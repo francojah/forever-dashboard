@@ -1,5 +1,4 @@
 import { createBrowserClient, createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
 // ── Tipos principales ──────────────────────────────────────────
 export type Snapshot = {
@@ -129,6 +128,8 @@ export function createClientBrowser() {
 }
 
 export function createClientServer() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { cookies } = require('next/headers') as { cookies: () => { get: (name: string) => { value: string } | undefined; set: (opts: object) => void } }
   const cookieStore = cookies()
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -136,8 +137,10 @@ export function createClientServer() {
     {
       cookies: {
         get(name: string) { return cookieStore.get(name)?.value },
-        set(name, value, options) { try { cookieStore.set({ name, value, ...options }) } catch {} },
-        remove(name, options) { try { cookieStore.set({ name, value: '', ...options }) } catch {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        set(name: string, value: string, options: any) { try { cookieStore.set({ name, value, ...options }) } catch {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        remove(name: string, options: any) { try { cookieStore.set({ name, value: '', ...options }) } catch {} },
       },
     }
   )
