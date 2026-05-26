@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 
 type Period = 'today' | 'yesterday' | '7d' | '30d' | 'ytd'
@@ -55,6 +56,25 @@ function getMetaSummary(metaSnapshot: Snapshot | null, period: Period): any {
 
 export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const [period, setPeriod] = useState<Period>('7d')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const router = useRouter()
+
+  const triggerSync = useCallback(async () => {
+    setSyncing(true)
+    setSyncMsg(null)
+    try {
+      const res = await fetch('/api/sync-tiendanube', { method: 'POST' })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setSyncMsg(`✓ Sync OK — hoy: ${data.orders_today} órdenes · 7d: ${data.orders_7d} órdenes`)
+      router.refresh()
+    } catch (e) {
+      setSyncMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
+    } finally {
+      setSyncing(false)
+    }
+  }, [router])
 
   const tn   = getSummary(tnSnapshot, period)
   const meta = getMetaSummary(metaSnapshot, period)
@@ -99,15 +119,33 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Datos Tiendanube</h1>
-          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">
-            {tnSnapshot
-              ? `Última actualización: ${tnSnapshot.snapshot_date}`
-              : 'Sin datos — corré el sync en GitHub Actions'}
+          <p className="text-sm mt-0.5">
+            {syncMsg
+              ? <span className={syncMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>{syncMsg}</span>
+              : <span className="text-gray-500 dark:text-zinc-500">
+                  {tnSnapshot ? `Última actualización: ${tnSnapshot.snapshot_date}` : 'Sin datos — hacé sync'}
+                </span>
+            }
           </p>
         </div>
 
-        {/* Period tabs */}
-        <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 rounded-lg p-1">
+        <div className="flex items-center gap-2">
+          {/* Sync button */}
+          <button
+            onClick={triggerSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all"
+            title="Sincronizar datos de Tiendanube"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+            </svg>
+            {syncing ? 'Sincronizando…' : 'Actualizar'}
+          </button>
+
+          {/* Period tabs */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 rounded-lg p-1">
           {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
             <button
               key={p}
@@ -121,6 +159,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
               {PERIOD_LABELS[p]}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
