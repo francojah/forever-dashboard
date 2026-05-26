@@ -50,7 +50,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 }
 
 export default function HistoricoClient({ data }: Props) {
-  const [activeMetrics, setActiveMetrics] = useState<Set<Metric>>(new Set(['blended_roas', 'total_spend_7d']))
+  const [activeMetrics, setActiveMetrics] = useState<Set<Metric>>(new Set<Metric>(['blended_roas', 'total_spend_7d']))
 
   if (!data.length) {
     return (
