@@ -325,8 +325,8 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             </div>
           )}
 
-          {/* ── Bottom row: Pagos + Provincias ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ── Bottom row: Pagos + Envíos + Provincias ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
             {/* Métodos de pago */}
             {tn?.payment_methods && Object.keys(tn.payment_methods).length > 0 && (
@@ -341,10 +341,35 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                         <div key={method}>
                           <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
                             <span className="capitalize">{method.replace(/_/g, ' ')}</span>
-                            <span className="font-medium">{count} órdenes · {pct.toFixed(0)}%</span>
+                            <span className="font-medium">{count} · {pct.toFixed(0)}%</span>
                           </div>
                           <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
                             <div className="h-1.5 rounded-full bg-violet-400" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Métodos de envío */}
+            {tn?.shipping_methods && Object.keys(tn.shipping_methods).length > 0 && (
+              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de envío</h2>
+                <div className="space-y-2.5">
+                  {Object.entries(tn.shipping_methods as Record<string, number>)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([method, count]) => {
+                      const pct = tn.total_orders > 0 ? (count / tn.total_orders) * 100 : 0
+                      return (
+                        <div key={method}>
+                          <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
+                            <span className="capitalize">{method.replace(/_/g, ' ')}</span>
+                            <span className="font-medium">{count} · {pct.toFixed(0)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-sky-400" style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       )
@@ -364,7 +389,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                       <div key={prov.name}>
                         <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
                           <span>{prov.name}</span>
-                          <span className="font-medium">{prov.count} órdenes · {pct.toFixed(0)}%</span>
+                          <span className="font-medium">{prov.count} · {pct.toFixed(0)}%</span>
                         </div>
                         <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
                           <div className="h-1.5 rounded-full bg-fuchsia-400" style={{ width: `${pct}%` }} />

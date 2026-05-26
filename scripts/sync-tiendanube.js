@@ -105,14 +105,34 @@ function buildTNSummary(orders) {
   const total_orders  = paid.length
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
-  // Top productos — agrupado por product_id (suma todos los talles/colores)
+  // Top productos — agrupado por product_id, revenue proporcional al o.total real
+  // (p.price es precio de lista; o.total ya aplica descuentos y envío)
   const productMap = {}
   paid.forEach(o => {
-    ;(o.products || []).forEach(p => {
+    const items = o.products || []
+    if (!items.length) return
+
+    // Suma de precios de lista de esta orden
+    const listTotal = items.reduce(
+      (sum, p) => sum + parseFloat(p.price || '0') * parseInt(p.quantity || '1'), 0
+    )
+    // Total real pagado (sin envío — usamos subtotal si existe, si no total)
+    const paidSubtotal = parseFloat(o.subtotal || o.total || '0')
+
+    items.forEach(p => {
       const key = String(p.product_id || p.name)
-      if (!productMap[key]) productMap[key] = { name: p.name, quantity: 0, revenue: 0 }
-      productMap[key].quantity += parseInt(p.quantity || '1')
-      productMap[key].revenue  += parseFloat(p.price || '0') * parseInt(p.quantity || '1')
+      // Nombre base: remover "(Color, Talle)" del final
+      const baseName = p.name.replace(/\s*\([^)]*\)\s*$/, '').trim() || p.name
+      const qty = parseInt(p.quantity || '1')
+      const listValue = parseFloat(p.price || '0') * qty
+      // Proporcional: precio de lista de este ítem / total lista × total real pagado
+      const proportionalRevenue = listTotal > 0
+        ? (listValue / listTotal) * paidSubtotal
+        : listValue
+
+      if (!productMap[key]) productMap[key] = { name: baseName, quantity: 0, revenue: 0 }
+      productMap[key].quantity += qty
+      productMap[key].revenue  += proportionalRevenue
     })
   })
 
@@ -125,6 +145,17 @@ function buildTNSummary(orders) {
   paid.forEach(o => {
     const method = o.payment_details?.method || 'otro'
     payment_methods[method] = (payment_methods[method] || 0) + 1
+  })
+
+  // Métodos de envío
+  const shipping_methods = {}
+  paid.forEach(o => {
+    const method =
+      o.shipping_option?.name ||
+      o.shipping?.option_reference ||
+      o.shipping_pickup_type ||
+      'otro'
+    shipping_methods[method] = (shipping_methods[method] || 0) + 1
   })
 
   // Provincias / geografía
@@ -151,8 +182,9 @@ function buildTNSummary(orders) {
     total_orders,
     aov:             Math.round(aov),
     unique_customers,
-    top_products,
+    top_products:    top_products.map(p => ({ ...p, revenue: Math.round(p.revenue) })),
     payment_methods,
+    shipping_methods,
     top_provinces,
     conversion_rate,
   }

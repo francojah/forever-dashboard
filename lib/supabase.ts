@@ -200,6 +200,7 @@ export type TNSummary = {
   unique_customers: number
   top_products: { name: string; quantity: number; revenue: number }[]
   payment_methods: Record<string, number>
+  shipping_methods?: Record<string, number>
   top_provinces?: { name: string; count: number }[]
   conversion_rate?: number
 }
