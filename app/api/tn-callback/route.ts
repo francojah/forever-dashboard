@@ -41,13 +41,15 @@ export async function GET(req: NextRequest) {
 
     const { access_token, user_id } = tokenData
 
-    // Save to Supabase for reference
+    // Save to Supabase for reference (best-effort, ignore if table doesn't exist)
     if (SUPABASE_URL && SUPABASE_KEY) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-      await supabase.from('app_config').upsert({
-        key: 'tiendanube_credentials',
-        value: { access_token, user_id, connected_at: new Date().toISOString() },
-      }, { onConflict: 'key' }).catch(() => null) // ignore if table doesn't exist
+      try {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+        await supabase.from('app_config').upsert({
+          key: 'tiendanube_credentials',
+          value: { access_token, user_id, connected_at: new Date().toISOString() },
+        }, { onConflict: 'key' })
+      } catch { /* ignore if table doesn't exist */ }
     }
 
     // Show success page with the credentials
