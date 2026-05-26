@@ -12,17 +12,17 @@ function KpiCard({
   label: string; value: string; sub?: string; status?: 'ok' | 'warn' | 'bad' | 'neutral'
 }) {
   const textColor = {
-    ok: 'text-green-700',
-    warn: 'text-amber-600',
-    bad: 'text-red-600',
-    neutral: 'text-gray-900',
+    ok:      'text-emerald-600 dark:text-emerald-400',
+    warn:    'text-amber-600  dark:text-amber-400',
+    bad:     'text-red-600    dark:text-red-400',
+    neutral: 'text-gray-900   dark:text-white',
   }[status || 'neutral']
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">{label}</p>
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+      <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium uppercase tracking-wide mb-1">{label}</p>
       <p className={`text-2xl font-semibold ${textColor}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">{sub}</p>}
     </div>
   )
 }
@@ -38,42 +38,12 @@ export default function KpiGrid({ summary, breakeven, aov }: Props) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      <KpiCard
-        label="Gasto 7d"
-        value={`$${Math.round((summary.total_spend_7d || 0) / 1000)}K`}
-        sub="ARS total"
-        status="neutral"
-      />
-      <KpiCard
-        label="Budget/día"
-        value={`$${Math.round((summary.daily_budget_active || 0) / 1000)}K`}
-        sub="ARS activo"
-        status="neutral"
-      />
-      <KpiCard
-        label="Compras 7d"
-        value={String(summary.total_purchases_7d || 0)}
-        sub={`~${Math.round((summary.total_purchases_7d || 0) / 7 * 10) / 10}/día`}
-        status="neutral"
-      />
-      <KpiCard
-        label="ROAS blend."
-        value={summary.blended_roas ? `${summary.blended_roas}x` : '—'}
-        sub="meta: 10x"
-        status={roasStatus}
-      />
-      <KpiCard
-        label="CPA blend."
-        value={summary.blended_cpa ? `$${Math.round(summary.blended_cpa / 1000)}K` : '—'}
-        sub={`breakeven $${breakeven / 1000}K`}
-        status={cpaStatus}
-      />
-      <KpiCard
-        label="Ad sets activos"
-        value={String(summary.active_adsets || 0)}
-        sub="corriendo"
-        status="neutral"
-      />
+      <KpiCard label="Gasto 7d"        value={`$${Math.round((summary.total_spend_7d || 0) / 1000)}K`}   sub="ARS total"                                    status="neutral" />
+      <KpiCard label="Budget/día"       value={`$${Math.round((summary.daily_budget_active || 0) / 1000)}K`} sub="ARS activo"                               status="neutral" />
+      <KpiCard label="Compras 7d"       value={String(summary.total_purchases_7d || 0)}                   sub={`~${Math.round((summary.total_purchases_7d || 0) / 7 * 10) / 10}/día`} status="neutral" />
+      <KpiCard label="ROAS blend."      value={summary.blended_roas ? `${summary.blended_roas}x` : '—'}   sub="meta: 10x"                                    status={roasStatus} />
+      <KpiCard label="CPA blend."       value={summary.blended_cpa ? `$${Math.round(summary.blended_cpa / 1000)}K` : '—'} sub={`breakeven $${breakeven / 1000}K`} status={cpaStatus} />
+      <KpiCard label="Ad sets activos"  value={String(summary.active_adsets || 0)}                        sub="corriendo"                                    status="neutral" />
     </div>
   )
 }

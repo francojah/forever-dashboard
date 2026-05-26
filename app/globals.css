@@ -8,15 +8,12 @@
   --color-danger: #dc2626;
 }
 
-body {
-  @apply bg-gray-50 text-gray-900 antialiased;
-}
-
 /* Scrollbar minimalista */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { @apply bg-transparent; }
-::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { border-radius: 999px; background: rgb(209 213 219); }
+.dark ::-webkit-scrollbar-thumb { background: rgb(63 63 70); }
 
-/* Animaciones suaves */
+/* Animaciones */
 .fade-in { animation: fadeIn 0.2s ease-in; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
