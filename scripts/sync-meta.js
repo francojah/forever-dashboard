@@ -58,18 +58,20 @@ function parseInsights(entity) {
     return found ? parseFloat(found.value) : null
   }
   const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
+  const spend   = formatNumber(i.spend)
+  const results = findAction(i.actions, PURCHASE_TYPES)
   return {
-    spend:            formatNumber(i.spend),
-    roas:             findAction(i.purchase_roas, PURCHASE_TYPES),
-    results:          findAction(i.actions, PURCHASE_TYPES),
-    cost_per_result:  findAction(i.cost_per_action_type, PURCHASE_TYPES),
-    impressions:      parseInt(i.impressions || '0'),
-    clicks:           parseInt(i.clicks || '0'),
-    ctr:              formatNumber(i.ctr),
+    spend,
+    roas:            findAction(i.purchase_roas, PURCHASE_TYPES),
+    results,
+    cost_per_result: (spend && results && results > 0) ? parseFloat((spend / results).toFixed(2)) : null,
+    impressions:     parseInt(i.impressions || '0'),
+    clicks:          parseInt(i.clicks || '0'),
+    ctr:             formatNumber(i.ctr),
   }
 }
 
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions,cost_per_action_type'
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions'
 
 // ── Fetch campaigns ────────────────────────────────────────────
 async function fetchCampaigns() {
