@@ -200,14 +200,18 @@ export type TNSummary = {
   unique_customers: number
   top_products: { name: string; quantity: number; revenue: number }[]
   payment_methods: Record<string, number>
+  top_provinces?: { name: string; count: number }[]
+  conversion_rate?: number
 }
 
 export type TNSnapshot = {
   id: string
   snapshot_date: string
-  summary_7d: TNSummary | null
-  summary_30d: TNSummary | null
-  summary_today: TNSummary | null
+  summary_today:     TNSummary | null
+  summary_yesterday: TNSummary | null
+  summary_7d:        TNSummary | null
+  summary_30d:       TNSummary | null
+  summary_ytd:       TNSummary | null
   orders_count: number
   created_at: string
 }
