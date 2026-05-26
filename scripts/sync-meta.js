@@ -31,6 +31,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 function fetchMeta(path) {
   return new Promise((resolve, reject) => {
     const url = `${META_API}/${path}&access_token=${META_TOKEN}`
+    console.log('  🌐 URL:', url.replace(META_TOKEN, 'TOKEN_HIDDEN'))
     https.get(url, (res) => {
       let data = ''
       res.on('data', (chunk) => data += chunk)
@@ -59,19 +60,19 @@ function parseInsights(entity) {
   }
   const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
   const spend   = formatNumber(i.spend)
-  const results = findAction(i.actions, PURCHASE_TYPES)
   return {
     spend,
-    roas:            findAction(i.purchase_roas, PURCHASE_TYPES),
-    results,
-    cost_per_result: (spend && results && results > 0) ? parseFloat((spend / results).toFixed(2)) : null,
+    roas:            null,
+    results:         null,
+    cost_per_result: null,
     impressions:     parseInt(i.impressions || '0'),
     clicks:          parseInt(i.clicks || '0'),
     ctr:             formatNumber(i.ctr),
   }
 }
 
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions'
+// Solo campos básicos garantizados; purchase_roas y actions se agregan cuando confirme que funcionan
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr'
 
 // ── Fetch campaigns ────────────────────────────────────────────
 async function fetchCampaigns() {
