@@ -1,6 +1,14 @@
 import { createBrowserClient, createServerClient } from '@supabase/ssr'
 
 // ── Tipos principales ──────────────────────────────────────────
+
+export type PeriodMetrics = {
+  campaigns: Campaign[]
+  adsets: Adset[]
+  ads: Ad[]
+  summary: Summary
+}
+
 export type Snapshot = {
   id: string
   snapshot_date: string
@@ -8,6 +16,12 @@ export type Snapshot = {
   adsets: Adset[]
   ads: Ad[]
   summary: Summary
+  periods?: {
+    today?: PeriodMetrics
+    yesterday?: PeriodMetrics
+    last_7d?: PeriodMetrics
+    last_30d?: PeriodMetrics
+  }
   created_at: string
 }
 
@@ -176,4 +190,14 @@ export async function getSnapshotDates(): Promise<string[]> {
     .order('snapshot_date', { ascending: false })
     .limit(30)
   return (data || []).map((d: { snapshot_date: string }) => d.snapshot_date)
+}
+
+export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_date: string; summary: Summary }[]> {
+  const supabase = createClientServer()
+  const { data } = await supabase
+    .from('meta_snapshots')
+    .select('snapshot_date, summary')
+    .order('snapshot_date', { ascending: true })
+    .limit(limit)
+  return (data || []) as { snapshot_date: string; summary: Summary }[]
 }

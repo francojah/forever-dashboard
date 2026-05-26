@@ -73,13 +73,13 @@ function parseInsights(entity) {
 }
 
 const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas'
+const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d']
 
-// ── Fetch campaigns ────────────────────────────────────────────
-async function fetchCampaigns() {
-  const fields = `id,name,status,objective,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+// ── Fetch campaigns for a given date_preset ────────────────────
+async function fetchCampaigns(preset = 'last_7d') {
+  const fields = `id,name,status,objective,insights.date_preset(${preset}){${INSIGHT_FIELDS}}`
   const res = await fetchMeta(`${ACCOUNT_ID}/campaigns?fields=${fields}&limit=50`)
-
-  if (res.error) throw new Error(`Meta API campaigns: ${res.error.message}`)
+  if (res.error) throw new Error(`Meta API campaigns [${preset}]: ${res.error.message}`)
   return (res.data || []).map(c => ({
     id: c.id,
     name: c.name,
@@ -89,12 +89,11 @@ async function fetchCampaigns() {
   }))
 }
 
-// ── Fetch ad sets ──────────────────────────────────────────────
-async function fetchAdsets() {
-  const fields = `id,name,status,campaign_id,daily_budget,optimization_goal,stop_time,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+// ── Fetch ad sets for a given date_preset ─────────────────────
+async function fetchAdsets(preset = 'last_7d') {
+  const fields = `id,name,status,campaign_id,daily_budget,optimization_goal,stop_time,insights.date_preset(${preset}){${INSIGHT_FIELDS}}`
   const res = await fetchMeta(`${ACCOUNT_ID}/adsets?fields=${fields}&limit=100`)
-
-  if (res.error) throw new Error(`Meta API adsets: ${res.error.message}`)
+  if (res.error) throw new Error(`Meta API adsets [${preset}]: ${res.error.message}`)
   return (res.data || []).map(s => ({
     id: s.id,
     name: s.name,
@@ -107,12 +106,11 @@ async function fetchAdsets() {
   }))
 }
 
-// ── Fetch ads ──────────────────────────────────────────────────
-async function fetchAds() {
-  const fields = `id,name,status,adset_id,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+// ── Fetch ads for a given date_preset ─────────────────────────
+async function fetchAds(preset = 'last_7d') {
+  const fields = `id,name,status,adset_id,insights.date_preset(${preset}){${INSIGHT_FIELDS}}`
   const res = await fetchMeta(`${ACCOUNT_ID}/ads?fields=${fields}&limit=200`)
-
-  if (res.error) throw new Error(`Meta API ads: ${res.error.message}`)
+  if (res.error) throw new Error(`Meta API ads [${preset}]: ${res.error.message}`)
   return (res.data || []).map(a => ({
     id: a.id,
     name: a.name,
@@ -120,6 +118,17 @@ async function fetchAds() {
     adset_id: a.adset_id,
     ...parseInsights(a),
   }))
+}
+
+// ── Fetch all data for one preset ─────────────────────────────
+async function fetchPreset(preset) {
+  const [campaigns, adsets, ads] = await Promise.all([
+    fetchCampaigns(preset),
+    fetchAdsets(preset),
+    fetchAds(preset),
+  ])
+  const summary = buildSummary(campaigns, adsets, ads)
+  return { campaigns, adsets, ads, summary }
 }
 
 // ── Calcular resumen ───────────────────────────────────────────
@@ -194,22 +203,27 @@ async function main() {
   console.log(`\n🔄 Sincronizando Meta Ads — ${today}`)
 
   try {
-    console.log('  📊 Fetching campaigns...')
-    const campaigns = await fetchCampaigns()
-    console.log(`  ✅ ${campaigns.length} campañas`)
-
-    console.log('  📊 Fetching ad sets...')
-    const adsets = await fetchAdsets()
-    console.log(`  ✅ ${adsets.length} ad sets`)
-
-    console.log('  📊 Fetching ads...')
-    const ads = await fetchAds()
-    console.log(`  ✅ ${ads.length} anuncios`)
-
-    const summary = buildSummary(campaigns, adsets, ads)
+    // Fetch primary dataset (last_7d) for backward compat
+    console.log('  📊 Fetching last_7d (principal)...')
+    const { campaigns, adsets, ads, summary } = await fetchPreset('last_7d')
+    console.log(`  ✅ ${campaigns.length} campañas · ${adsets.length} ad sets · ${ads.length} anuncios`)
     console.log(`  💰 Gasto 7d: $${summary.total_spend_7d.toLocaleString('es-AR')} ARS`)
     console.log(`  🛒 Compras: ${summary.total_purchases_7d}`)
     console.log(`  📈 ROAS blend: ${summary.blended_roas || 'N/A'}x`)
+
+    // Fetch all other presets
+    const periods = { last_7d: { campaigns, adsets, ads, summary } }
+    for (const preset of ['today', 'yesterday', 'last_30d']) {
+      console.log(`  📊 Fetching ${preset}...`)
+      try {
+        periods[preset] = await fetchPreset(preset)
+        const s = periods[preset].summary
+        console.log(`  ✅ ${preset}: gasto $${s.total_spend_7d.toLocaleString('es-AR')} · compras ${s.total_purchases_7d}`)
+      } catch (e) {
+        console.warn(`  ⚠️ No se pudo obtener ${preset}:`, e.message)
+        periods[preset] = null
+      }
+    }
 
     // Guardar snapshot en Supabase
     console.log('  💾 Guardando en Supabase...')
@@ -221,6 +235,7 @@ async function main() {
         adsets,
         ads,
         summary,
+        periods,
       }, { onConflict: 'snapshot_date' })
 
     if (error) throw error
