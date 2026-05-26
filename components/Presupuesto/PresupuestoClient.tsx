@@ -276,7 +276,7 @@ export default function PresupuestoClient({ snapshot }: Props) {
                   </div>
                 </div>
                 <button
-                  onClick={() => setApplied(prev => new Set([...prev, r.adset_id]))}
+                  onClick={() => setApplied(prev => new Set(Array.from(prev).concat(r.adset_id)))}
                   disabled={isApplied}
                   className="shrink-0 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
                 >
