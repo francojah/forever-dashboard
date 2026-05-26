@@ -31,7 +31,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 function fetchMeta(path) {
   return new Promise((resolve, reject) => {
     const url = `${META_API}/${path}&access_token=${META_TOKEN}`
-    console.log('  🌐 URL:', url.replace(META_TOKEN, 'TOKEN_HIDDEN'))
     https.get(url, (res) => {
       let data = ''
       res.on('data', (chunk) => data += chunk)
