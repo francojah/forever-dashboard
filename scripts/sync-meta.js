@@ -47,17 +47,34 @@ function formatNumber(str) {
   return isNaN(n) ? null : n
 }
 
+// ── Helper para parsear insights de Meta API ───────────────────
+// Los campos de métricas vienen anidados en insights.data[0]
+// purchase_roas, actions y cost_per_action son arrays de objetos {action_type, value}
+function parseInsights(entity) {
+  const i = entity.insights?.data?.[0] || {}
+  const findAction = (arr, types) => {
+    if (!arr) return null
+    const found = arr.find(a => types.includes(a.action_type))
+    return found ? parseFloat(found.value) : null
+  }
+  const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
+  return {
+    spend:            formatNumber(i.spend),
+    roas:             findAction(i.purchase_roas, PURCHASE_TYPES),
+    results:          findAction(i.actions, PURCHASE_TYPES),
+    cost_per_result:  findAction(i.cost_per_action, PURCHASE_TYPES),
+    impressions:      parseInt(i.impressions || '0'),
+    clicks:           parseInt(i.clicks || '0'),
+    ctr:              formatNumber(i.ctr),
+  }
+}
+
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions,cost_per_action'
+
 // ── Fetch campaigns ────────────────────────────────────────────
 async function fetchCampaigns() {
-  const fields = [
-    'id','name','status','objective',
-    'spend','purchase_roas','results','cost_per_result',
-    'impressions','clicks','ctr'
-  ].join(',')
-
-  const res = await fetchMeta(
-    `${ACCOUNT_ID}/campaigns?fields=${fields}&date_preset=last_7d&limit=50`
-  )
+  const fields = `id,name,status,objective,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+  const res = await fetchMeta(`${ACCOUNT_ID}/campaigns?fields=${fields}&limit=50`)
 
   if (res.error) throw new Error(`Meta API campaigns: ${res.error.message}`)
   return (res.data || []).map(c => ({
@@ -65,27 +82,14 @@ async function fetchCampaigns() {
     name: c.name,
     status: c.status,
     objective: c.objective,
-    spend: formatNumber(c.spend),
-    roas: c.purchase_roas ? parseFloat(c.purchase_roas) : null,
-    results: c.results?.[0]?.values?.[0]?.value ?? null,
-    cost_per_result: c.cost_per_result?.[0]?.values?.[0]?.value ?? null,
-    impressions: parseInt(c.impressions || '0'),
-    clicks: parseInt(c.clicks || '0'),
-    ctr: formatNumber(c.ctr),
+    ...parseInsights(c),
   }))
 }
 
 // ── Fetch ad sets ──────────────────────────────────────────────
 async function fetchAdsets() {
-  const fields = [
-    'id','name','status','campaign_id','daily_budget',
-    'optimization_goal','spend','purchase_roas',
-    'results','cost_per_result','impressions','clicks','ctr','stop_time'
-  ].join(',')
-
-  const res = await fetchMeta(
-    `${ACCOUNT_ID}/adsets?fields=${fields}&date_preset=last_7d&limit=100`
-  )
+  const fields = `id,name,status,campaign_id,daily_budget,optimization_goal,stop_time,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+  const res = await fetchMeta(`${ACCOUNT_ID}/adsets?fields=${fields}&limit=100`)
 
   if (res.error) throw new Error(`Meta API adsets: ${res.error.message}`)
   return (res.data || []).map(s => ({
@@ -95,28 +99,15 @@ async function fetchAdsets() {
     campaign_id: s.campaign_id,
     daily_budget: s.daily_budget ? parseInt(s.daily_budget) / 100 : null,
     optimization_goal: s.optimization_goal,
-    spend: formatNumber(s.spend),
-    roas: s.purchase_roas ? parseFloat(s.purchase_roas) : null,
-    results: s.results?.[0]?.values?.[0]?.value ?? null,
-    cost_per_result: s.cost_per_result?.[0]?.values?.[0]?.value ?? null,
-    impressions: parseInt(s.impressions || '0'),
-    clicks: parseInt(s.clicks || '0'),
-    ctr: formatNumber(s.ctr),
     stop_time: s.stop_time || null,
+    ...parseInsights(s),
   }))
 }
 
 // ── Fetch ads ──────────────────────────────────────────────────
 async function fetchAds() {
-  const fields = [
-    'id','name','status','adset_id',
-    'spend','purchase_roas','results','cost_per_result',
-    'impressions','clicks','ctr'
-  ].join(',')
-
-  const res = await fetchMeta(
-    `${ACCOUNT_ID}/ads?fields=${fields}&date_preset=last_7d&limit=200`
-  )
+  const fields = `id,name,status,adset_id,insights.date_preset(last_7d){${INSIGHT_FIELDS}}`
+  const res = await fetchMeta(`${ACCOUNT_ID}/ads?fields=${fields}&limit=200`)
 
   if (res.error) throw new Error(`Meta API ads: ${res.error.message}`)
   return (res.data || []).map(a => ({
@@ -124,13 +115,7 @@ async function fetchAds() {
     name: a.name,
     status: a.status,
     adset_id: a.adset_id,
-    spend: formatNumber(a.spend),
-    roas: a.purchase_roas ? parseFloat(a.purchase_roas) : null,
-    results: a.results?.[0]?.values?.[0]?.value ?? null,
-    cost_per_result: a.cost_per_result?.[0]?.values?.[0]?.value ?? null,
-    impressions: parseInt(a.impressions || '0'),
-    clicks: parseInt(a.clicks || '0'),
-    ctr: formatNumber(a.ctr),
+    ...parseInsights(a),
   }))
 }
 
