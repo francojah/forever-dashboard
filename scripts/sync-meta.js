@@ -62,14 +62,14 @@ function parseInsights(entity) {
     spend:            formatNumber(i.spend),
     roas:             findAction(i.purchase_roas, PURCHASE_TYPES),
     results:          findAction(i.actions, PURCHASE_TYPES),
-    cost_per_result:  findAction(i.cost_per_action, PURCHASE_TYPES),
+    cost_per_result:  findAction(i.cost_per_action_type, PURCHASE_TYPES),
     impressions:      parseInt(i.impressions || '0'),
     clicks:           parseInt(i.clicks || '0'),
     ctr:              formatNumber(i.ctr),
   }
 }
 
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions,cost_per_action'
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,purchase_roas,actions,cost_per_action_type'
 
 // ── Fetch campaigns ────────────────────────────────────────────
 async function fetchCampaigns() {
