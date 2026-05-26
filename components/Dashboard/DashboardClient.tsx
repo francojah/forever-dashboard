@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Snapshot, PeriodMetrics } from '@/lib/supabase'
 import KpiGrid from './KpiGrid'
 import AdsetTable from './AdsetTable'
@@ -24,6 +25,25 @@ interface Props {
 
 export default function DashboardClient({ snapshot }: Props) {
   const [period, setPeriod] = useState<Period>('last_7d')
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const router = useRouter()
+
+  const triggerSync = useCallback(async () => {
+    setSyncing(true)
+    setSyncMsg(null)
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setSyncMsg(`✓ Sincronizado · ${data.adsets} ad sets · ROAS ${data.roas ?? '—'}x`)
+      router.refresh()
+    } catch (e) {
+      setSyncMsg(`✗ ${e instanceof Error ? e.message : 'Error al sincronizar'}`)
+    } finally {
+      setSyncing(false)
+    }
+  }, [router])
 
   if (!snapshot) {
     return (
@@ -67,13 +87,31 @@ export default function DashboardClient({ snapshot }: Props) {
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Dashboard Meta Ads</h1>
           <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">
-            Sync {snapshot.snapshot_date} · {new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+            {syncMsg
+              ? <span className={syncMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>{syncMsg}</span>
+              : <>Sync {snapshot.snapshot_date} · {new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</>
+            }
             {!periodData && period !== 'last_7d' && (
               <span className="ml-2 text-amber-500">(sin datos para este período — mostrando 7d)</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Sync button */}
+          <button
+            onClick={triggerSync}
+            disabled={syncing}
+            title="Actualizar datos ahora"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all"
+          >
+            <svg
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            {syncing ? 'Actualizando…' : 'Actualizar'}
+          </button>
           {/* Period selector */}
           <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
             {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (

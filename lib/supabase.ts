@@ -192,6 +192,37 @@ export async function getSnapshotDates(): Promise<string[]> {
   return (data || []).map((d: { snapshot_date: string }) => d.snapshot_date)
 }
 
+// ── Tiendanube types ───────────────────────────────────────────
+export type TNSummary = {
+  total_revenue: number
+  total_orders: number
+  aov: number
+  unique_customers: number
+  top_products: { name: string; quantity: number; revenue: number }[]
+  payment_methods: Record<string, number>
+}
+
+export type TNSnapshot = {
+  id: string
+  snapshot_date: string
+  summary_7d: TNSummary | null
+  summary_30d: TNSummary | null
+  summary_today: TNSummary | null
+  orders_count: number
+  created_at: string
+}
+
+export async function getLatestTNSnapshot(): Promise<TNSnapshot | null> {
+  const supabase = createClientServer()
+  const { data } = await supabase
+    .from('tiendanube_snapshots')
+    .select('*')
+    .order('snapshot_date', { ascending: false })
+    .limit(1)
+    .single()
+  return data
+}
+
 export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_date: string; summary: Summary }[]> {
   const supabase = createClientServer()
   const { data } = await supabase
