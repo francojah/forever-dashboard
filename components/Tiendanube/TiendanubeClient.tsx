@@ -60,16 +60,20 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const meta = getMetaSummary(metaSnapshot, period)
 
   // ── Attribution math ──────────────────────────────────────────
-  const tnRevenue    = tn?.total_revenue ?? 0
-  const tnOrders     = tn?.total_orders  ?? 0
-  const metaSpend    = meta?.total_spend_7d ?? meta?.conversion_spend_7d ?? 0
-  const metaRoas     = meta?.blended_roas ?? 0
+  const tnRevenue     = tn?.total_revenue ?? 0
+  const tnOrders      = tn?.total_orders  ?? 0
+  const tnAOV         = tn?.aov ?? 0
+  const metaSpend     = meta?.total_spend_7d ?? meta?.conversion_spend_7d ?? 0
+  const metaRoas      = meta?.blended_roas ?? 0
   const metaPurchases = meta?.total_purchases_7d ?? 0
 
-  // Meta attributed revenue = spend × ROAS
-  const metaAttributedRevenue = metaSpend > 0 && metaRoas > 0 ? metaSpend * metaRoas : 0
+  // Meta attributed revenue = Meta purchases × TN real AOV
+  // (More honest than spend × ROAS which overcounts due to Meta's 28-day attribution window)
+  const metaAttributedRevenue = metaPurchases > 0 && tnAOV > 0
+    ? Math.min(metaPurchases * tnAOV, tnRevenue) // cap at 100%
+    : 0
   const organicRevenue = Math.max(0, tnRevenue - metaAttributedRevenue)
-  const metaPct  = tnRevenue > 0 ? (metaAttributedRevenue / tnRevenue) * 100 : 0
+  const metaPct    = tnRevenue > 0 ? (metaAttributedRevenue / tnRevenue) * 100 : 0
   const organicPct = Math.max(0, 100 - metaPct)
 
   // True ROAS = TN total revenue / Meta spend
@@ -229,9 +233,9 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
 
                   <div className="space-y-3">
                     <MetricRow
-                      label="ROAS real (TN total / gasto Meta)"
+                      label="ROAS real (ventas TN / gasto Meta)"
                       value={trueRoas ? `${trueRoas.toFixed(2)}x` : '—'}
-                      note="Ventas reales de Tiendanube sobre gasto en Meta"
+                      note="Total vendido en TN dividido gasto en Meta — incluye ventas orgánicas"
                       highlight={trueRoas != null && trueRoas >= 5 ? 'green' : trueRoas != null && trueRoas >= 3 ? 'yellow' : 'red'}
                     />
                     <MetricRow

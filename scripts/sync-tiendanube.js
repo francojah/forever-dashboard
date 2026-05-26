@@ -49,34 +49,37 @@ function fetchTN(path) {
 }
 
 // ── Date helpers (UTC-3 Argentina) ─────────────────────────────
-function buildDateRange(startISO, endISO) {
-  return {
-    created_at_min: startISO,
-    created_at_max: endISO,
-  }
+// Argentina = UTC-3. We always build ranges in local Argentina time
+// to avoid UTC midnight crossing bugs.
+
+function argentinaDateStr(date) {
+  // Returns YYYY-MM-DD in Argentina timezone (UTC-3)
+  const ms = date.getTime() - 3 * 60 * 60 * 1000
+  return new Date(ms).toISOString().split('T')[0]
 }
 
 function getRange(preset) {
-  const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
+  const now      = new Date()
+  const todayAR  = argentinaDateStr(now)
+  const yearAR   = todayAR.slice(0, 4)
 
-  // Argentina is UTC-3
-  const startOfToday    = new Date(todayStr + 'T00:00:00-03:00')
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000)
-  const endOfYesterday   = new Date(startOfToday.getTime() - 1000)
-  const start7d  = new Date(startOfToday.getTime() - 6  * 24 * 60 * 60 * 1000)
-  const start30d = new Date(startOfToday.getTime() - 29 * 24 * 60 * 60 * 1000)
-  const startYTD = new Date(`${now.getFullYear()}-01-01T00:00:00-03:00`)
+  // Build clean midnight boundaries in Argentina time
+  const startOfToday     = new Date(todayAR + 'T00:00:00.000-03:00')
+  const startOfYesterday = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 1))
+  const endOfYesterday   = new Date(startOfToday.getTime() - 1)   // 23:59:59.999 yesterday AR
+  const start7d          = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 6))
+  const start30d         = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 29))
+  const startYTD         = new Date(`${yearAR}-01-01T00:00:00.000-03:00`)
 
   const fmt = (d) => d.toISOString()
 
   switch (preset) {
-    case 'today':     return buildDateRange(fmt(startOfToday),     fmt(now))
-    case 'yesterday': return buildDateRange(fmt(startOfYesterday), fmt(endOfYesterday))
-    case '7d':        return buildDateRange(fmt(start7d),          fmt(now))
-    case '30d':       return buildDateRange(fmt(start30d),         fmt(now))
-    case 'ytd':       return buildDateRange(fmt(startYTD),         fmt(now))
-    default:          return buildDateRange(fmt(start7d),          fmt(now))
+    case 'today':     return { created_at_min: fmt(startOfToday),     created_at_max: fmt(now) }
+    case 'yesterday': return { created_at_min: fmt(startOfYesterday), created_at_max: fmt(endOfYesterday) }
+    case '7d':        return { created_at_min: fmt(start7d),          created_at_max: fmt(now) }
+    case '30d':       return { created_at_min: fmt(start30d),         created_at_max: fmt(now) }
+    case 'ytd':       return { created_at_min: fmt(startYTD),         created_at_max: fmt(now) }
+    default:          return { created_at_min: fmt(start7d),          created_at_max: fmt(now) }
   }
 }
 
@@ -102,11 +105,11 @@ function buildTNSummary(orders) {
   const total_orders  = paid.length
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
-  // Top productos
+  // Top productos — agrupado por product_id (suma todos los talles/colores)
   const productMap = {}
   paid.forEach(o => {
     ;(o.products || []).forEach(p => {
-      const key = `${p.product_id}_${p.variant_id || ''}`
+      const key = String(p.product_id || p.name)
       if (!productMap[key]) productMap[key] = { name: p.name, quantity: 0, revenue: 0 }
       productMap[key].quantity += parseInt(p.quantity || '1')
       productMap[key].revenue  += parseFloat(p.price || '0') * parseInt(p.quantity || '1')
