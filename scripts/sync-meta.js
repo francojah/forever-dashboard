@@ -50,15 +50,10 @@ function formatNumber(str) {
 // ── Helper para parsear insights de Meta API ───────────────────
 // Los campos de métricas vienen anidados en insights.data[0]
 // purchase_roas, actions y cost_per_action son arrays de objetos {action_type, value}
+const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
+
 function parseInsights(entity) {
   const i = entity.insights?.data?.[0] || {}
-  const findAction = (arr, types) => {
-    if (!arr) return null
-    const found = arr.find(a => types.includes(a.action_type))
-    return found ? parseFloat(found.value) : null
-  }
-  const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
-  const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
   const findAction = (arr, types) => {
     if (!arr) return null
     const found = arr.find(a => types.includes(a.action_type))
