@@ -8,6 +8,9 @@ import { useTheme } from '@/lib/theme-context'
 
 const icons = {
   dashboard:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
+  creativos:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+  chat:        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  meta:        <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-11h2v6h-2zm0-4h2v2h-2z"/></svg>,
   historico:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   ideas:       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 2a7 7 0 0 1 5 11.9V17a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-3.1A7 7 0 0 1 12 2z"/><path d="M9 21h6"/></svg>,
   competencia: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
@@ -21,12 +24,27 @@ const icons = {
 
 const NAV = [
   { href: '/',             label: 'Dashboard',    icon: 'dashboard'   },
+  { href: '/creativos',    label: 'Creativos',    icon: 'creativos'   },
   { href: '/historico',    label: 'Historial',    icon: 'historico'   },
+  { href: '/chat',         label: 'Chat IA',      icon: 'chat'        },
   { href: '/ideas',        label: 'Ideas IA',     icon: 'ideas'       },
   { href: '/competencia',  label: 'Competencia',  icon: 'competencia' },
   { href: '/presupuesto',  label: 'Presupuesto',  icon: 'presupuesto' },
   { href: '/resumen',      label: 'Resumen IA',   icon: 'resumen'     },
   { href: '/alertas',      label: 'Alertas',      icon: 'alertas'     },
+]
+
+const META_LINKS = [
+  {
+    href:  'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1614288152915913',
+    label: 'Ads Manager',
+    icon:  'meta',
+  },
+  {
+    href:  'https://business.facebook.com/',
+    label: 'Business Suite',
+    icon:  'meta',
+  },
 ]
 
 export default function Sidebar({ userEmail, onClose }: { userEmail: string; onClose?: () => void }) {
@@ -86,6 +104,32 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
           )
         })}
       </nav>
+
+      {/* Meta quick links */}
+      <div className="px-3 pb-3">
+        <p className="text-[10px] font-medium text-gray-400 dark:text-zinc-600 uppercase tracking-wider px-3 mb-1.5">Meta</p>
+        {META_LINKS.map(link => (
+          <a
+            key={link.href}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 hover:text-gray-900 dark:hover:text-zinc-100 transition-all"
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-blue-500 dark:text-blue-400">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96C18.34 21.21 22 17.06 22 12.06C22 6.53 17.5 2.04 12 2.04Z"/>
+                </svg>
+              </span>
+              {link.label}
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 opacity-40">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </a>
+        ))}
+      </div>
 
       {/* Footer */}
       <div className="px-3 py-4 border-t border-gray-100 dark:border-zinc-800 space-y-1">

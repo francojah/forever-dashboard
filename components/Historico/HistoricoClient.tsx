@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -49,17 +49,62 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   )
 }
 
-export default function HistoricoClient({ data }: Props) {
+export default function HistoricoClient({ data: initialData }: Props) {
+  const [data, setData] = useState(initialData)
   const [activeMetrics, setActiveMetrics] = useState<Set<Metric>>(new Set<Metric>(['blended_roas', 'total_spend_7d']))
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+
+  const runBackfill = useCallback(async () => {
+    setBackfilling(true)
+    setBackfillMsg(null)
+    try {
+      const res = await fetch('/api/backfill-history', { method: 'POST' })
+      const result = await res.json()
+      if (result.error) throw new Error(result.error)
+      setBackfillMsg(
+        result.inserted > 0
+          ? `✓ ${result.inserted} días importados de Meta (${result.range}). Recargá la página para ver el historial completo.`
+          : `✓ ${result.message || 'Historial ya actualizado.'}`
+      )
+      // Reload page data after short delay
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (e) {
+      setBackfillMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
+    } finally {
+      setBackfilling(false)
+    }
+  }, [])
 
   if (!data.length) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-        <div className="text-5xl mb-4">📈</div>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-zinc-200 mb-2">Sin historial todavía</h2>
-        <p className="text-sm text-gray-500 dark:text-zinc-500 max-w-xs">
-          El historial se construye con cada sync diario. Volvé después del primer sync.
-        </p>
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Historial de performance</h1>
+            <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Sin datos aún</p>
+          </div>
+          <button
+            onClick={runBackfill}
+            disabled={backfilling}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all shrink-0"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-3.5 h-3.5 ${backfilling ? 'animate-spin' : ''}`}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+            </svg>
+            {backfilling ? 'Importando…' : 'Importar 30d de Meta'}
+          </button>
+        </div>
+        {backfillMsg && (
+          <p className={`text-sm ${backfillMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>{backfillMsg}</p>
+        )}
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="text-5xl mb-4">📈</div>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-zinc-200 mb-2">Sin historial todavía</h2>
+          <p className="text-sm text-gray-500 dark:text-zinc-500 max-w-xs">
+            Hacé click en &quot;Importar 30d de Meta&quot; para traer los últimos 30 días de datos directamente desde la API.
+          </p>
+        </div>
       </div>
     )
   }
@@ -97,11 +142,28 @@ export default function HistoricoClient({ data }: Props) {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Historial de performance</h1>
-        <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">
-          Evolución diaria de métricas clave · últimos {data.length} días
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Historial de performance</h1>
+          <p className="text-sm mt-0.5">
+            {backfillMsg
+              ? <span className={backfillMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>{backfillMsg}</span>
+              : <span className="text-gray-500 dark:text-zinc-500">Evolución diaria · {data.length} días</span>
+            }
+          </p>
+        </div>
+        <button
+          onClick={runBackfill}
+          disabled={backfilling}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all shrink-0"
+          title="Importar últimos 30 días desde Meta"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            className={`w-3.5 h-3.5 ${backfilling ? 'animate-spin' : ''}`}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+          </svg>
+          {backfilling ? 'Importando…' : 'Importar 30d de Meta'}
+        </button>
       </div>
 
       {/* Summary cards */}

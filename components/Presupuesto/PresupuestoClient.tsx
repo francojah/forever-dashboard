@@ -255,24 +255,22 @@ export default function PresupuestoClient({ snapshot }: Props) {
           Recomendaciones por ad set
         </h2>
 
-        {recos.length === 0 && (
+        {recos.filter(r => !applied.has(r.adset_id)).length === 0 && (
           <div className="text-center py-10 text-gray-500 dark:text-zinc-500 text-sm">
-            No hay ad sets activos con datos suficientes para analizar.
+            {applied.size > 0
+              ? `Todas las recomendaciones fueron aplicadas. ¡Buen trabajo!`
+              : 'No hay ad sets activos con datos suficientes para analizar.'}
           </div>
         )}
 
-        {recos.map(r => {
+        {recos.filter(r => !applied.has(r.adset_id)).map(r => {
           const cfg = RECO_CONFIG[r.type]
-          const isApplied = applied.has(r.adset_id)
+          const isApplied = false // filtered above, always false here
 
           return (
             <div
               key={r.adset_id}
-              className={`rounded-xl border p-4 transition-all ${
-                isApplied
-                  ? 'border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/30 opacity-60'
-                  : `border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900`
-              } shadow-sm`}
+              className="rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
