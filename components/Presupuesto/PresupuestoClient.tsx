@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Snapshot } from '@/lib/supabase'
+
+const STORAGE_KEY = 'forever-presupuesto-applied'
 
 const BREAKEVEN_CPA = 17500
 const ROAS_MIN = 2.86
@@ -157,6 +159,27 @@ function buildRecommendations(snapshot: Snapshot): Recommendation[] {
 export default function PresupuestoClient({ snapshot }: Props) {
   const [applied, setApplied] = useState<Set<string>>(new Set())
 
+  // Load persisted applied state from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) setApplied(new Set(JSON.parse(stored) as string[]))
+    } catch {}
+  }, [])
+
+  function markApplied(id: string) {
+    setApplied(prev => {
+      const next = new Set(Array.from(prev).concat(id))
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next))) } catch {}
+      return next
+    })
+  }
+
+  function clearApplied() {
+    setApplied(new Set())
+    try { localStorage.removeItem(STORAGE_KEY) } catch {}
+  }
+
   if (!snapshot) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
@@ -181,11 +204,21 @@ export default function PresupuestoClient({ snapshot }: Props) {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Optimizador de presupuesto</h1>
-        <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">
-          Recomendaciones basadas en datos de los últimos 7 días · {snapshot.snapshot_date}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Optimizador de presupuesto</h1>
+          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">
+            Recomendaciones basadas en datos de los últimos 7 días · {snapshot.snapshot_date}
+          </p>
+        </div>
+        {applied.size > 0 && (
+          <button
+            onClick={clearApplied}
+            className="text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 transition-colors shrink-0"
+          >
+            Limpiar aplicados ({applied.size})
+          </button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -276,7 +309,7 @@ export default function PresupuestoClient({ snapshot }: Props) {
                   </div>
                 </div>
                 <button
-                  onClick={() => setApplied(prev => new Set(Array.from(prev).concat(r.adset_id)))}
+                  onClick={() => markApplied(r.adset_id)}
                   disabled={isApplied}
                   className="shrink-0 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
                 >

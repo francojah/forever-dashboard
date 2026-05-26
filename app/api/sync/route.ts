@@ -163,7 +163,11 @@ export async function POST() {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     const { error } = await supabase
       .from('meta_snapshots')
-      .upsert({ snapshot_date: today, campaigns, adsets, ads, summary, periods }, { onConflict: 'snapshot_date' })
+      .upsert({
+        snapshot_date: today,
+        campaigns, adsets, ads, summary, periods,
+        created_at: new Date().toISOString(), // always refresh timestamp on sync
+      }, { onConflict: 'snapshot_date' })
 
     if (error) throw error
 
