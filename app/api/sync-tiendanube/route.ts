@@ -112,9 +112,14 @@ function buildSummary(orders: any[]) {
   const unique_customers = new Set(customerIds).size
   const conversion_rate  = orders.length > 0 ? parseFloat(((total_orders / orders.length) * 100).toFixed(1)) : 0
 
+  const shipping_revenue = Math.round(
+    paid.reduce((s: number, o: { shipping_cost_owner?: string }) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
+  )
+
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
     unique_customers, top_products, payment_methods, shipping_methods, top_provinces, conversion_rate,
+    shipping_revenue,
   }
 }
 

@@ -1,14 +1,18 @@
-import { getLatestSnapshot } from '@/lib/supabase'
+import { getLatestSnapshot, getLatestTNSnapshot } from '@/lib/supabase'
 import DashboardClient from '@/components/Dashboard/DashboardClient'
 
-export const revalidate = 3600
+export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const snapshot = await getLatestSnapshot()
+  const [snapshot, tnSnapshot] = await Promise.all([
+    getLatestSnapshot().catch(() => null),
+    getLatestTNSnapshot().catch(() => null),
+  ])
 
   return (
     <div className="p-6">
-      <DashboardClient snapshot={snapshot} />
+      <DashboardClient snapshot={snapshot} tnSnapshot={tnSnapshot} />
     </div>
   )
 }

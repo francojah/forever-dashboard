@@ -73,7 +73,7 @@ export default function CreativosClient({ snapshot }: Props) {
   snapshot.adsets.forEach(s => { adsetCampMap[s.id] = s.campaign_id })
 
   const rows: CreativeRow[] = snapshot.ads
-    .filter(a => (a.spend || 0) > 0 || a.status === 'ACTIVE')
+    .filter(a => a.status === 'ACTIVE')
     .map(a => {
       const base: CreativeRow = {
         id: a.id, name: a.name,

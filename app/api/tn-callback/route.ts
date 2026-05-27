@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
   if (!code) {
     return new NextResponse(`
       <html><body style="font-family:sans-serif;padding:40px">
-        <h2>❌ No se recibió el código de autorización</h2>
-        <p>Volvé a intentar el proceso de instalación.</p>
+        <h2>No se recibio el codigo de autorizacion</h2>
+        <p>Volve a intentar el proceso de instalacion.</p>
       </body></html>
     `, { headers: { 'Content-Type': 'text/html' } })
   }
@@ -53,12 +53,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Show success page with the credentials
-    return new NextResponse(`
-      <html>
+    return new NextResponse(
+      `<html>
       <head><title>Tiendanube conectado</title></head>
       <body style="font-family:-apple-system,sans-serif;padding:40px;max-width:600px;margin:0 auto">
-        <h2 style="color:#16a34a">✅ Tiendanube conectado exitosamente</h2>
-        <p>Copiá estas variables y agregalas en Vercel y GitHub Secrets:</p>
+        <h2 style="color:#16a34a">Tiendanube conectado exitosamente</h2>
+        <p>Copia estas variables y agregarlas en Vercel y GitHub Secrets:</p>
         
         <div style="background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0">
           <p style="margin:0 0 8px"><strong>TIENDANUBE_USER_ID</strong></p>
@@ -72,14 +72,14 @@ export async function GET(req: NextRequest) {
 
         <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:20px 0">
           <p style="margin:0;font-size:14px;color:#92400e">
-            ⚠️ <strong>Guardá estos valores ahora.</strong> El access token no vuelve a mostrarse.
+            IMPORTANTE: Guarda estos valores ahora. El access token no vuelve a mostrarse.
           </p>
         </div>
 
         <p style="font-size:14px;color:#6b7280">
           Donde agregarlos:<br>
-          1. <strong>Vercel</strong>: Dashboard → Settings → Environment Variables<br>
-          2. <strong>GitHub Secrets</strong>: Repo → Settings → Secrets and variables → Actions<br>
+          1. <strong>Vercel</strong>: Dashboard &rarr; Settings &rarr; Environment Variables<br>
+          2. <strong>GitHub Secrets</strong>: Repo &rarr; Settings &rarr; Secrets and variables &rarr; Actions<br>
           3. <strong>.env.local</strong>: en tu proyecto local
         </p>
 
@@ -87,17 +87,19 @@ export async function GET(req: NextRequest) {
           Volver al dashboard
         </a>
       </body>
-      </html>
-    `, { headers: { 'Content-Type': 'text/html' } })
+      </html>`,
+      { headers: { 'Content-Type': 'text/html' } }
+    )
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return new NextResponse(`
-      <html><body style="font-family:sans-serif;padding:40px">
-        <h2>❌ Error al obtener el token</h2>
+    return new NextResponse(
+      `<html><body style="font-family:sans-serif;padding:40px">
+        <h2>Error al obtener el token</h2>
         <pre style="background:#fee2e2;padding:16px;border-radius:8px">${msg}</pre>
-        <p>Revisá que el Client Secret esté bien configurado en las variables de entorno de Vercel.</p>
-      </body></html>
-    `, { headers: { 'Content-Type': 'text/html' } })
+        <p>Revisa que el Client Secret este bien configurado en las variables de entorno de Vercel.</p>
+      </body></html>`,
+      { headers: { 'Content-Type': 'text/html' } }
+    )
   }
 }

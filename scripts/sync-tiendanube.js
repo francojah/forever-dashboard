@@ -177,6 +177,11 @@ function buildTNSummary(orders) {
   const all_orders = orders.length
   const conversion_rate = all_orders > 0 ? parseFloat(((total_orders / all_orders) * 100).toFixed(1)) : 0
 
+  // Costo de envío cobrado al cliente (shipping_cost_owner)
+  const shipping_revenue = Math.round(
+    paid.reduce((s, o) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
+  )
+
   return {
     total_revenue:   Math.round(total_revenue),
     total_orders,
@@ -187,6 +192,7 @@ function buildTNSummary(orders) {
     shipping_methods,
     top_provinces,
     conversion_rate,
+    shipping_revenue,
   }
 }
 

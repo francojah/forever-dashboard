@@ -203,6 +203,7 @@ export type TNSummary = {
   shipping_methods?: Record<string, number>
   top_provinces?: { name: string; count: number }[]
   conversion_rate?: number
+  shipping_revenue?: number  // monto cobrado por envíos al cliente
 }
 
 export type TNSnapshot = {
@@ -227,6 +228,7 @@ export async function getLatestTNSnapshot(): Promise<TNSnapshot | null> {
     .single()
   return data
 }
+
 
 export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_date: string; summary: Summary }[]> {
   const supabase = createClientServer()
