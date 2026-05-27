@@ -5,19 +5,24 @@ import { generateCreativeIdeas } from '@/lib/claude'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
+export const maxDuration = 60 // Vercel: allow up to 60s for Claude call
+
 export async function POST() {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-    const { data: snapshot } = await supabase
+    const { data: snapshot, error: snapErr } = await supabase
       .from('meta_snapshots')
       .select('*')
       .order('snapshot_date', { ascending: false })
       .limit(1)
       .single()
 
-    if (!snapshot) {
-      return NextResponse.json({ error: 'No hay datos de Meta. Ejecuta un sync primero.' }, { status: 400 })
+    if (snapErr || !snapshot) {
+      return NextResponse.json(
+        { error: 'No hay datos de Meta. Ejecuta un sync primero.' },
+        { status: 400 }
+      )
     }
 
     const { data: tnSnap } = await supabase
@@ -37,7 +42,8 @@ export async function POST() {
     return NextResponse.json(result)
 
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Error interno'
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[ideas] Error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

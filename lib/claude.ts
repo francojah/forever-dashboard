@@ -115,19 +115,13 @@ Respondé SOLO en JSON (sin texto adicional):
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
 
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('No JSON found')
-    return JSON.parse(jsonMatch[0])
-  } catch {
-    return {
-      what_works: 'No se pudo analizar.',
-      what_fails: 'No se pudo analizar.',
-      patterns: [],
-      top_products: [],
-      ideas: [],
-    }
+  // Strip markdown code fences if present
+  const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    throw new Error(`Claude no devolvio JSON valido. Respuesta: ${stripped.slice(0, 300)}`)
   }
+  return JSON.parse(jsonMatch[0]) as CreativeAnalysis
 }
 
 // ── Análisis de competencia ────────────────────────────────────
