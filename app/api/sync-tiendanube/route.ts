@@ -79,8 +79,9 @@ function buildSummary(orders: any[]) {
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
   // Products grouped by product_id, revenue proportional to o.total
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const productMap: Record<string, { name: string; quantity: number; revenue: number }> = {}
-  paid.forEach((o: { total: string; subtotal: string; products: { product_id: number; name: string; price: string; quantity: string }[] }) => {
+  paid.forEach((o: { total: string; products: { product_id: number; name: string; price: string; quantity: string }[] }) => {
     const items = o.products || []
     if (!items.length) return
     const listTotal = items.reduce((s, p) => s + parseFloat(p.price || '0') * parseInt(p.quantity || '1'), 0)
@@ -160,42 +161,6 @@ export async function POST() {
     const today = argentinaDateStr(new Date())
 
     const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.all([
-      fetchOrders('today'),
-      fetchOrders('yesterday'),
-      fetchOrders('7d'),
-      fetchOrders('30d'),
-      fetchOrders('ytd'),
-    ])
-
-    const snapshot = {
-      snapshot_date:     today,
-      summary_today:     buildSummary(ordersToday),
-      summary_yesterday: buildSummary(ordersYesterday),
-      summary_7d:        buildSummary(orders7d),
-      summary_30d:       buildSummary(orders30d),
-      summary_ytd:       buildSummary(ordersYTD),
-      orders_count:      orders7d.length,
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const { error } = await supabase
-      .from('tiendanube_snapshots')
-      .upsert({ ...snapshot, created_at: new Date().toISOString() }, { onConflict: 'snapshot_date' })
-
-    if (error) throw error
-
-    return NextResponse.json({
-      ok: true, date: today,
-      orders_today: snapshot.summary_today.total_orders,
-      orders_7d: snapshot.summary_7d.total_orders,
-      revenue_7d: snapshot.summary_7d.total_revenue,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido'
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
-}
-l([
       fetchOrders('today'),
       fetchOrders('yesterday'),
       fetchOrders('7d'),
