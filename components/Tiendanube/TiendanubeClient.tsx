@@ -184,12 +184,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">
               Tiendanube · {PERIOD_LABELS[period]}
             </p>
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <KpiCard label="Ventas totales"     value={fmt(tnRevenue)}         sub={`${fmt(revenuePerDay)}/día`}   color="indigo" />
               <KpiCard label="Órdenes"             value={fmt(tnOrders, 'number')} sub={`${ordersPerDay.toFixed(1)}/día`} color="violet" />
               <KpiCard label="Ticket promedio"     value={fmt(tn?.aov)}            sub="por orden"                     color="purple" />
               <KpiCard label="Clientes únicos"     value={fmt(tn?.unique_customers, 'number')} sub="en el período"    color="fuchsia" />
-              <KpiCard label="Carritos creados"    value={fmt(tn?.total_carts, 'number') !== '—' ? fmt(tn?.total_carts, 'number') : '—'} sub={tn?.conversion_rate != null ? tn.conversion_rate.toFixed(1) + '% conv.' : 'checkouts'} color="violet" />
               <KpiCard label="Unidades vendidas"   value={fmt(tn?.total_units_sold, 'number')} sub="artículos" color="purple" />
             </div>
           </div>

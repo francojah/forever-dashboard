@@ -208,10 +208,8 @@ export type TNSummary = {
   payment_methods: Record<string, number>
   shipping_methods?: Record<string, number>
   top_provinces?: { name: string; count: number }[]
-  conversion_rate?: number
   shipping_revenue?: number
   total_units_sold?: number
-  total_carts?: number
 }
 
 export type TNSnapshot = {

@@ -35,11 +35,6 @@ function getRange(preset: string) {
   }
 }
 
-const TN_HEADERS = {
-  'Authentication': `bearer ${TOKEN}`,
-  'User-Agent': 'ForeverDashboard/1.0 (francojah@gmail.com)',
-}
-
 async function fetchOrders(preset: string) {
   const { created_at_min, created_at_max } = getRange(preset)
   const params = new URLSearchParams({
@@ -48,30 +43,15 @@ async function fetchOrders(preset: string) {
     per_page: '200',
   })
   const res = await fetch(`${TN_API}/${USER_ID}/orders?${params}`, {
-    headers: TN_HEADERS,
+    headers: {
+      'Authentication': `bearer ${TOKEN}`,
+      'User-Agent': 'ForeverDashboard/1.0 (francojah@gmail.com)',
+    },
     cache: 'no-store',
   })
   const data = await res.json()
   if (data.error || data.code) throw new Error(`TN orders [${preset}]: ${data.description || data.error}`)
   return Array.isArray(data) ? data : []
-}
-
-async function fetchCheckoutsCount(preset: string): Promise<number> {
-  try {
-    const { created_at_min, created_at_max } = getRange(preset)
-    const params = new URLSearchParams({
-      created_at_min, created_at_max,
-      per_page: '200',
-    })
-    const res = await fetch(`${TN_API}/${USER_ID}/checkouts?${params}`, {
-      headers: TN_HEADERS,
-      cache: 'no-store',
-    })
-    const data = await res.json()
-    return Array.isArray(data) ? data.length : 0
-  } catch {
-    return 0
-  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +72,7 @@ function normalizeShipping(o: any): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildSummary(orders: any[], total_carts: number) {
+function buildSummary(orders: any[]) {
   const paid = orders.filter((o: { payment_status: string }) => ['paid', 'closed'].includes(o.payment_status))
   const total_revenue = paid.reduce((s: number, o: { total: string }) => s + parseFloat(o.total || '0'), 0)
   const total_orders  = paid.length
@@ -155,7 +135,6 @@ function buildSummary(orders: any[], total_carts: number) {
 
   const customerIds = paid.map((o: { customer?: { id?: number } }) => o.customer?.id).filter(Boolean)
   const unique_customers = new Set(customerIds).size
-  const conversion_rate  = total_carts > 0 ? parseFloat(((total_orders / total_carts) * 100).toFixed(1)) : 0
 
   const shipping_revenue = Math.round(
     paid.reduce((s: number, o: { shipping_cost_owner?: string }) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
@@ -163,8 +142,8 @@ function buildSummary(orders: any[], total_carts: number) {
 
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
-    unique_customers, top_products, payment_methods, shipping_methods, top_provinces, conversion_rate,
-    shipping_revenue, total_units_sold, total_carts,
+    unique_customers, top_products, payment_methods, shipping_methods, top_provinces,
+    shipping_revenue, total_units_sold,
   }
 }
 
@@ -176,27 +155,21 @@ export async function POST() {
   try {
     const today = argentinaDateStr(new Date())
 
-    const [
-      ordersToday,    cartsToday,
-      ordersYesterday, cartsYesterday,
-      orders7d,       carts7d,
-      orders30d,      carts30d,
-      ordersYTD,      cartsYTD,
-    ] = await Promise.all([
-      fetchOrders('today'),        fetchCheckoutsCount('today'),
-      fetchOrders('yesterday'),    fetchCheckoutsCount('yesterday'),
-      fetchOrders('7d'),           fetchCheckoutsCount('7d'),
-      fetchOrders('30d'),          fetchCheckoutsCount('30d'),
-      fetchOrders('ytd'),          fetchCheckoutsCount('ytd'),
+    const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.all([
+      fetchOrders('today'),
+      fetchOrders('yesterday'),
+      fetchOrders('7d'),
+      fetchOrders('30d'),
+      fetchOrders('ytd'),
     ])
 
     const snapshot = {
       snapshot_date:     today,
-      summary_today:     buildSummary(ordersToday,     cartsToday),
-      summary_yesterday: buildSummary(ordersYesterday, cartsYesterday),
-      summary_7d:        buildSummary(orders7d,        carts7d),
-      summary_30d:       buildSummary(orders30d,       carts30d),
-      summary_ytd:       buildSummary(ordersYTD,       cartsYTD),
+      summary_today:     buildSummary(ordersToday),
+      summary_yesterday: buildSummary(ordersYesterday),
+      summary_7d:        buildSummary(orders7d),
+      summary_30d:       buildSummary(orders30d),
+      summary_ytd:       buildSummary(ordersYTD),
       orders_count:      orders7d.length,
     }
 
@@ -210,7 +183,6 @@ export async function POST() {
     return NextResponse.json({
       ok: true, date: today,
       orders_today: snapshot.summary_today.total_orders,
-      carts_today:  snapshot.summary_today.total_carts,
       orders_7d:    snapshot.summary_7d.total_orders,
       revenue_7d:   snapshot.summary_7d.total_revenue,
     })
