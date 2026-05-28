@@ -74,25 +74,25 @@ export default function KpiGrid({ summary, breakeven, period = '7d', tnRevenue =
   const roasSub = realRoas != null ? 'real (TN/Meta)' : undefined
 
   const tnLabel = 'Ventas TN ' + (
-    period === 'today'     ? 'Hoy'  :
-    period === 'yesterday' ? 'Ayer' :
-    period === '7d'        ? '7d'   :
-    period === '30d'       ? '30d'  :
-    period === 'custom'    ? 'Rango' : period
+    period === 'hoy'    ? 'Hoy'   :
+    period === 'ayer'   ? 'Ayer'  :
+    period === '7d'     ? '7d'    :
+    period === '30d'    ? '30d'   :
+    period === 'custom' ? 'Rango' : period
   )
 
   const spendLabel = 'Gasto ' + (
-    period === 'today'     ? 'Hoy'  :
-    period === 'yesterday' ? 'Ayer' :
-    period === '30d'       ? '30d'  :
-    period === 'custom'    ? 'Rango' : '7d'
+    period === 'hoy'    ? 'Hoy'   :
+    period === 'ayer'   ? 'Ayer'  :
+    period === '30d'    ? '30d'   :
+    period === 'custom' ? 'Rango' : '7d'
   )
 
   const purchasesLabel = 'Compras ' + (
-    period === 'today'     ? 'Hoy'  :
-    period === 'yesterday' ? 'Ayer' :
-    period === '30d'       ? '30d'  :
-    period === 'custom'    ? 'Rango' : '7d'
+    period === 'hoy'    ? 'Hoy'   :
+    period === 'ayer'   ? 'Ayer'  :
+    period === '30d'    ? '30d'   :
+    period === 'custom' ? 'Rango' : '7d'
   )
 
   // WoW deltas
