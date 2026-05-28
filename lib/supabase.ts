@@ -54,6 +54,7 @@ export type Adset = {
   clicks: number
   ctr: number | null
   stop_time: string | null
+  frequency?: number | null
 }
 
 export type Ad = {
@@ -72,6 +73,7 @@ export type Ad = {
   video_p50?: number | null
   hook_rate?: number | null
   view_rate?: number | null
+  frequency?: number | null
 }
 
 export type Summary = {

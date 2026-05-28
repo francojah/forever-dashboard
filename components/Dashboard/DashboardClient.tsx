@@ -121,6 +121,11 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
     .filter(s => s.status === 'ACTIVE' && (s.spend || 0) > 0)
     .sort((a, b) => (b.spend || 0) - (a.spend || 0))
 
+  const activeAdsetIds = new Set(activeAdsets.map(s => s.id))
+  const activeAds = ads
+    .filter(a => activeAdsetIds.has(a.adset_id) && (a.spend || 0) > 0)
+    .sort((a, b) => (b.spend || 0) - (a.spend || 0))
+
   const syncTime = lastSynced
     ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 
@@ -267,6 +272,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
       <div className="mt-6">
         <AdsetTable
           adsets={activeAdsets}
+          ads={activeAds}
           campaignMap={campMap}
           breakeven={BREAKEVEN_CPA}
           period={PERIOD_SHORT[period]}

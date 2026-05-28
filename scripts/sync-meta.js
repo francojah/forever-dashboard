@@ -77,10 +77,11 @@ function parseInsights(entity) {
     video_p50:       videoP50,
     hook_rate:       (videoPlays && impr > 0) ? parseFloat((videoPlays / impr * 100).toFixed(1)) : null,
     view_rate:       (videoP50   && impr > 0) ? parseFloat((videoP50   / impr * 100).toFixed(1)) : null,
+    frequency:       formatNumber(i.frequency),
   }
 }
 
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,frequency,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
 const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d']
 
 // ── Fetch campaigns for a given date_preset ────────────────────

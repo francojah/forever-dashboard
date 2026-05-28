@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
-import type { Adset } from '@/lib/supabase'
+import type { Adset, Ad } from '@/lib/supabase'
 
 const ROAS_TARGET = 3.0
 
@@ -10,70 +10,11 @@ function isTrafficAdset(adset: Adset, campaignMap: Record<string, string>): bool
   const goal = adset.optimization_goal || ''
   if (['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT'].includes(goal)) return true
   const campName = (campaignMap[adset.campaign_id] || '').toLowerCase()
-  return campName.includes('trafico') || campName.includes('tráfico') || campName.includes('traffic')
-}
-
-// -- Motor de insights --------------------------------------------
-type Verdict = 'success' | 'good' | 'warning' | 'danger' | 'info'
-interface Insight { verdict: Verdict; text: string; action: string }
-
-function generateInsight(adset: Adset, type: 'conversion' | 'traffic', breakeven: number): Insight {
-  if (type === 'conversion') {
-    const spend   = adset.spend   || 0
-    const results = adset.results || 0
-
-    if (results === 0) {
-      if (spend > breakeven * 3) return {
-        verdict: 'danger',
-        text:   `Sin compras con $${Math.round(spend).toLocaleString('es-AR')} gastado en 7 días.`,
-        action: 'Revisar audiencia, landing y oferta. Si no convierte hoy, pausar.'
-      }
-      return {
-        verdict: 'info',
-        text:   'Sin compras registradas en el período.',
-        action: 'Normal en ad sets nuevos o con alcance bajo. Monitorear los próximos días.'
-      }
-    }
-
-    const roas = adset.roas
-    const cpa  = adset.cost_per_result
-
-    if (roas !== null && roas !== undefined) {
-      if (roas >= 6) return { verdict: 'success', text: `ROAS ${roas.toFixed(1)}x — top performer, muy por encima del objetivo (${ROAS_TARGET}x).`, action: 'Escalar +20-30% si lleva más de 5 días estable. Duplicar en nueva audiencia.' }
-      if (roas >= ROAS_TARGET) return { verdict: 'good',    text: `ROAS ${roas.toFixed(1)}x — rentable y por encima del objetivo mínimo (${ROAS_TARGET}x).`, action: 'Mantener presupuesto. Testear creativos frescos para seguir escalando.' }
-      if (roas >= 2) return           { verdict: 'warning', text: `ROAS ${roas.toFixed(1)}x — cerca del punto de equilibrio. Margen ajustado.`,              action: 'No escalar. Testear nuevos creativos, revisar copy y frecuencia de anuncio.' }
-      return                          { verdict: 'danger',  text: `ROAS ${roas.toFixed(1)}x — por debajo del mínimo rentable (${ROAS_TARGET}x).`,              action: 'Acción urgente: revisar creativos y segmentación. Sin mejora en 24h, pausar.' }
-    }
-
-    if (cpa !== null && cpa !== undefined) {
-      const pct = Math.round((cpa / breakeven - 1) * 100)
-      if (cpa <= breakeven)        return { verdict: 'success', text: `CPA $${Math.round(cpa).toLocaleString('es-AR')} — dentro del breakeven ($${breakeven.toLocaleString('es-AR')}).`, action: 'Mantener. Optimizar creativos para seguir bajando el CPA.' }
-      if (cpa <= breakeven * 1.25) return { verdict: 'warning', text: `CPA $${Math.round(cpa).toLocaleString('es-AR')} — ${pct}% sobre el breakeven.`,          action: 'No escalar. Optimizar creativos y copy. Revisar calidad de la audiencia.' }
-      return                              { verdict: 'danger',  text: `CPA $${Math.round(cpa).toLocaleString('es-AR')} — ${pct}% sobre el breakeven. No rentable.`, action: 'Revisar audiencia, landing y oferta urgente. Pausar si no mejora en 24h.' }
-    }
-
-    return { verdict: 'info', text: 'Datos insuficientes para generar una recomendación.', action: 'Esperar al menos 3 días de acumulación de datos.' }
-  }
-
-  // Tráfico
-  const ctr = adset.ctr || 0
-  if (!adset.impressions || adset.impressions < 500) return { verdict: 'info',    text: 'Volumen bajo. Pocas impresiones para evaluar el rendimiento.', action: 'Esperar más entrega antes de tomar decisiones de optimización.' }
-  if (ctr >= 2.5) return                                    { verdict: 'success', text: `CTR ${ctr.toFixed(2)}% — excelente. El creativo captura muy bien la atención.`,          action: 'Reutilizar este creativo en campañas de conversión. Considerar escalar.' }
-  if (ctr >= 1.2) return                                    { verdict: 'good',    text: `CTR ${ctr.toFixed(2)}% — buen rendimiento para tráfico frío.`,                           action: 'Testear variaciones de copy e imagen para seguir mejorando el CTR.' }
-  if (ctr >= 0.6) return                                    { verdict: 'warning', text: `CTR ${ctr.toFixed(2)}% — por debajo del promedio esperado (>1.2%).`,                     action: 'Revisar creativos. Testear audiencias más amplias o diferentes intereses.' }
-  return                                                    { verdict: 'danger',  text: `CTR ${ctr.toFixed(2)}% — muy bajo. El creativo no está resonando con la audiencia.`,     action: 'Cambiar creativos urgente. Revisar segmentación y relevancia del mensaje.' }
+  return campName.includes('trafico') || campName.includes('trafico') || campName.includes('traffic')
 }
 
 // -- UI helpers ---------------------------------------------------
-const VS: Record<Verdict, { bg: string; border: string; dotColor: string; text: string; action: string }> = {
-  success: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-l-emerald-400', dotColor: 'bg-emerald-500', text: 'text-emerald-900 dark:text-emerald-300', action: 'text-emerald-700 dark:text-emerald-400' },
-  good:    { bg: 'bg-blue-50 dark:bg-blue-950/30',       border: 'border-l-blue-400',    dotColor: 'bg-blue-500',    text: 'text-blue-900 dark:text-blue-300',       action: 'text-blue-700 dark:text-blue-400'    },
-  warning: { bg: 'bg-amber-50 dark:bg-amber-950/30',     border: 'border-l-amber-400',   dotColor: 'bg-amber-500',   text: 'text-amber-900 dark:text-amber-300',     action: 'text-amber-700 dark:text-amber-400'  },
-  danger:  { bg: 'bg-red-50 dark:bg-red-950/30',         border: 'border-l-red-400',     dotColor: 'bg-red-500',     text: 'text-red-900 dark:text-red-300',         action: 'text-red-700 dark:text-red-400'      },
-  info:    { bg: 'bg-gray-50 dark:bg-zinc-800/40',       border: 'border-l-gray-300 dark:border-l-zinc-600', dotColor: 'bg-gray-400 dark:bg-zinc-500', text: 'text-gray-700 dark:text-zinc-300', action: 'text-gray-500 dark:text-zinc-400' },
-}
-
-function RoasBar({ roas }: { roas: number | null }) {
+function RoasBar({ roas }: { roas: number | null | undefined }) {
   if (!roas) return <span className="text-gray-300 dark:text-zinc-600 text-sm">—</span>
   const pct   = Math.min((roas / (ROAS_TARGET * 2.5)) * 100, 100)
   const color = roas >= ROAS_TARGET * 2 ? '#059669' : roas >= ROAS_TARGET ? '#2563eb' : roas >= 2 ? '#d97706' : '#dc2626'
@@ -88,7 +29,7 @@ function RoasBar({ roas }: { roas: number | null }) {
   )
 }
 
-function CpaChip({ cpa, breakeven }: { cpa: number | null; breakeven: number }) {
+function CpaChip({ cpa, breakeven }: { cpa: number | null | undefined; breakeven: number }) {
   if (!cpa) return <span className="text-gray-300 dark:text-zinc-600 text-sm">—</span>
   const cls = cpa <= breakeven
     ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'
@@ -98,79 +39,79 @@ function CpaChip({ cpa, breakeven }: { cpa: number | null; breakeven: number }) 
   return <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold ${cls}`}>${Math.round(cpa).toLocaleString('es-AR')}</span>
 }
 
-function CtrBadge({ ctr }: { ctr: number | null }) {
+function CtrBadge({ ctr }: { ctr: number | null | undefined }) {
   if (!ctr) return <span className="text-gray-300 dark:text-zinc-600 text-sm">—</span>
   const cls = ctr >= 1.2 ? 'text-blue-700 dark:text-blue-400 font-bold' : ctr >= 0.6 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-red-600 dark:text-red-400 font-semibold'
   return <span className={`text-sm ${cls}`}>{ctr.toFixed(2)}%</span>
 }
 
+function FreqBadge({ freq }: { freq: number | null | undefined }) {
+  if (freq == null) return <span className="text-gray-300 dark:text-zinc-600 text-sm">—</span>
+  const cls = freq >= 4 ? 'text-red-600 dark:text-red-400 font-bold' : freq >= 2.5 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-600 dark:text-zinc-300'
+  return <span className={`text-sm ${cls}`}>{freq.toFixed(1)}</span>
+}
+
+function VideoMetric({ value, label, greenThreshold, amberThreshold }: { value: number | null | undefined; label: string; greenThreshold: number; amberThreshold: number }) {
+  if (value == null) return <span className="text-gray-300 dark:text-zinc-600 text-xs">—</span>
+  const cls = value >= greenThreshold ? 'text-emerald-600 dark:text-emerald-400 font-bold' : value >= amberThreshold ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-zinc-400'
+  return <span className={`text-xs ${cls}`}>{value.toFixed(1)}%</span>
+}
+
 function Chevron({ open }: { open: boolean }) {
   return (
-    <svg
-      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round"
-      className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-    >
+      className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
       <polyline points="6 9 12 15 18 9"/>
     </svg>
   )
 }
 
-
-// -- Botones de accion directa ------------------------------------
+// -- Botones de accion solo para creativos (pause/activate) --------
 type ActionState = 'idle' | 'loading' | 'done' | 'error'
 
-function ActionButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) {
+function AdActionButtons({ ad, onDone }: { ad: Ad; onDone: () => void }) {
   const [state, setState] = useState<ActionState>('idle')
   const [msg, setMsg]     = useState('')
-  const [confirm, setConfirm] = useState<{ action: string; label: string; value?: number } | null>(null)
+  const [confirm, setConfirm] = useState<{ action: string; label: string } | null>(null)
 
-  const doAction = useCallback(async (action: string, label: string, value?: number) => {
+  const doAction = useCallback(async (action: string, label: string) => {
     setState('loading')
     setMsg('')
     try {
-      const body: Record<string, unknown> = { entityId: adset.id, action }
-      if (value != null) body.value = value
-      const res  = await fetch('/api/meta/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res  = await fetch('/api/meta/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: ad.id, action }) })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (!data.ok) throw new Error(data.error || 'Error')
       setState('done')
-      setMsg(label + ' aplicado')
-      setTimeout(() => { setState('idle'); setMsg(''); onDone() }, 2500)
+      setMsg(label)
+      setTimeout(() => { setState('idle'); setMsg(''); onDone() }, 2000)
     } catch (e) {
       setState('error')
       setMsg(e instanceof Error ? e.message : 'Error')
-      setTimeout(() => { setState('idle'); setMsg('') }, 3500)
+      setTimeout(() => { setState('idle'); setMsg('') }, 3000)
     }
     setConfirm(null)
-  }, [adset.id, onDone])
+  }, [ad.id, onDone])
 
-  const isPaused = adset.status === 'PAUSED'
-  const budget   = adset.daily_budget || 0
+  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">...</span>
+  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
+  if (state === 'error')   return <span className="text-xs text-red-500 truncate max-w-[120px]" title={msg}>Error</span>
 
   if (confirm) {
     return (
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-1">
         <span className="text-xs text-gray-500 dark:text-zinc-400">{confirm.label}?</span>
-        <button onClick={() => doAction(confirm.action, confirm.label, confirm.value)}
-          className="text-xs px-2 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium hover:opacity-80">
-          Si
-        </button>
+        <button onClick={() => doAction(confirm.action, confirm.label)}
+          className="text-xs px-1.5 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium">Si</button>
         <button onClick={() => setConfirm(null)}
-          className="text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800">
-          No
-        </button>
+          className="text-xs px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400">No</button>
       </div>
     )
   }
 
-  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">Aplicando...</span>
-  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
-  if (state === 'error')   return <span className="text-xs text-red-500">{msg}</span>
-
+  const isPaused = ad.status === 'PAUSED'
   return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {/* Pause / Activate */}
+    <div className="flex items-center gap-1">
       {isPaused ? (
         <button onClick={() => setConfirm({ action: 'activate', label: 'Activar' })}
           className="text-xs px-2 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 font-medium transition-colors">
@@ -182,58 +123,183 @@ function ActionButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) 
           Pausar
         </button>
       )}
-      {/* Budget adjustments (only for active adsets with budget) */}
-      {!isPaused && budget > 0 && (
-        <>
-          <button onClick={() => setConfirm({ action: 'set_budget', label: '+20% budget', value: Math.round(budget * 1.2 / 500) * 500 })}
-            className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
-            +20%
-          </button>
-          <button onClick={() => setConfirm({ action: 'set_budget', label: '-20% budget', value: Math.round(budget * 0.8 / 500) * 500 })}
-            className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
-            -20%
-          </button>
-        </>
-      )}
     </div>
   )
 }
 
-// -- Seccion acordeon ---------------------------------------------
+// -- Botones de presupuesto para ad sets --------------------------
+function AdsetBudgetButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) {
+  const [state, setState] = useState<ActionState>('idle')
+  const [msg, setMsg]     = useState('')
+  const [confirm, setConfirm] = useState<{ action: string; label: string; value: number } | null>(null)
+
+  const doAction = useCallback(async (action: string, label: string, value: number) => {
+    setState('loading')
+    try {
+      const res  = await fetch('/api/meta/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: adset.id, action, value }) })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!data.ok) throw new Error(data.error || 'Error')
+      setState('done')
+      setMsg(label)
+      setTimeout(() => { setState('idle'); setMsg(''); onDone() }, 2000)
+    } catch (e) {
+      setState('error')
+      setMsg('Error')
+      setTimeout(() => { setState('idle'); setMsg('') }, 3000)
+    }
+    setConfirm(null)
+  }, [adset.id, onDone])
+
+  const budget = adset.daily_budget || 0
+  if (!budget || adset.status === 'PAUSED') return null
+
+  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">...</span>
+  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
+  if (state === 'error')   return <span className="text-xs text-red-500">Error</span>
+
+  if (confirm) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-gray-500 dark:text-zinc-400">{confirm.label}?</span>
+        <button onClick={() => doAction(confirm.action, confirm.label, confirm.value)}
+          className="text-xs px-1.5 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium">Si</button>
+        <button onClick={() => setConfirm(null)}
+          className="text-xs px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400">No</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <button onClick={() => setConfirm({ action: 'set_budget', label: '+20%', value: Math.round(budget * 1.2 / 500) * 500 })}
+        className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
+        +20%
+      </button>
+      <button onClick={() => setConfirm({ action: 'set_budget', label: '-20%', value: Math.round(budget * 0.8 / 500) * 500 })}
+        className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
+        -20%
+      </button>
+    </div>
+  )
+}
+
+// -- Sub-tabla de creativos de un ad set --------------------------
+function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'conversion' | 'traffic'; breakeven: number; onAction: () => void }) {
+  if (ads.length === 0) return (
+    <tr><td colSpan={9} className="px-8 py-3 text-xs text-gray-400 dark:text-zinc-600 italic">Sin creativos con datos en este periodo.</td></tr>
+  )
+  const isConv = type === 'conversion'
+  return (
+    <>
+      <tr className="bg-gray-50/80 dark:bg-zinc-800/60">
+        <td colSpan={9} className="px-0 py-0">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-t border-gray-100 dark:border-zinc-700">
+                <th className="pl-10 pr-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Creativo</th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Gasto</th>
+                {isConv ? (
+                  <>
+                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Compras</th>
+                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPA</th>
+                    <th className="px-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">ROAS</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Impr.</th>
+                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Clicks</th>
+                  </>
+                )}
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CTR</th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Frec.</th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Hook%</th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">View%</th>
+                <th className="px-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ads.map(ad => (
+                <tr key={ad.id} className="border-t border-gray-100 dark:border-zinc-700/50 hover:bg-white/50 dark:hover:bg-zinc-800/30">
+                  <td className="pl-10 pr-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      {ad.status === 'PAUSED' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                      {ad.status === 'ACTIVE' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
+                      <span className="text-gray-700 dark:text-zinc-200 leading-tight">{ad.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">
+                    {ad.spend ? '$' + Math.round(ad.spend).toLocaleString('es-AR') : '—'}
+                  </td>
+                  {isConv ? (
+                    <>
+                      <td className="px-3 py-2 text-right font-medium text-gray-700 dark:text-zinc-200">{ad.results ?? '—'}</td>
+                      <td className="px-3 py-2 text-right"><CpaChip cpa={ad.cost_per_result} breakeven={breakeven} /></td>
+                      <td className="px-3 py-2"><RoasBar roas={ad.roas} /></td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.impressions ? ad.impressions.toLocaleString('es-AR') : '—'}</td>
+                      <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.clicks ? ad.clicks.toLocaleString('es-AR') : '—'}</td>
+                    </>
+                  )}
+                  <td className="px-3 py-2 text-right"><CtrBadge ctr={ad.ctr} /></td>
+                  <td className="px-3 py-2 text-right"><FreqBadge freq={ad.frequency} /></td>
+                  <td className="px-3 py-2 text-right"><VideoMetric value={ad.hook_rate} label="Hook" greenThreshold={20} amberThreshold={10} /></td>
+                  <td className="px-3 py-2 text-right"><VideoMetric value={ad.view_rate} label="View" greenThreshold={25} amberThreshold={12} /></td>
+                  <td className="px-3 py-2"><AdActionButtons ad={ad} onDone={onAction} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </>
+  )
+}
+
+// -- Seccion acordeon (Conversion / Trafico) ----------------------
 interface SectionProps {
   title: string
   type: 'conversion' | 'traffic'
   adsets: Adset[]
+  ads: Ad[]
   campaignMap: Record<string, string>
   breakeven: number
   period?: string
   onAction?: () => void
 }
 
-function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onAction }: SectionProps) {
-  const [open, setOpen] = useState(true)
+function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period, onAction }: SectionProps) {
+  const [open, setOpen]           = useState(true)
+  const [expandedIds, setExpanded] = useState<Set<string>>(new Set())
   const handleAction = onAction ?? (() => {})
+
+  const toggleExpand = (id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const totalSpend  = adsets.reduce((s, a) => s + (a.spend  || 0), 0)
   const totalBudget = adsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
   const isConv      = type === 'conversion'
-  const cols        = isConv ? 8 : 7
   const gradient    = isConv ? 'from-blue-600 to-blue-700' : 'from-violet-600 to-violet-700'
 
   const spendLabel = period
-    ? `Gasto ${period === 'hoy' ? 'Hoy' : period === 'ayer' ? 'Ayer' : period === '30d' ? '30d' : '7d'}`
+    ? 'Gasto ' + (period === 'hoy' ? 'Hoy' : period === 'ayer' ? 'Ayer' : period === '30d' ? '30d' : '7d')
     : 'Gasto 7d'
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm">
 
-      {/* Header acordion */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`w-full bg-gradient-to-r ${gradient} px-5 py-3.5 flex items-center justify-between hover:opacity-95 transition-opacity`}
-      >
+      {/* Header */}
+      <button onClick={() => setOpen(o => !o)}
+        className={`w-full bg-gradient-to-r ${gradient} px-5 py-3.5 flex items-center justify-between hover:opacity-95 transition-opacity`}>
         <div className="flex items-center gap-2.5">
-          <span className={`w-2.5 h-2.5 rounded-full bg-white/80 inline-block shrink-0`} />
+          <span className="w-2.5 h-2.5 rounded-full bg-white/80 inline-block shrink-0" />
           <span className="text-sm font-bold text-white">{title}</span>
           <span className="text-xs text-white/60 bg-white/10 px-2 py-0.5 rounded-full">
             {adsets.length} ad set{adsets.length !== 1 ? 's' : ''}
@@ -242,20 +308,19 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onA
         <div className="flex items-center gap-5">
           <div className="hidden sm:flex items-center gap-5 text-xs text-white/80">
             <span>{spendLabel}: <strong className="text-white">${Math.round(totalSpend).toLocaleString('es-AR')}</strong></span>
-            <span>Budget/día: <strong className="text-white">${Math.round(totalBudget).toLocaleString('es-AR')}</strong></span>
+            <span>Budget/dia: <strong className="text-white">${Math.round(totalBudget).toLocaleString('es-AR')}</strong></span>
           </div>
           <span className="text-white/70"><Chevron open={open} /></span>
         </div>
       </button>
 
-      {/* Contenido colapsable */}
       {open && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-800/40">
                 <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ad Set</th>
-                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/día</th>
+                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/dia</th>
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">{spendLabel}</th>
                 {isConv ? (
                   <>
@@ -263,37 +328,46 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onA
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CPA</th>
                     <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">ROAS</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
-                    <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Acciones</th>
                   </>
                 ) : (
                   <>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Impr.</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Clicks</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CPC</th>
-                    <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Acciones</th>
                   </>
                 )}
+                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Frec.</th>
+                <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget</th>
               </tr>
             </thead>
             <tbody>
               {adsets.map(adset => {
-                const insight = generateInsight(adset, type, breakeven)
-                const vs      = VS[insight.verdict]
-                const cpc     = (adset.spend && adset.clicks > 0) ? adset.spend / adset.clicks : null
+                const adsetAds = ads
+                  .filter(a => a.adset_id === adset.id)
+                  .sort((a, b) => (b.spend || 0) - (a.spend || 0))
+                const isExpanded = expandedIds.has(adset.id)
+                const cpc = (adset.spend && adset.clicks > 0) ? adset.spend / adset.clicks : null
 
                 return (
                   <React.Fragment key={adset.id}>
-                    <tr className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors">
+                    <tr
+                      onClick={() => toggleExpand(adset.id)}
+                      className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer"
+                    >
                       <td className="px-5 py-3">
-                        <p className="font-semibold text-gray-900 dark:text-white leading-tight">{adset.name}</p>
-                        <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{campaignMap[adset.campaign_id] || '—'}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 dark:text-zinc-500"><Chevron open={isExpanded} /></span>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white leading-tight">{adset.name}</p>
+                            <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{campaignMap[adset.campaign_id] || '—'}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-right text-gray-500 dark:text-zinc-400 tabular-nums">
-                        {adset.daily_budget ? `$${adset.daily_budget.toLocaleString('es-AR')}` : '—'}
+                        {adset.daily_budget ? '$' + adset.daily_budget.toLocaleString('es-AR') : '—'}
                       </td>
                       <td className="px-3 py-3 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
-                        {adset.spend ? `$${Math.round(adset.spend).toLocaleString('es-AR')}` : '—'}
+                        {adset.spend ? '$' + Math.round(adset.spend).toLocaleString('es-AR') : '—'}
                       </td>
                       {isConv ? (
                         <>
@@ -305,10 +379,7 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onA
                           <td className="px-3 py-3 text-right"><CpaChip cpa={adset.cost_per_result} breakeven={breakeven} /></td>
                           <td className="px-3 py-3"><RoasBar roas={adset.roas} /></td>
                           <td className="px-3 py-3 text-right text-gray-500 dark:text-zinc-400 text-xs tabular-nums">
-                            {adset.ctr ? `${adset.ctr.toFixed(2)}%` : '—'}
-                          </td>
-                          <td className="px-3 py-3">
-                            <ActionButtons adset={adset} onDone={handleAction} />
+                            {adset.ctr ? adset.ctr.toFixed(2) + '%' : '—'}
                           </td>
                         </>
                       ) : (
@@ -316,26 +387,16 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onA
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.impressions ? adset.impressions.toLocaleString('es-AR') : '—'}</td>
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.clicks ? adset.clicks.toLocaleString('es-AR') : '—'}</td>
                           <td className="px-3 py-3 text-right"><CtrBadge ctr={adset.ctr} /></td>
-                          <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{cpc ? `$${Math.round(cpc).toLocaleString('es-AR')}` : '—'}</td>
-                          <td className="px-3 py-3">
-                            <ActionButtons adset={adset} onDone={handleAction} />
-                          </td>
                         </>
                       )}
-                    </tr>
-
-                    {/* Insight row */}
-                    <tr>
-                      <td colSpan={cols} className="px-5 pt-0 pb-3">
-                        <div className={`${vs.bg} border-l-2 ${vs.border} rounded-r-lg px-3 py-2 flex items-start gap-2`}>
-                          <span className={`w-2 h-2 rounded-full ${vs.dotColor} shrink-0 mt-1 inline-block`} />
-                          <p className="text-xs leading-relaxed">
-                            <span className={`font-medium ${vs.text}`}>{insight.text}</span>
-                            <span className={`ml-2 ${vs.action}`}>— <em>{insight.action}</em></span>
-                          </p>
-                        </div>
+                      <td className="px-3 py-3 text-right"><FreqBadge freq={adset.frequency} /></td>
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <AdsetBudgetButtons adset={adset} onDone={handleAction} />
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <AdsSubTable ads={adsetAds} type={type} breakeven={breakeven} onAction={handleAction} />
+                    )}
                   </React.Fragment>
                 )
               })}
@@ -350,22 +411,23 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onA
 // -- Export principal ---------------------------------------------
 interface Props {
   adsets: Adset[]
+  ads: Ad[]
   campaignMap: Record<string, string>
   breakeven: number
   period?: string
 }
 
-export default function AdsetTable({ adsets, campaignMap, breakeven, period }: Props) {
+export default function AdsetTable({ adsets, ads, campaignMap, breakeven, period }: Props) {
   const convAdsets    = adsets.filter(a => !isTrafficAdset(a, campaignMap))
   const trafficAdsets = adsets.filter(a =>  isTrafficAdset(a, campaignMap))
 
   return (
     <div className="space-y-6">
       {convAdsets.length > 0 && (
-        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} onAction={() => {}} />
+        <AdsetSection title="Conversion" type="conversion" adsets={convAdsets} ads={ads} campaignMap={campaignMap} breakeven={breakeven} period={period} />
       )}
       {trafficAdsets.length > 0 && (
-        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} onAction={() => {}} />
+        <AdsetSection title="Trafico web" type="traffic" adsets={trafficAdsets} ads={ads} campaignMap={campaignMap} breakeven={breakeven} period={period} />
       )}
     </div>
   )

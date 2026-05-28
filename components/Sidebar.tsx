@@ -28,8 +28,7 @@ const icons = {
 
 const NAV = [
   { href: '/',             label: 'Dashboard',    icon: 'dashboard'   },
-  { href: '/creativos',    label: 'Creativos',    icon: 'creativos'   },
-  { href: '/historico',    label: 'Historial',    icon: 'historico'   },
+{ href: '/historico',    label: 'Historial',    icon: 'historico'   },
   { href: '/tiendanube',   label: 'Tiendanube',   icon: 'tiendanube'  },
   { href: '/balance',      label: 'Balance',      icon: 'balance'     },
   { href: '/chat',         label: 'Chat IA',      icon: 'chat'        },
