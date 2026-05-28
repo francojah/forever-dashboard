@@ -195,4 +195,45 @@ export async function POST() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const newAlerts = (summary.alerts as any[])
         .map((a: any) => ({ ...a, created_at: new Date().toISOString() }))
-        .filter((a: any) => !existingKeys
+        .filter((a: any) => !existingKeys.has(a.entity_id + ':' + a.type))
+      if (newAlerts.length > 0) {
+        await supabase.from('alerts').insert(newAlerts)
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      date: today,
+      campaigns: campaigns.length,
+      adsets: adsets.length,
+      ads: ads.length,
+      spend: summary.total_spend_7d,
+      purchases: summary.total_purchases_7d,
+      roas: summary.blended_roas,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error desconocido'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+.has(a.entity_id + ':' + a.type))
+      if (newAlerts.length > 0) {
+        await supabase.from('alerts').insert(newAlerts)
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      date: today,
+      campaigns: campaigns.length,
+      adsets: adsets.length,
+      ads: ads.length,
+      spend: summary.total_spend_7d,
+      purchases: summary.total_purchases_7d,
+      roas: summary.blended_roas,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error desconocido'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
