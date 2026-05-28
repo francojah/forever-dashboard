@@ -68,6 +68,10 @@ export type Ad = {
   impressions: number
   clicks: number
   ctr: number | null
+  video_plays?: number | null
+  video_p50?: number | null
+  hook_rate?: number | null
+  view_rate?: number | null
 }
 
 export type Summary = {
@@ -236,6 +240,10 @@ export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_dat
     .from('meta_snapshots')
     .select('snapshot_date, summary')
     .order('snapshot_date', { ascending: true })
+    .limit(limit)
+  return (data || []) as { snapshot_date: string; summary: Summary }[]
+}
+, { ascending: true })
     .limit(limit)
   return (data || []) as { snapshot_date: string; summary: Summary }[]
 }

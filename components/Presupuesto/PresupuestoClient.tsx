@@ -156,6 +156,89 @@ function buildRecommendations(snapshot: Snapshot): Recommendation[] {
   return recos.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
 }
 
+
+// ── Proyeccion mensual ──────────────────────────────────────────
+function MonthlyProjection({ snapshot }: { snapshot: Snapshot }) {
+  const spend30d = snapshot.periods?.last_30d?.summary?.total_spend_7d ?? null
+  if (!spend30d) return null
+
+  const today = new Date()
+  const year  = today.getFullYear()
+  const month = today.getMonth()
+  const daysElapsed  = today.getDate()
+  const daysInMonth  = new Date(year, month + 1, 0).getDate()
+  const daysLeft     = daysInMonth - daysElapsed
+
+  const avgDaily     = spend30d / 30
+  const mtdEstimate  = Math.round(avgDaily * daysElapsed)
+  const projected    = Math.round(avgDaily * daysInMonth)
+  const monthName    = today.toLocaleString('es-AR', { month: 'long' })
+
+  const pacing = daysElapsed / daysInMonth
+  const spendPacing = mtdEstimate / projected
+  const pacingDiff = Math.round((spendPacing - pacing) * 100)
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 uppercase tracking-wide">Proyeccion mensual</h2>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5 capitalize">{monthName} {year} - dia {daysElapsed} de {daysInMonth}</p>
+        </div>
+        <span className={'text-xs font-medium px-2 py-1 rounded-full ' + (
+          pacingDiff > 5  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
+          pacingDiff < -5 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+          'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+        )}>
+          {pacingDiff > 5 ? 'Ritmo alto' : pacingDiff < -5 ? 'Ritmo bajo' : 'En ritmo'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+        <div>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-0.5">Gasto diario promedio</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-zinc-100">${Math.round(avgDaily / 1000)}K</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-600">ARS / dia (30d)</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-0.5">MTD estimado</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-zinc-100">${Math.round(mtdEstimate / 1000)}K</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-600">{daysElapsed} dias</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-0.5">Proyeccion fin de mes</p>
+          <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">${Math.round(projected / 1000)}K</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-600">{daysLeft} dias restantes</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-0.5">Budget diario activo</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-zinc-100">${Math.round((snapshot.summary.daily_budget_active || 0) / 1000)}K</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-600">configurado hoy</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div>
+        <div className="flex justify-between text-xs text-gray-400 dark:text-zinc-500 mb-1.5">
+          <span>Progreso del mes</span>
+          <span>{Math.round(pacing * 100)}% del mes transcurrido</span>
+        </div>
+        <div className="h-2 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-blue-500 dark:bg-blue-400 transition-all"
+            style={{ width: Math.min(Math.round(pacing * 100), 100) + '%' }}
+          />
+        </div>
+        <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1.5">
+          Al ritmo actual vas a gastar <strong className="text-gray-600 dark:text-zinc-300">${Math.round(projected / 1000)}K</strong> en {monthName}.
+          {pacingDiff > 5 && ' Considera revisar si el presupuesto esta sobredimensionado.'}
+          {pacingDiff < -5 && ' Hay margen para escalar budgets en los ad sets que funcionan bien.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function PresupuestoClient({ snapshot }: Props) {
   const [applied, setApplied] = useState<Set<string>>(new Set())
 
@@ -248,6 +331,9 @@ export default function PresupuestoClient({ snapshot }: Props) {
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">ad sets</p>
         </div>
       </div>
+
+      {/* Proyeccion mensual */}
+      <MonthlyProjection snapshot={snapshot} />
 
       {/* Recommendations */}
       <div className="space-y-3">

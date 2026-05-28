@@ -59,20 +59,28 @@ function parseInsights(entity) {
     const found = arr.find(a => types.includes(a.action_type))
     return found ? parseFloat(found.value) : null
   }
-  const spend   = formatNumber(i.spend)
-  const results = findAction(i.actions, PURCHASE_TYPES)
+  const VIDEO_VIEW = ['video_view']
+  const spend      = formatNumber(i.spend)
+  const results    = findAction(i.actions, PURCHASE_TYPES)
+  const impr       = parseInt(i.impressions || '0')
+  const videoPlays = findAction(i.video_play_actions, VIDEO_VIEW)
+  const videoP50   = findAction(i.video_p50_watched_actions, VIDEO_VIEW)
   return {
     spend,
     roas:            findAction(i.purchase_roas, PURCHASE_TYPES),
     results,
     cost_per_result: (spend && results && results > 0) ? parseFloat((spend / results).toFixed(2)) : null,
-    impressions:     parseInt(i.impressions || '0'),
+    impressions:     impr,
     clicks:          parseInt(i.clicks || '0'),
     ctr:             formatNumber(i.ctr),
+    video_plays:     videoPlays,
+    video_p50:       videoP50,
+    hook_rate:       (videoPlays && impr > 0) ? parseFloat((videoPlays / impr * 100).toFixed(1)) : null,
+    view_rate:       (videoP50   && impr > 0) ? parseFloat((videoP50   / impr * 100).toFixed(1)) : null,
   }
 }
 
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas'
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
 const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d']
 
 // ── Fetch campaigns for a given date_preset ────────────────────

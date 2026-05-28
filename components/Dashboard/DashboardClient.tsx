@@ -30,9 +30,10 @@ const PERIOD_SHORT: Record<Period, string> = {
 interface Props {
   snapshot: Snapshot | null
   tnSnapshot: TNSnapshot | null
+  prevSnapshot?: Snapshot | null
 }
 
-export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
+export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: Props) {
   const [period, setPeriod] = useState<Period>('last_7d')
   const [syncing, setSyncing] = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
@@ -136,6 +137,13 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
   const metaSpend = summary.total_spend_7d || 0
   const realRoas = tnRevenue != null && metaSpend > 0
     ? parseFloat((tnRevenue / metaSpend).toFixed(2))
+    : null
+
+  // WoW prev summary (misma period de hace 7 dias)
+  const prevSummary = prevSnapshot
+    ? (period === 'last_7d'
+        ? prevSnapshot.summary
+        : (prevSnapshot.periods?.[period as 'today' | 'yesterday' | 'last_30d']?.summary ?? null))
     : null
 
   return (
@@ -248,6 +256,7 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
           period={PERIOD_SHORT[period]}
           tnRevenue={tnRevenue}
           realRoas={realRoas}
+          prevSummary={prevSummary}
         />
       )}
 

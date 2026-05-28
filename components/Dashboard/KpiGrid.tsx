@@ -1,17 +1,41 @@
 import type { Summary } from '@/lib/supabase'
 
 interface Props {
-  summary:    Summary
-  breakeven:  number
-  period?:    string
-  tnRevenue?: number | null
-  realRoas?:  number | null
+  summary:     Summary
+  breakeven:   number
+  period?:     string
+  tnRevenue?:  number | null
+  realRoas?:   number | null
+  prevSummary?: Summary | null
+}
+
+function delta(current: number | null | undefined, prev: number | null | undefined): number | null {
+  if (current == null || prev == null || prev === 0) return null
+  return parseFloat(((current - prev) / Math.abs(prev) * 100).toFixed(1))
+}
+
+function DeltaBadge({ pct, invert = false }: { pct: number | null; invert?: boolean }) {
+  if (pct == null) return null
+  const positive = invert ? pct < 0 : pct > 0
+  const neutral   = Math.abs(pct) < 2
+  const cls = neutral
+    ? 'text-gray-400 dark:text-zinc-500'
+    : positive
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : 'text-red-500 dark:text-red-400'
+  const arrow = neutral ? '' : pct > 0 ? ' \u2191' : ' \u2193'
+  return (
+    <span className={'text-xs font-medium ' + cls}>
+      {(pct > 0 ? '+' : '') + pct + '%' + arrow}
+    </span>
+  )
 }
 
 function KpiCard({
-  label, value, sub, status
+  label, value, sub, status, delta: d, invertDelta
 }: {
   label: string; value: string; sub?: string; status?: 'ok' | 'warn' | 'bad' | 'neutral'
+  delta?: number | null; invertDelta?: boolean
 }) {
   const textColor = {
     ok:      'text-emerald-600 dark:text-emerald-400',
@@ -23,14 +47,17 @@ function KpiCard({
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
       <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium uppercase tracking-wide mb-1">{label}</p>
-      <p className={"text-2xl font-semibold " + textColor}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">{sub}</p>}
+      <p className={'text-2xl font-semibold ' + textColor}>{value}</p>
+      <div className="flex items-center gap-2 mt-1">
+        {sub && <p className="text-xs text-gray-400 dark:text-zinc-600">{sub}</p>}
+        {d != null && <DeltaBadge pct={d} invert={invertDelta} />}
+      </div>
     </div>
   )
 }
 
-export default function KpiGrid({ summary, breakeven, period = '7d', tnRevenue = null, realRoas = null }: Props) {
-  const roasValue = realRoas ?? summary.blended_roas
+export default function KpiGrid({ summary, breakeven, period = '7d', tnRevenue = null, realRoas = null, prevSummary = null }: Props) {
+  const roasValue  = realRoas ?? summary.blended_roas
   const roasStatus = !roasValue ? 'neutral'
     : roasValue >= 5 ? 'ok'
     : roasValue >= 3 ? 'warn' : 'bad'
@@ -39,7 +66,7 @@ export default function KpiGrid({ summary, breakeven, period = '7d', tnRevenue =
     : summary.blended_cpa <= breakeven ? 'ok'
     : summary.blended_cpa <= breakeven * 1.3 ? 'warn' : 'bad'
 
-  const days = period === '30d' ? 30 : period === '7d' ? 7 : null
+  const days     = period === '30d' ? 30 : period === '7d' ? 7 : null
   const perDaySub = days && summary.total_purchases_7d
     ? '~' + (Math.round((summary.total_purchases_7d / days) * 10) / 10) + '/dia'
     : undefined
@@ -68,17 +95,23 @@ export default function KpiGrid({ summary, breakeven, period = '7d', tnRevenue =
     period === 'custom'    ? 'Rango' : '7d'
   )
 
+  // WoW deltas
+  const dSpend     = delta(summary.total_spend_7d, prevSummary?.total_spend_7d)
+  const dPurchases = delta(summary.total_purchases_7d, prevSummary?.total_purchases_7d)
+  const dRoas      = delta(roasValue, prevSummary ? (realRoas ?? prevSummary.blended_roas) : null)
+  const dCpa       = delta(summary.blended_cpa, prevSummary?.blended_cpa)
+
   return (
-    <div className={"grid grid-cols-2 " + (tnRevenue != null ? 'md:grid-cols-4 lg:grid-cols-7' : 'md:grid-cols-3 lg:grid-cols-6') + " gap-3"}>
+    <div className={'grid grid-cols-2 ' + (tnRevenue != null ? 'md:grid-cols-4 lg:grid-cols-7' : 'md:grid-cols-3 lg:grid-cols-6') + ' gap-3'}>
       {tnRevenue != null && (
-        <KpiCard label={tnLabel} value={"$" + Math.round(tnRevenue / 1000) + "K"} sub="ARS - Tiendanube" status="neutral" />
+        <KpiCard label={tnLabel} value={'$' + Math.round(tnRevenue / 1000) + 'K'} sub="ARS - Tiendanube" status="neutral" />
       )}
-      <KpiCard label={spendLabel}        value={"$" + Math.round((summary.total_spend_7d || 0) / 1000) + "K"}          sub="ARS total"    status="neutral" />
-      <KpiCard label="Budget/dia"        value={"$" + Math.round((summary.daily_budget_active || 0) / 1000) + "K"}      sub="ARS activo"   status="neutral" />
-      <KpiCard label={purchasesLabel}    value={String(summary.total_purchases_7d || 0)}                                 sub={perDaySub}    status="neutral" />
-      <KpiCard label="ROAS blend."       value={roasValue ? roasValue.toFixed(2) + 'x' : '--'}                           sub={roasSub}      status={roasStatus} />
-      <KpiCard label="CPA blend."        value={summary.blended_cpa ? '$' + Math.round(summary.blended_cpa / 1000) + 'K' : '--'} sub={'bk $' + breakeven / 1000 + 'K'} status={cpaStatus} />
-      <KpiCard label="Ad sets activos"   value={String(summary.active_adsets || 0)}                                      sub="corriendo"   status="neutral" />
+      <KpiCard label={spendLabel}      value={'$' + Math.round((summary.total_spend_7d || 0) / 1000) + 'K'}  sub="ARS total"  status="neutral" delta={dSpend} />
+      <KpiCard label="Budget/dia"      value={'$' + Math.round((summary.daily_budget_active || 0) / 1000) + 'K'} sub="ARS activo" status="neutral" />
+      <KpiCard label={purchasesLabel}  value={String(summary.total_purchases_7d || 0)}                         sub={perDaySub}  status="neutral" delta={dPurchases} />
+      <KpiCard label="ROAS blend."     value={roasValue ? roasValue.toFixed(2) + 'x' : '--'}                   sub={roasSub}    status={roasStatus} delta={dRoas} />
+      <KpiCard label="CPA blend."      value={summary.blended_cpa ? '$' + Math.round(summary.blended_cpa / 1000) + 'K' : '--'} sub={'bk $' + breakeven / 1000 + 'K'} status={cpaStatus} delta={dCpa} invertDelta />
+      <KpiCard label="Ad sets activos" value={String(summary.active_adsets || 0)}                              sub="corriendo" status="neutral" />
     </div>
   )
 }

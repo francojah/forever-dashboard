@@ -32,6 +32,8 @@ interface CreativeRow {
   impressions: number
   clicks: number
   ctr: number | null
+  hook_rate: number | null
+  view_rate: number | null
   action: Action
   reason: string
 }
@@ -102,7 +104,9 @@ export default function CreativosClient({ snapshot }: Props) {
         status: a.status,
         spend: a.spend || 0, roas: a.roas, cpa: a.cost_per_result,
         results: a.results || 0, impressions: a.impressions || 0,
-        clicks: a.clicks || 0, ctr: a.ctr, action: 'no_data', reason: '',
+        clicks: a.clicks || 0, ctr: a.ctr,
+        hook_rate: a.hook_rate ?? null, view_rate: a.view_rate ?? null,
+        action: 'no_data', reason: '',
       }
       const isTrafficAd = (() => {
         const goal = adsetGoalMap[a.adset_id] || ''
@@ -190,11 +194,13 @@ export default function CreativosClient({ snapshot }: Props) {
                     {sort === k ? (sortAsc ? ' ↑' : ' ↓') : ''}
                   </th>
                 ))}
+                <th className="text-right px-4 py-2.5 font-medium text-gray-400 dark:text-zinc-500">Hook%</th>
+                <th className="text-right px-4 py-2.5 font-medium text-gray-400 dark:text-zinc-500">View%</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
               {sorted.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400 dark:text-zinc-600 text-sm">Sin anuncios para este filtro</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-gray-400 dark:text-zinc-600 text-sm">Sin anuncios para este filtro</td></tr>
               )}
               {sorted.map((r, i) => {
                 const cfg = ACTION_CONFIG[r.action]
@@ -221,6 +227,16 @@ export default function CreativosClient({ snapshot }: Props) {
                       {r.cpa != null ? <span className={'font-medium ' + (r.cpa <= BREAKEVEN_CPA ? 'text-emerald-600 dark:text-emerald-400' : r.cpa <= BREAKEVEN_CPA * 1.3 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')}>${Math.round(r.cpa / 1000)}K</span> : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-gray-600 dark:text-zinc-400">{r.ctr != null ? r.ctr.toFixed(2) + '%' : '—'}</td>
+                    <td className="px-4 py-3 text-right text-xs tabular-nums">
+                      {r.hook_rate != null
+                        ? <span className={r.hook_rate >= 20 ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : r.hook_rate >= 10 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-zinc-600'}>{r.hook_rate.toFixed(1)}%</span>
+                        : <span className="text-gray-300 dark:text-zinc-700">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs tabular-nums">
+                      {r.view_rate != null
+                        ? <span className={r.view_rate >= 25 ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : r.view_rate >= 12 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-zinc-600'}>{r.view_rate.toFixed(1)}%</span>
+                        : <span className="text-gray-300 dark:text-zinc-700">—</span>}
+                    </td>
                   </tr>
                 )
               })}

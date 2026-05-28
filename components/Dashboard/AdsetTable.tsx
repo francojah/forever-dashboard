@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import type { Adset } from '@/lib/supabase'
 
 const ROAS_TARGET = 3.0
@@ -116,6 +116,89 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
+
+// -- Botones de accion directa ------------------------------------
+type ActionState = 'idle' | 'loading' | 'done' | 'error'
+
+function ActionButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) {
+  const [state, setState] = useState<ActionState>('idle')
+  const [msg, setMsg]     = useState('')
+  const [confirm, setConfirm] = useState<{ action: string; label: string; value?: number } | null>(null)
+
+  const doAction = useCallback(async (action: string, label: string, value?: number) => {
+    setState('loading')
+    setMsg('')
+    try {
+      const body: Record<string, unknown> = { entityId: adset.id, action }
+      if (value != null) body.value = value
+      const res  = await fetch('/api/meta/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!data.ok) throw new Error(data.error || 'Error')
+      setState('done')
+      setMsg(label + ' aplicado')
+      setTimeout(() => { setState('idle'); setMsg(''); onDone() }, 2500)
+    } catch (e) {
+      setState('error')
+      setMsg(e instanceof Error ? e.message : 'Error')
+      setTimeout(() => { setState('idle'); setMsg('') }, 3500)
+    }
+    setConfirm(null)
+  }, [adset.id, onDone])
+
+  const isPaused = adset.status === 'PAUSED'
+  const budget   = adset.daily_budget || 0
+
+  if (confirm) {
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-gray-500 dark:text-zinc-400">{confirm.label}?</span>
+        <button onClick={() => doAction(confirm.action, confirm.label, confirm.value)}
+          className="text-xs px-2 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium hover:opacity-80">
+          Si
+        </button>
+        <button onClick={() => setConfirm(null)}
+          className="text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800">
+          No
+        </button>
+      </div>
+    )
+  }
+
+  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">Aplicando...</span>
+  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
+  if (state === 'error')   return <span className="text-xs text-red-500">{msg}</span>
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {/* Pause / Activate */}
+      {isPaused ? (
+        <button onClick={() => setConfirm({ action: 'activate', label: 'Activar' })}
+          className="text-xs px-2 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 font-medium transition-colors">
+          Activar
+        </button>
+      ) : (
+        <button onClick={() => setConfirm({ action: 'pause', label: 'Pausar' })}
+          className="text-xs px-2 py-0.5 rounded-md border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-colors">
+          Pausar
+        </button>
+      )}
+      {/* Budget adjustments (only for active adsets with budget) */}
+      {!isPaused && budget > 0 && (
+        <>
+          <button onClick={() => setConfirm({ action: 'set_budget', label: '+20% budget', value: Math.round(budget * 1.2 / 500) * 500 })}
+            className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
+            +20%
+          </button>
+          <button onClick={() => setConfirm({ action: 'set_budget', label: '-20% budget', value: Math.round(budget * 0.8 / 500) * 500 })}
+            className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
+            -20%
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // -- Seccion acordeon ---------------------------------------------
 interface SectionProps {
   title: string
@@ -124,15 +207,17 @@ interface SectionProps {
   campaignMap: Record<string, string>
   breakeven: number
   period?: string
+  onAction?: () => void
 }
 
-function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: SectionProps) {
+function AdsetSection({ title, type, adsets, campaignMap, breakeven, period, onAction }: SectionProps) {
   const [open, setOpen] = useState(true)
+  const handleAction = onAction ?? (() => {})
 
   const totalSpend  = adsets.reduce((s, a) => s + (a.spend  || 0), 0)
   const totalBudget = adsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
   const isConv      = type === 'conversion'
-  const cols        = isConv ? 7 : 6
+  const cols        = isConv ? 8 : 7
   const gradient    = isConv ? 'from-blue-600 to-blue-700' : 'from-violet-600 to-violet-700'
 
   const spendLabel = period
@@ -178,6 +263,7 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: S
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CPA</th>
                     <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">ROAS</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
+                    <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Acciones</th>
                   </>
                 ) : (
                   <>
@@ -185,6 +271,7 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: S
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Clicks</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CPC</th>
+                    <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Acciones</th>
                   </>
                 )}
               </tr>
@@ -220,6 +307,9 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: S
                           <td className="px-3 py-3 text-right text-gray-500 dark:text-zinc-400 text-xs tabular-nums">
                             {adset.ctr ? `${adset.ctr.toFixed(2)}%` : '—'}
                           </td>
+                          <td className="px-3 py-3">
+                            <ActionButtons adset={adset} onDone={handleAction} />
+                          </td>
                         </>
                       ) : (
                         <>
@@ -227,6 +317,9 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: S
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.clicks ? adset.clicks.toLocaleString('es-AR') : '—'}</td>
                           <td className="px-3 py-3 text-right"><CtrBadge ctr={adset.ctr} /></td>
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{cpc ? `$${Math.round(cpc).toLocaleString('es-AR')}` : '—'}</td>
+                          <td className="px-3 py-3">
+                            <ActionButtons adset={adset} onDone={handleAction} />
+                          </td>
                         </>
                       )}
                     </tr>
@@ -269,10 +362,10 @@ export default function AdsetTable({ adsets, campaignMap, breakeven, period }: P
   return (
     <div className="space-y-6">
       {convAdsets.length > 0 && (
-        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} />
+        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} onAction={() => {}} />
       )}
       {trafficAdsets.length > 0 && (
-        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} />
+        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} onAction={() => {}} />
       )}
     </div>
   )
