@@ -5,7 +5,7 @@ import type { Adset } from '@/lib/supabase'
 
 const ROAS_TARGET = 3.0
 
-// ── Clasificación ──────────────────────────────────────────────
+// -- Clasificacion ------------------------------------------------
 function isTrafficAdset(adset: Adset, campaignMap: Record<string, string>): boolean {
   const goal = adset.optimization_goal || ''
   if (['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT'].includes(goal)) return true
@@ -13,7 +13,7 @@ function isTrafficAdset(adset: Adset, campaignMap: Record<string, string>): bool
   return campName.includes('trafico') || campName.includes('tráfico') || campName.includes('traffic')
 }
 
-// ── Motor de insights ──────────────────────────────────────────
+// -- Motor de insights --------------------------------------------
 type Verdict = 'success' | 'good' | 'warning' | 'danger' | 'info'
 interface Insight { verdict: Verdict; text: string; action: string }
 
@@ -39,7 +39,7 @@ function generateInsight(adset: Adset, type: 'conversion' | 'traffic', breakeven
     const cpa  = adset.cost_per_result
 
     if (roas !== null && roas !== undefined) {
-      if (roas >= 6) return { verdict: 'success', text: `ROAS ${roas.toFixed(1)}x — top performer, muy por encima del objetivo (${ROAS_TARGET}x).`, action: 'Escalar +20–30% si lleva más de 5 días estable. Duplicar en nueva audiencia.' }
+      if (roas >= 6) return { verdict: 'success', text: `ROAS ${roas.toFixed(1)}x — top performer, muy por encima del objetivo (${ROAS_TARGET}x).`, action: 'Escalar +20-30% si lleva más de 5 días estable. Duplicar en nueva audiencia.' }
       if (roas >= ROAS_TARGET) return { verdict: 'good',    text: `ROAS ${roas.toFixed(1)}x — rentable y por encima del objetivo mínimo (${ROAS_TARGET}x).`, action: 'Mantener presupuesto. Testear creativos frescos para seguir escalando.' }
       if (roas >= 2) return           { verdict: 'warning', text: `ROAS ${roas.toFixed(1)}x — cerca del punto de equilibrio. Margen ajustado.`,              action: 'No escalar. Testear nuevos creativos, revisar copy y frecuencia de anuncio.' }
       return                          { verdict: 'danger',  text: `ROAS ${roas.toFixed(1)}x — por debajo del mínimo rentable (${ROAS_TARGET}x).`,              action: 'Acción urgente: revisar creativos y segmentación. Sin mejora en 24h, pausar.' }
@@ -64,13 +64,13 @@ function generateInsight(adset: Adset, type: 'conversion' | 'traffic', breakeven
   return                                                    { verdict: 'danger',  text: `CTR ${ctr.toFixed(2)}% — muy bajo. El creativo no está resonando con la audiencia.`,     action: 'Cambiar creativos urgente. Revisar segmentación y relevancia del mensaje.' }
 }
 
-// ── UI helpers ─────────────────────────────────────────────────
-const VS: Record<Verdict, { bg: string; border: string; icon: string; text: string; action: string }> = {
-  success: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-l-emerald-400', icon: '✅', text: 'text-emerald-900 dark:text-emerald-300', action: 'text-emerald-700 dark:text-emerald-400' },
-  good:    { bg: 'bg-blue-50 dark:bg-blue-950/30',       border: 'border-l-blue-400',    icon: '👍', text: 'text-blue-900 dark:text-blue-300',       action: 'text-blue-700 dark:text-blue-400' },
-  warning: { bg: 'bg-amber-50 dark:bg-amber-950/30',     border: 'border-l-amber-400',   icon: '⚠️', text: 'text-amber-900 dark:text-amber-300',     action: 'text-amber-700 dark:text-amber-400' },
-  danger:  { bg: 'bg-red-50 dark:bg-red-950/30',         border: 'border-l-red-400',     icon: '🚨', text: 'text-red-900 dark:text-red-300',         action: 'text-red-700 dark:text-red-400' },
-  info:    { bg: 'bg-gray-50 dark:bg-zinc-800/40',       border: 'border-l-gray-300 dark:border-l-zinc-600', icon: '📊', text: 'text-gray-700 dark:text-zinc-300', action: 'text-gray-500 dark:text-zinc-400' },
+// -- UI helpers ---------------------------------------------------
+const VS: Record<Verdict, { bg: string; border: string; dotColor: string; text: string; action: string }> = {
+  success: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-l-emerald-400', dotColor: 'bg-emerald-500', text: 'text-emerald-900 dark:text-emerald-300', action: 'text-emerald-700 dark:text-emerald-400' },
+  good:    { bg: 'bg-blue-50 dark:bg-blue-950/30',       border: 'border-l-blue-400',    dotColor: 'bg-blue-500',    text: 'text-blue-900 dark:text-blue-300',       action: 'text-blue-700 dark:text-blue-400'    },
+  warning: { bg: 'bg-amber-50 dark:bg-amber-950/30',     border: 'border-l-amber-400',   dotColor: 'bg-amber-500',   text: 'text-amber-900 dark:text-amber-300',     action: 'text-amber-700 dark:text-amber-400'  },
+  danger:  { bg: 'bg-red-50 dark:bg-red-950/30',         border: 'border-l-red-400',     dotColor: 'bg-red-500',     text: 'text-red-900 dark:text-red-300',         action: 'text-red-700 dark:text-red-400'      },
+  info:    { bg: 'bg-gray-50 dark:bg-zinc-800/40',       border: 'border-l-gray-300 dark:border-l-zinc-600', dotColor: 'bg-gray-400 dark:bg-zinc-500', text: 'text-gray-700 dark:text-zinc-300', action: 'text-gray-500 dark:text-zinc-400' },
 }
 
 function RoasBar({ roas }: { roas: number | null }) {
@@ -104,7 +104,6 @@ function CtrBadge({ ctr }: { ctr: number | null }) {
   return <span className={`text-sm ${cls}`}>{ctr.toFixed(2)}%</span>
 }
 
-// Chevron animado
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -117,16 +116,17 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
-// ── Sección acordeón ───────────────────────────────────────────
+// -- Seccion acordeon ---------------------------------------------
 interface SectionProps {
   title: string
   type: 'conversion' | 'traffic'
   adsets: Adset[]
   campaignMap: Record<string, string>
   breakeven: number
+  period?: string
 }
 
-function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionProps) {
+function AdsetSection({ title, type, adsets, campaignMap, breakeven, period }: SectionProps) {
   const [open, setOpen] = useState(true)
 
   const totalSpend  = adsets.reduce((s, a) => s + (a.spend  || 0), 0)
@@ -134,18 +134,21 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionPr
   const isConv      = type === 'conversion'
   const cols        = isConv ? 7 : 6
   const gradient    = isConv ? 'from-blue-600 to-blue-700' : 'from-violet-600 to-violet-700'
-  const emoji       = isConv ? '🎯' : '🚀'
+
+  const spendLabel = period
+    ? `Gasto ${period === 'hoy' ? 'Hoy' : period === 'ayer' ? 'Ayer' : period === '30d' ? '30d' : '7d'}`
+    : 'Gasto 7d'
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm">
 
-      {/* Header acordeón */}
+      {/* Header acordion */}
       <button
         onClick={() => setOpen(o => !o)}
         className={`w-full bg-gradient-to-r ${gradient} px-5 py-3.5 flex items-center justify-between hover:opacity-95 transition-opacity`}
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-lg">{emoji}</span>
+          <span className={`w-2.5 h-2.5 rounded-full bg-white/80 inline-block shrink-0`} />
           <span className="text-sm font-bold text-white">{title}</span>
           <span className="text-xs text-white/60 bg-white/10 px-2 py-0.5 rounded-full">
             {adsets.length} ad set{adsets.length !== 1 ? 's' : ''}
@@ -153,7 +156,7 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionPr
         </div>
         <div className="flex items-center gap-5">
           <div className="hidden sm:flex items-center gap-5 text-xs text-white/80">
-            <span>Gasto 7d: <strong className="text-white">${Math.round(totalSpend).toLocaleString('es-AR')}</strong></span>
+            <span>{spendLabel}: <strong className="text-white">${Math.round(totalSpend).toLocaleString('es-AR')}</strong></span>
             <span>Budget/día: <strong className="text-white">${Math.round(totalBudget).toLocaleString('es-AR')}</strong></span>
           </div>
           <span className="text-white/70"><Chevron open={open} /></span>
@@ -168,7 +171,7 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionPr
               <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-800/40">
                 <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ad Set</th>
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/día</th>
-                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Gasto 7d</th>
+                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">{spendLabel}</th>
                 {isConv ? (
                   <>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Compras</th>
@@ -232,10 +235,10 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionPr
                     <tr>
                       <td colSpan={cols} className="px-5 pt-0 pb-3">
                         <div className={`${vs.bg} border-l-2 ${vs.border} rounded-r-lg px-3 py-2 flex items-start gap-2`}>
-                          <span className="text-sm shrink-0 mt-0.5">{vs.icon}</span>
+                          <span className={`w-2 h-2 rounded-full ${vs.dotColor} shrink-0 mt-1 inline-block`} />
                           <p className="text-xs leading-relaxed">
                             <span className={`font-medium ${vs.text}`}>{insight.text}</span>
-                            <span className={`ml-2 ${vs.action}`}>→ <em>{insight.action}</em></span>
+                            <span className={`ml-2 ${vs.action}`}>— <em>{insight.action}</em></span>
                           </p>
                         </div>
                       </td>
@@ -251,24 +254,25 @@ function AdsetSection({ title, type, adsets, campaignMap, breakeven }: SectionPr
   )
 }
 
-// ── Export principal ───────────────────────────────────────────
+// -- Export principal ---------------------------------------------
 interface Props {
   adsets: Adset[]
   campaignMap: Record<string, string>
   breakeven: number
+  period?: string
 }
 
-export default function AdsetTable({ adsets, campaignMap, breakeven }: Props) {
+export default function AdsetTable({ adsets, campaignMap, breakeven, period }: Props) {
   const convAdsets    = adsets.filter(a => !isTrafficAdset(a, campaignMap))
   const trafficAdsets = adsets.filter(a =>  isTrafficAdset(a, campaignMap))
 
   return (
     <div className="space-y-6">
       {convAdsets.length > 0 && (
-        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} campaignMap={campaignMap} breakeven={breakeven} />
+        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} />
       )}
       {trafficAdsets.length > 0 && (
-        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} campaignMap={campaignMap} breakeven={breakeven} />
+        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} campaignMap={campaignMap} breakeven={breakeven} period={period} />
       )}
     </div>
   )

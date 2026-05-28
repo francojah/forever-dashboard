@@ -12,7 +12,7 @@ const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas'
 const BREAKEVEN_CPA  = 17500
 const ROAS_MIN       = 2.86
 
-// ── Helpers ──────────────────────────────────────────────────────
+// -- Helpers ------------------------------------------------------
 function fmt(str: string | null | undefined): number | null {
   const n = parseFloat(str ?? '')
   return isNaN(n) ? null : n
@@ -99,7 +99,7 @@ function buildSummary(adsets: any[]) {
       if (s.cost_per_result > BREAKEVEN_CPA) {
         alerts.push({
           type: 'cpa_exceeded', entity_type: 'adset', entity_id: s.id, entity_name: s.name,
-          message: `CPA $${Math.round(s.cost_per_result).toLocaleString('es-AR')} supera el breakeven`,
+          message: 'CPA $' + Math.round(s.cost_per_result).toLocaleString('es-AR') + ' supera el breakeven',
           severity: s.cost_per_result > BREAKEVEN_CPA * 1.5 ? 'danger' : 'warning',
           threshold: BREAKEVEN_CPA, actual_value: s.cost_per_result,
         })
@@ -108,7 +108,7 @@ function buildSummary(adsets: any[]) {
     if (s.roas && s.roas < ROAS_MIN && s.spend > 5000) {
       alerts.push({
         type: 'roas_drop', entity_type: 'adset', entity_id: s.id, entity_name: s.name,
-        message: `ROAS ${s.roas.toFixed(2)}x por debajo del mínimo (${ROAS_MIN}x)`,
+        message: 'ROAS ' + s.roas.toFixed(2) + 'x por debajo del minimo (' + ROAS_MIN + 'x)',
         severity: 'warning', threshold: ROAS_MIN, actual_value: s.roas,
       })
     }
@@ -136,7 +136,7 @@ async function fetchPreset(preset: string) {
   return { campaigns, adsets, ads, summary }
 }
 
-// ── Handler ───────────────────────────────────────────────────────
+// -- Handler ------------------------------------------------------
 export async function POST() {
   if (!META_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
     return NextResponse.json({ error: 'Faltan variables de entorno' }, { status: 500 })
@@ -166,16 +166,29 @@ export async function POST() {
       .upsert({
         snapshot_date: today,
         campaigns, adsets, ads, summary, periods,
-        created_at: new Date().toISOString(), // always refresh timestamp on sync
+        created_at: new Date().toISOString(),
       }, { onConflict: 'snapshot_date' })
 
     if (error) throw error
 
-    // Save alerts
+    // Save alerts -- deduplicated: skip alerts already fired today for same entity+type
     if (summary.alerts.length > 0) {
-      await supabase
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const { data: existingAlerts } = await supabase
         .from('alerts')
-        .insert(summary.alerts.map((a: object) => ({ ...a, created_at: new Date().toISOString() })))
+        .select('entity_id, type')
+        .gte('created_at', todayStart.toISOString())
+      const existingKeys = new Set(
+        (existingAlerts || []).map((a: { entity_id: string; type: string }) => a.entity_id + ':' + a.type)
+      )
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const newAlerts = (summary.alerts as any[])
+        .map((a: any) => ({ ...a, created_at: new Date().toISOString() }))
+        .filter((a: any) => !existingKeys.has(a.entity_id + ':' + a.type))
+      if (newAlerts.length > 0) {
+        await supabase.from('alerts').insert(newAlerts)
+      }
     }
 
     return NextResponse.json({

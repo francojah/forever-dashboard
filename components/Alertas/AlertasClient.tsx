@@ -16,9 +16,9 @@ interface Alert {
 }
 
 const SEVERITY_STYLE = {
-  danger:  { bg: 'bg-red-50',    border: 'border-red-200',    dot: 'bg-red-500',    icon: '🔴' },
-  warning: { bg: 'bg-amber-50',  border: 'border-amber-200',  dot: 'bg-amber-500',  icon: '⚠️' },
-  info:    { bg: 'bg-blue-50',   border: 'border-blue-200',   dot: 'bg-blue-500',   icon: 'ℹ️' },
+  danger:  { bg: 'bg-red-50 dark:bg-red-900/15',    border: 'border-red-200 dark:border-red-800/50',    dot: 'bg-red-500'    },
+  warning: { bg: 'bg-amber-50 dark:bg-amber-900/15', border: 'border-amber-200 dark:border-amber-800/50', dot: 'bg-amber-500'  },
+  info:    { bg: 'bg-blue-50 dark:bg-blue-900/15',   border: 'border-blue-200 dark:border-blue-800/50',   dot: 'bg-blue-500'   },
 }
 
 export default function AlertasClient({ alerts: initial }: { alerts: Alert[] }) {
@@ -61,7 +61,7 @@ export default function AlertasClient({ alerts: initial }: { alerts: Alert[] }) 
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-4xl mb-3">✅</p>
+          <span className="inline-block w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 mb-3" />
           <p className="text-sm">No hay alertas {filter === 'unread' ? 'sin leer' : ''}</p>
         </div>
       ) : (
@@ -73,10 +73,10 @@ export default function AlertasClient({ alerts: initial }: { alerts: Alert[] }) 
                 className={`flex items-start gap-3 p-4 rounded-xl border ${style.bg} ${style.border} ${
                   alert.is_read ? 'opacity-60' : ''
                 }`}>
-                <span className="text-xl flex-shrink-0">{style.icon}</span>
+                <span className={`w-2.5 h-2.5 rounded-full ${style.dot} flex-shrink-0 mt-1`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{alert.entity_name}</p>
-                  <p className="text-sm text-gray-700 mt-0.5">{alert.message}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-zinc-100">{alert.entity_name}</p>
+                  <p className="text-sm text-gray-700 dark:text-zinc-300 mt-0.5">{alert.message}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     {new Date(alert.created_at).toLocaleDateString('es-AR', {
                       day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'

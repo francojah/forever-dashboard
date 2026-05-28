@@ -6,9 +6,9 @@ import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 type Period = 'today' | '7d' | '30d' | 'ytd'
 const PERIOD_LABELS: Record<Period, string> = {
   today: 'Hoy',
-  '7d':  'Últimos 7 días',
-  '30d': 'Últimos 30 días',
-  'ytd': 'Este año',
+  '7d':  'Ultimos 7 dias',
+  '30d': 'Ultimos 30 dias',
+  'ytd': 'Este ano',
 }
 
 interface Settings {
@@ -24,12 +24,12 @@ interface Props {
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return '—'
-  return `$${Math.round(n).toLocaleString('es-AR')}`
+  return '$' + Math.round(n).toLocaleString('es-AR')
 }
 
 function fmtPct(n: number | null | undefined): string {
   if (n == null) return '—'
-  return `${n.toFixed(1)}%`
+  return n.toFixed(1) + '%'
 }
 
 interface PnLRow {
@@ -44,8 +44,8 @@ interface PnLRow {
 }
 
 export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Props) {
-  const [period, setPeriod]             = useState<Period>('30d')
-  const [manualShipping, setManual]     = useState<string>('')
+  const [period, setPeriod]         = useState<Period>('30d')
+  const [manualShipping, setManual] = useState<string>('')
   const printRef = useRef<HTMLDivElement>(null)
 
   const tnData = period === 'today' ? tnSnapshot?.summary_today
@@ -53,20 +53,16 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
     : period === '30d' ? tnSnapshot?.summary_30d
     : tnSnapshot?.summary_ytd
 
-  // Meta spend for the period
-  const metaSpend = period === '30d' ? metaSnapshot?.summary?.total_spend_7d ?? null : null
-  // For periods other than 30d we show the 7d spend from the snapshot (it's a snapshot metric)
-  // Note: this is a known limitation — Meta snapshot only stores 7d spend as main metric.
-  // For a proper balance we'd need period-specific Meta spend.
+  // Meta spend for the selected period
   const periodMetaSpend = period === '7d'   ? (metaSnapshot?.summary?.total_spend_7d ?? null)
     : period === 'today'  ? (metaSnapshot?.periods?.today?.summary?.total_spend_7d ?? null)
-    : period === '30d'    ? (metaSnapshot?.summary?.total_spend_7d ?? null)
+    : period === '30d'    ? (metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d ?? null)
     : null  // ytd not available from Meta snapshots
 
   const ventas = tnData?.total_revenue ?? null
 
   // Shipping: use actual TN shipping_revenue if available, else settings % estimate
-  const shippingActual = tnData?.shipping_revenue ?? null
+  const shippingActual    = tnData?.shipping_revenue ?? null
   const shippingEstimated = ventas != null ? Math.round(ventas * (settings.shipping_pct / 100)) : null
   const useManual = manualShipping !== ''
   const shippingValue = useManual
@@ -89,7 +85,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       label: 'Ventas brutas (Tiendanube)',
       value: ventas,
       isPositive: true,
-      note: tnData ? `${tnData.total_orders} órdenes · AOV ${fmt(tnData.aov)}` : undefined,
+      note: tnData ? tnData.total_orders + ' ordenes · AOV ' + fmt(tnData.aov) : undefined,
     },
     {
       label: 'Gasto Meta Ads',
@@ -100,15 +96,15 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       note: period !== '7d' && period !== '30d' ? 'Solo disponible para 7d/30d' : undefined,
     },
     {
-      label: 'Gastos de envío',
+      label: 'Gastos de envio',
       value: shippingValue != null ? -shippingValue : null,
       pct: ventas && shippingValue ? (-shippingValue / ventas) * 100 : null,
       isNegative: true,
       indent: true,
-      note: shippingActual != null ? 'Dato real de Tiendanube' : `Estimado (${settings.shipping_pct}% ventas)`,
+      note: shippingActual != null ? 'Dato real de Tiendanube' : 'Estimado (' + settings.shipping_pct + '% ventas)',
     },
     {
-      label: `Comisión Tiendanube (${settings.tn_commission_pct}%)`,
+      label: 'Comision Tiendanube (' + settings.tn_commission_pct + '%)',
       value: comisionTN != null ? -comisionTN : null,
       pct: ventas && comisionTN ? (-comisionTN / ventas) * 100 : null,
       isNegative: true,
@@ -117,7 +113,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
     {
       label: 'Resultado Bruto',
       value: resultadoBruto,
-      pct: margen,
+      pct: null,  // rendered via the isTotal colored span to avoid duplication
       isPositive: resultadoBruto != null && resultadoBruto >= 0,
       isNegative: resultadoBruto != null && resultadoBruto < 0,
       isTotal: true,
@@ -130,26 +126,25 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
   }
 
   async function handleExcelDownload() {
-    // Build CSV (simple, opens in Excel)
     const lines: string[] = [
-      `Balance Forever Basics — ${PERIOD_LABELS[period]}`,
-      `Fecha,${new Date().toLocaleDateString('es-AR')}`,
+      'Balance Forever Basics — ' + PERIOD_LABELS[period],
+      'Fecha,' + new Date().toLocaleDateString('es-AR'),
       '',
       'Concepto,Importe (ARS),% Ventas',
     ]
     rows.forEach(r => {
       const val = r.value != null ? Math.round(r.value).toString() : ''
-      const pct = r.pct != null ? `${r.pct.toFixed(1)}%` : ''
-      lines.push(`"${r.label}",${val},${pct}`)
+      const pct = r.pct != null ? r.pct.toFixed(1) + '%' : ''
+      lines.push('"' + r.label + '",' + val + ',' + pct)
     })
     lines.push('')
-    lines.push(`"Notas:","CMV y costos operativos no incluidos",`)
+    lines.push('"Notas:","CMV y costos operativos no incluidos",')
 
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = `balance_forever_${period}_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = 'balance_forever_' + period + '_' + new Date().toISOString().split('T')[0] + '.csv'
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -160,7 +155,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Balance</h1>
-          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Resultado del negocio por período</p>
+          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Resultado del negocio por periodo</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={handlePrint}
@@ -184,11 +179,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5 w-fit">
         {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
           <button key={p} onClick={() => setPeriod(p)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+            className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
               period === p
                 ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
                 : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
-            }`}>
+            )}>
             {PERIOD_LABELS[p]}
           </button>
         ))}
@@ -214,28 +209,28 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className={`border-b border-gray-50 dark:border-zinc-800/60 ${
+              <tr key={i} className={'border-b border-gray-50 dark:border-zinc-800/60 ' + (
                 row.isTotal ? 'bg-gray-50 dark:bg-zinc-800/30' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/20'
-              }`}>
-                <td className={`px-5 py-3 ${row.indent ? 'pl-8' : ''}`}>
-                  <p className={`${row.isTotal ? 'font-semibold text-gray-900 dark:text-zinc-100' : 'text-gray-700 dark:text-zinc-300'} text-sm`}>
+              )}>
+                <td className={'px-5 py-3 ' + (row.indent ? 'pl-8' : '')}>
+                  <p className={(row.isTotal ? 'font-semibold text-gray-900 dark:text-zinc-100' : 'text-gray-700 dark:text-zinc-300') + ' text-sm'}>
                     {row.label}
                   </p>
                   {row.note && <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-0.5">{row.note}</p>}
                 </td>
-                <td className={`px-5 py-3 text-right font-medium ${
+                <td className={'px-5 py-3 text-right font-medium ' + (
                   row.isTotal
                     ? row.isPositive ? 'text-emerald-600 dark:text-emerald-400 text-base' : 'text-red-600 dark:text-red-400 text-base'
                     : row.isPositive ? 'text-emerald-600 dark:text-emerald-400'
                     : row.isNegative ? 'text-red-600 dark:text-red-400'
                     : 'text-gray-700 dark:text-zinc-300'
-                }`}>
+                )}>
                   {row.value != null ? fmt(row.value) : <span className="text-gray-400 font-normal">—</span>}
                 </td>
                 <td className="px-5 py-3 text-right text-xs text-gray-400 dark:text-zinc-500">
-                  {row.pct != null ? fmtPct(row.pct) : ''}
+                  {!row.isTotal && row.pct != null ? fmtPct(row.pct) : ''}
                   {row.isTotal && margen != null ? (
-                    <span className={`font-semibold ${margen >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                    <span className={'font-semibold ' + (margen >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
                       {fmtPct(margen)}
                     </span>
                   ) : null}
@@ -248,20 +243,20 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
         {/* Footer note */}
         <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-[11px] text-gray-400 dark:text-zinc-600">
-            ⚠️ No incluye costo de mercadería (CMV), sueldos ni costos operativos. El resultado bruto es antes de esos gastos.
+            No incluye costo de mercaderia (CMV), sueldos ni costos operativos. El resultado bruto es antes de esos gastos.
           </p>
         </div>
       </div>
 
       {/* Manual shipping override */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-3">Ajustar costo de envíos</h3>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-3">Ajustar costo de envios</h3>
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <p className="text-xs text-gray-400 dark:text-zinc-500 mb-1">
               {shippingActual != null
-                ? `Tiendanube reporta ${fmt(shippingActual)} cobrado por envíos. Ajustá si el costo real es diferente.`
-                : `Sin datos de TN. Estimado en ${settings.shipping_pct}% de ventas = ${fmt(shippingEstimated)}`
+                ? 'Tiendanube reporta ' + fmt(shippingActual) + ' cobrado por envios. Ajusta si el costo real es diferente.'
+                : 'Sin datos de TN. Estimado en ' + settings.shipping_pct + '% de ventas = ' + fmt(shippingEstimated)
               }
             </p>
             <div className="flex items-center gap-2">
@@ -280,13 +275,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
           </div>
           <div className="text-right">
             <a href="/settings" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-              ⚙️ Ajustar % en configuración
+              Ajustar % en configuracion
             </a>
           </div>
         </div>
       </div>
 
-      {/* Print styles */}
       <style>{`
         @media print {
           body * { visibility: hidden; }

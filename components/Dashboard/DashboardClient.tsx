@@ -41,9 +41,14 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
     setSyncing(true)
     setSyncError(null)
     try {
-      const res = await fetch('/api/sync', { method: 'POST' })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      const [metaRes, tnRes] = await Promise.all([
+        fetch('/api/sync', { method: 'POST' }),
+        fetch('/api/sync-tiendanube', { method: 'POST' }),
+      ])
+      const metaData = await metaRes.json()
+      const tnData = await tnRes.json()
+      if (metaData.error) throw new Error('Meta: ' + metaData.error)
+      if (tnData.error) throw new Error('TN: ' + tnData.error)
       const now = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
       setLastSynced(now)
       router.refresh()
@@ -123,11 +128,11 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
           <button
             onClick={triggerSync}
             disabled={syncing}
-            title="Actualizar datos ahora"
+            title="Actualizar Meta + Tiendanube"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`}>
+              className={'w-3.5 h-3.5 ' + (syncing ? 'animate-spin' : '')}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
             {syncing ? 'Actualizando...' : 'Actualizar'}
@@ -138,30 +143,16 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
                   period === p
                     ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
                     : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
-                }`}
+                )}
               >
                 {PERIOD_LABELS[p]}
               </button>
             ))}
           </div>
-
-          {(() => {
-            const hotSaleEnd = new Date('2026-05-31')
-            const now = new Date()
-            const diff = Math.ceil((hotSaleEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-            if (diff > 0 && diff <= 10) {
-              return (
-                <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap">
-                  HOT SALE: {diff}d
-                </span>
-              )
-            }
-            return null
-          })()}
         </div>
       </div>
 
@@ -173,7 +164,7 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
           </svg>
           <p className="text-xs text-amber-700 dark:text-amber-400">
             <strong>ROAS real vs reportado:</strong> El ROAS reportado por Meta incluye conversiones de los ultimos 7d (ventana de atribucion). El ROAS real = Ventas TN del dia / Gasto Meta del dia.
-            {realRoasToday != null && ` Hoy: ${realRoasToday.toFixed(2)}x real vs ${summary.blended_roas?.toFixed(2) ?? '--'}x reportado.`}
+            {realRoasToday != null ? ' Hoy: ' + realRoasToday.toFixed(2) + 'x real vs ' + (summary.blended_roas?.toFixed(2) ?? '--') + 'x reportado.' : ''}
           </p>
         </div>
       )}
@@ -207,6 +198,7 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
           adsets={activeAdsets}
           campaignMap={campMap}
           breakeven={BREAKEVEN_CPA}
+          period={PERIOD_SHORT[period]}
         />
       </div>
 
