@@ -8,7 +8,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const META_API     = 'https://graph.facebook.com/v21.0'
 
 const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
-const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,actions,purchase_roas'
+const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,frequency,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
 const BREAKEVEN_CPA  = 17500
 const ROAS_MIN       = 2.86
 
@@ -24,19 +24,29 @@ function findAction(arr: { action_type: string; value: string }[] | null, types:
   return found ? parseFloat(found.value) : null
 }
 
+const VIDEO_VIEW = ['video_view']
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseInsights(entity: any) {
   const i = entity.insights?.data?.[0] || {}
-  const spend   = fmt(i.spend)
-  const results = findAction(i.actions, PURCHASE_TYPES)
+  const spend      = fmt(i.spend)
+  const results    = findAction(i.actions, PURCHASE_TYPES)
+  const impr       = parseInt(i.impressions || '0')
+  const videoPlays = findAction(i.video_play_actions, VIDEO_VIEW)
+  const videoP50   = findAction(i.video_p50_watched_actions, VIDEO_VIEW)
   return {
     spend,
     roas:            findAction(i.purchase_roas, PURCHASE_TYPES),
     results,
     cost_per_result: (spend && results && results > 0) ? parseFloat((spend / results).toFixed(2)) : null,
-    impressions:     parseInt(i.impressions || '0'),
+    impressions:     impr,
     clicks:          parseInt(i.clicks || '0'),
     ctr:             fmt(i.ctr),
+    frequency:       fmt(i.frequency),
+    video_plays:     videoPlays,
+    video_p50:       videoP50,
+    hook_rate:       (videoPlays && impr > 0) ? parseFloat((videoPlays / impr * 100).toFixed(1)) : null,
+    view_rate:       (videoP50   && impr > 0) ? parseFloat((videoP50   / impr * 100).toFixed(1)) : null,
   }
 }
 
@@ -185,24 +195,4 @@ export async function POST() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const newAlerts = (summary.alerts as any[])
         .map((a: any) => ({ ...a, created_at: new Date().toISOString() }))
-        .filter((a: any) => !existingKeys.has(a.entity_id + ':' + a.type))
-      if (newAlerts.length > 0) {
-        await supabase.from('alerts').insert(newAlerts)
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      date: today,
-      campaigns: campaigns.length,
-      adsets: adsets.length,
-      ads: ads.length,
-      spend: summary.total_spend_7d,
-      purchases: summary.total_purchases_7d,
-      roas: summary.blended_roas,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido'
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
-}
+        .filter((a: any) => !existingKeys

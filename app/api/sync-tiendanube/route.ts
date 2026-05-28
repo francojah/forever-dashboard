@@ -55,6 +55,23 @@ async function fetchOrders(preset: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeShipping(o: any): string {
+  const raw = (
+    o.shipping_option?.name ||
+    o.shipping?.option_reference ||
+    o.shipping_pickup_type ||
+    ''
+  ).toLowerCase()
+  if (raw.includes('moto')) return 'Moto'
+  if (
+    raw.includes('pickup') || raw.includes('pick_up') || raw === 'pickup' ||
+    raw.includes('retiro') || raw.includes('sucursal') || raw.includes('local') ||
+    raw.includes('branch') || raw.includes('punto de retiro')
+  ) return 'Retiro'
+  return 'Correo'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildSummary(orders: any[]) {
   const paid = orders.filter((o: { payment_status: string }) => ['paid', 'closed'].includes(o.payment_status))
   const total_revenue = paid.reduce((s: number, o: { total: string }) => s + parseFloat(o.total || '0'), 0)
@@ -67,7 +84,7 @@ function buildSummary(orders: any[]) {
     const items = o.products || []
     if (!items.length) return
     const listTotal = items.reduce((s, p) => s + parseFloat(p.price || '0') * parseInt(p.quantity || '1'), 0)
-    const paidSub   = parseFloat(o.subtotal || o.total || '0')
+    const paidSub   = parseFloat(o.total || '0')
     items.forEach(p => {
       const key      = String(p.product_id || p.name)
       const baseName = p.name.replace(/\s*\([^)]*\)\s*$/, '').trim() || p.name
@@ -91,12 +108,23 @@ function buildSummary(orders: any[]) {
     payment_methods[m] = (payment_methods[m] || 0) + 1
   })
 
-  // Shipping methods
-  const shipping_methods: Record<string, number> = {}
+  // Shipping methods — normalized to 3 categories: Correo, Retiro, Moto
+  const shippingCounts: Record<string, number> = {}
   paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string }) => {
-    const m = o.shipping_option?.name || o.shipping?.option_reference || o.shipping_pickup_type || 'otro'
-    shipping_methods[m] = (shipping_methods[m] || 0) + 1
+    const cat = normalizeShipping(o)
+    shippingCounts[cat] = (shippingCounts[cat] || 0) + 1
   })
+  const shipping_methods: Record<string, number> = {}
+  if (shippingCounts['Correo']) shipping_methods['Correo'] = shippingCounts['Correo']
+  if (shippingCounts['Retiro']) shipping_methods['Retiro'] = shippingCounts['Retiro']
+  if (shippingCounts['Moto'])   shipping_methods['Moto']   = shippingCounts['Moto']
+
+  // Total units sold
+  const total_units_sold = paid.reduce((sum: number, o: { products?: { quantity?: string }[] }) =>
+    sum + (o.products || []).reduce((s, p) => s + parseInt(p.quantity || '1'), 0), 0)
+
+  // Total carts (all orders regardless of status)
+  const total_carts = orders.length
 
   // Provinces
   const provinces: Record<string, number> = {}
@@ -119,7 +147,7 @@ function buildSummary(orders: any[]) {
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
     unique_customers, top_products, payment_methods, shipping_methods, top_provinces, conversion_rate,
-    shipping_revenue,
+    shipping_revenue, total_units_sold, total_carts,
   }
 }
 
@@ -131,39 +159,4 @@ export async function POST() {
   try {
     const today = argentinaDateStr(new Date())
 
-    const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.all([
-      fetchOrders('today'),
-      fetchOrders('yesterday'),
-      fetchOrders('7d'),
-      fetchOrders('30d'),
-      fetchOrders('ytd'),
-    ])
-
-    const snapshot = {
-      snapshot_date:     today,
-      summary_today:     buildSummary(ordersToday),
-      summary_yesterday: buildSummary(ordersYesterday),
-      summary_7d:        buildSummary(orders7d),
-      summary_30d:       buildSummary(orders30d),
-      summary_ytd:       buildSummary(ordersYTD),
-      orders_count:      orders7d.length,
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const { error } = await supabase
-      .from('tiendanube_snapshots')
-      .upsert({ ...snapshot, created_at: new Date().toISOString() }, { onConflict: 'snapshot_date' })
-
-    if (error) throw error
-
-    return NextResponse.json({
-      ok: true, date: today,
-      orders_today: snapshot.summary_today.total_orders,
-      orders_7d: snapshot.summary_7d.total_orders,
-      revenue_7d: snapshot.summary_7d.total_revenue,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido'
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
-}
+    const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.al
