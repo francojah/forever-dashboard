@@ -117,7 +117,7 @@ function buildTNSummary(orders) {
       (sum, p) => sum + parseFloat(p.price || '0') * parseInt(p.quantity || '1'), 0
     )
     // Total real pagado (sin envío — usamos subtotal si existe, si no total)
-    const paidSubtotal = parseFloat(o.subtotal || o.total || '0')
+    const paidSubtotal = parseFloat(o.total || '0')
 
     items.forEach(p => {
       const key = String(p.product_id || p.name)
@@ -147,16 +147,31 @@ function buildTNSummary(orders) {
     payment_methods[method] = (payment_methods[method] || 0) + 1
   })
 
-  // Métodos de envío
-  const shipping_methods = {}
-  paid.forEach(o => {
-    const method =
+  // Metodos de envio normalizado en 3 categorias: Correo, Retiro, Moto
+  function normalizeShipping(o) {
+    const raw = (
       o.shipping_option?.name ||
       o.shipping?.option_reference ||
       o.shipping_pickup_type ||
-      'otro'
-    shipping_methods[method] = (shipping_methods[method] || 0) + 1
+      ''
+    ).toLowerCase()
+    if (raw.includes('moto')) return 'Moto'
+    if (
+      raw.includes('pickup') || raw.includes('pick_up') || raw === 'pickup' ||
+      raw.includes('retiro') || raw.includes('sucursal') || raw.includes('local') ||
+      raw.includes('branch') || raw.includes('punto de retiro')
+    ) return 'Retiro'
+    return 'Correo'
+  }
+  const shipping_counts = {}
+  paid.forEach(o => {
+    const cat = normalizeShipping(o)
+    shipping_counts[cat] = (shipping_counts[cat] || 0) + 1
   })
+  const shipping_methods = {}
+  if (shipping_counts['Correo']) shipping_methods['Correo'] = shipping_counts['Correo']
+  if (shipping_counts['Retiro']) shipping_methods['Retiro'] = shipping_counts['Retiro']
+  if (shipping_counts['Moto'])   shipping_methods['Moto']   = shipping_counts['Moto']
 
   // Provincias / geografía
   const provinces = {}
@@ -193,6 +208,8 @@ function buildTNSummary(orders) {
     top_provinces,
     conversion_rate,
     shipping_revenue,
+    total_units_sold,
+    total_carts,
   }
 }
 

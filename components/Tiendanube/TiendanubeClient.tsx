@@ -184,11 +184,13 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">
               Tiendanube · {PERIOD_LABELS[period]}
             </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               <KpiCard label="Ventas totales"     value={fmt(tnRevenue)}         sub={`${fmt(revenuePerDay)}/día`}   color="indigo" />
               <KpiCard label="Órdenes"             value={fmt(tnOrders, 'number')} sub={`${ordersPerDay.toFixed(1)}/día`} color="violet" />
               <KpiCard label="Ticket promedio"     value={fmt(tn?.aov)}            sub="por orden"                     color="purple" />
               <KpiCard label="Clientes únicos"     value={fmt(tn?.unique_customers, 'number')} sub="en el período"    color="fuchsia" />
+              <KpiCard label="Carritos creados"    value={fmt(tn?.total_carts, 'number') !== '—' ? fmt(tn?.total_carts, 'number') : '—'} sub={tn?.conversion_rate != null ? tn.conversion_rate.toFixed(1) + '% conv.' : 'checkouts'} color="violet" />
+              <KpiCard label="Unidades vendidas"   value={fmt(tn?.total_units_sold, 'number')} sub="artículos" color="purple" />
             </div>
           </div>
 
@@ -340,7 +342,8 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
                     {tn.top_products.map((p: { name: string; quantity: number; revenue: number }, i: number) => {
-                      const pct = tnRevenue > 0 ? (p.revenue / tnRevenue) * 100 : 0
+                      const topTotal = tn.top_products.reduce((s: number, x: { revenue: number }) => s + x.revenue, 0)
+                      const pct = topTotal > 0 ? (p.revenue / topTotal) * 100 : 0
                       return (
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-zinc-800/30 transition-colors">
                           <td className="px-4 py-2.5 text-gray-400 dark:text-zinc-600 font-medium">{i + 1}</td>

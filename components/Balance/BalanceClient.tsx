@@ -46,6 +46,7 @@ interface PnLRow {
 export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Props) {
   const [period, setPeriod]         = useState<Period>('30d')
   const [manualShipping, setManual] = useState<string>('')
+  const [costPerUnit, setCostPerUnit] = useState<string>('')
   const printRef = useRef<HTMLDivElement>(null)
 
   const tnData = period === 'today' ? tnSnapshot?.summary_today
@@ -71,9 +72,14 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
 
   const comisionTN = ventas != null ? Math.round(ventas * (settings.tn_commission_pct / 100)) : null
 
+  // CMV = costo por unidad × unidades vendidas en el periodo
+  const unitCost = costPerUnit !== '' ? (parseFloat(costPerUnit.replace(/\./g, '').replace(',', '.')) || 0) : null
+  const unitsSold = tnData?.total_units_sold ?? null
+  const cmv = unitCost != null && unitsSold != null ? Math.round(unitCost * unitsSold) : null
+
   const resultadoBruto =
     ventas != null && periodMetaSpend != null && shippingValue != null && comisionTN != null
-      ? ventas - periodMetaSpend - shippingValue - comisionTN
+      ? ventas - periodMetaSpend - shippingValue - comisionTN - (cmv ?? 0)
       : null
 
   const margen = ventas && ventas > 0 && resultadoBruto != null
@@ -111,6 +117,16 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       indent: true,
     },
     {
+      label: 'CMV (costo mercaderia vendida)',
+      value: cmv != null ? -cmv : null,
+      pct: ventas && cmv ? (-cmv / ventas) * 100 : null,
+      isNegative: true,
+      indent: true,
+      note: unitCost != null && unitsSold != null
+        ? '$' + Math.round(unitCost).toLocaleString('es-AR') + ' x ' + unitsSold + ' uds'
+        : 'Ingresa el costo promedio por unidad abajo',
+    },
+    {
       label: 'Resultado Bruto',
       value: resultadoBruto,
       pct: null,  // rendered via the isTotal colored span to avoid duplication
@@ -138,7 +154,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       lines.push('"' + r.label + '",' + val + ',' + pct)
     })
     lines.push('')
-    lines.push('"Notas:","CMV y costos operativos no incluidos",')
+    if (cmv != null) lines.push('"CMV",' + (-cmv) + ',' + (ventas ? ((-cmv/ventas)*100).toFixed(1) + '%' : ''))
 
     const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
@@ -243,8 +259,34 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
         {/* Footer note */}
         <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-[11px] text-gray-400 dark:text-zinc-600">
-            No incluye costo de mercaderia (CMV), sueldos ni costos operativos. El resultado bruto es antes de esos gastos.
+            Incluye CMV si cargaste el costo por unidad. No incluye sueldos ni otros costos operativos fijos.
           </p>
+        </div>
+      </div>
+
+      {/* CMV — costo por unidad */}
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Costo de mercaderia (CMV)</h3>
+        <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
+          {unitsSold != null
+            ? 'Se vendieron ' + unitsSold + ' unidades en el periodo. CMV = costo unitario × unidades.'
+            : 'Unidades vendidas no disponibles — ejecuta un nuevo sync.'}
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Costo prom. por unidad $</span>
+          <input
+            type="text"
+            placeholder="ej: 8000"
+            value={costPerUnit}
+            onChange={e => setCostPerUnit(e.target.value)}
+            className="w-32 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
+          />
+          {cmv != null && (
+            <span className="text-xs text-gray-500 dark:text-zinc-400">
+              = CMV <strong className="text-red-600 dark:text-red-400">${Math.round(cmv).toLocaleString('es-AR')}</strong>
+            </span>
+          )}
+          {costPerUnit && <button onClick={() => setCostPerUnit('')} className="text-xs text-gray-400 hover:text-gray-600">Limpiar</button>}
         </div>
       </div>
 

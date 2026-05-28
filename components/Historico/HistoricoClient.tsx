@@ -251,7 +251,6 @@ export default function HistoricoClient({ data }: Props) {
                   ROAS
                   <span className="ml-1 text-[10px] text-gray-300 dark:text-zinc-600 font-normal normal-case tracking-normal">28d</span>
                 </th>
-                <th className="text-right px-4 py-2.5 font-medium">Ad sets</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
@@ -277,9 +276,6 @@ export default function HistoricoClient({ data }: Props) {
                         {s.blended_roas.toFixed(2)}x
                       </span>
                     ) : <span className="text-gray-400">--</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-gray-600 dark:text-zinc-400">
-                    {s.active_adsets != null ? s.active_adsets : '--'}
                   </td>
                 </tr>
               ))}

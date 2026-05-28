@@ -241,7 +241,8 @@ export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_dat
   const { data } = await supabase
     .from('meta_snapshots')
     .select('snapshot_date, summary')
-    .order('snapshot_date', { ascending: true })
+    .order('snapshot_date', { ascending: false })
     .limit(limit)
-  return (data || []) as { snapshot_date: string; summary: Summary }[]
+  const sorted = (data || []).sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+  return sorted as { snapshot_date: string; summary: Summary }[]
 }
