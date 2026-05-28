@@ -49,11 +49,7 @@ function fetchTN(path) {
 }
 
 // ── Date helpers (UTC-3 Argentina) ─────────────────────────────
-// Argentina = UTC-3. We always build ranges in local Argentina time
-// to avoid UTC midnight crossing bugs.
-
 function argentinaDateStr(date) {
-  // Returns YYYY-MM-DD in Argentina timezone (UTC-3)
   const ms = date.getTime() - 3 * 60 * 60 * 1000
   return new Date(ms).toISOString().split('T')[0]
 }
@@ -63,10 +59,9 @@ function getRange(preset) {
   const todayAR  = argentinaDateStr(now)
   const yearAR   = todayAR.slice(0, 4)
 
-  // Build clean midnight boundaries in Argentina time
   const startOfToday     = new Date(todayAR + 'T00:00:00.000-03:00')
   const startOfYesterday = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 1))
-  const endOfYesterday   = new Date(startOfToday.getTime() - 1)   // 23:59:59.999 yesterday AR
+  const endOfYesterday   = new Date(startOfToday.getTime() - 1)
   const start7d          = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 6))
   const start30d         = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 29))
   const startYTD         = new Date(`${yearAR}-01-01T00:00:00.000-03:00`)
@@ -97,8 +92,25 @@ async function fetchOrders(preset = '7d') {
   return Array.isArray(res) ? res : []
 }
 
+// ── Fetch checkouts (carritos creados) para un preset ──────────
+async function fetchCheckoutsCount(preset = '7d') {
+  try {
+    const { created_at_min, created_at_max } = getRange(preset)
+    const params = new URLSearchParams({
+      created_at_min,
+      created_at_max,
+      per_page: '200',
+    })
+    const res = await fetchTN(`checkouts?${params}`)
+    return Array.isArray(res) ? res.length : 0
+  } catch (e) {
+    console.warn(`  ⚠️  No se pudo obtener checkouts [${preset}]: ${e.message}`)
+    return 0
+  }
+}
+
 // ── Calcular métricas de Tiendanube ───────────────────────────
-function buildTNSummary(orders) {
+function buildTNSummary(orders, total_carts) {
   const paid = orders.filter(o => ['paid', 'closed'].includes(o.payment_status))
 
   const total_revenue = paid.reduce((sum, o) => sum + parseFloat(o.total || '0'), 0)
@@ -106,26 +118,21 @@ function buildTNSummary(orders) {
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
   // Top productos — agrupado por product_id, revenue proporcional al o.total real
-  // (p.price es precio de lista; o.total ya aplica descuentos y envío)
   const productMap = {}
   paid.forEach(o => {
     const items = o.products || []
     if (!items.length) return
 
-    // Suma de precios de lista de esta orden
     const listTotal = items.reduce(
       (sum, p) => sum + parseFloat(p.price || '0') * parseInt(p.quantity || '1'), 0
     )
-    // Total real pagado (sin envío — usamos subtotal si existe, si no total)
     const paidSubtotal = parseFloat(o.total || '0')
 
     items.forEach(p => {
       const key = String(p.product_id || p.name)
-      // Nombre base: remover "(Color, Talle)" del final
       const baseName = p.name.replace(/\s*\([^)]*\)\s*$/, '').trim() || p.name
       const qty = parseInt(p.quantity || '1')
       const listValue = parseFloat(p.price || '0') * qty
-      // Proporcional: precio de lista de este ítem / total lista × total real pagado
       const proportionalRevenue = listTotal > 0
         ? (listValue / listTotal) * paidSubtotal
         : listValue
@@ -188,14 +195,18 @@ function buildTNSummary(orders) {
   const customerIds = paid.map(o => o.customer?.id).filter(Boolean)
   const unique_customers = new Set(customerIds).size
 
-  // Tasa de conversión
-  const all_orders = orders.length
-  const conversion_rate = all_orders > 0 ? parseFloat(((total_orders / all_orders) * 100).toFixed(1)) : 0
+  // Tasa de conversión: ventas / carritos creados
+  const conversion_rate = total_carts > 0 ? parseFloat(((total_orders / total_carts) * 100).toFixed(1)) : 0
 
-  // Costo de envío cobrado al cliente (shipping_cost_owner)
+  // Costo de envío cobrado al cliente
   const shipping_revenue = Math.round(
     paid.reduce((s, o) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
   )
+
+  // Total unidades vendidas
+  const total_units_sold = paid.reduce((sum, o) => {
+    return sum + (o.products || []).reduce((s, p) => s + parseInt(p.quantity || '1'), 0)
+  }, 0)
 
   return {
     total_revenue:   Math.round(total_revenue),
@@ -219,26 +230,26 @@ async function main() {
   console.log(`\n🛍️ Sincronizando Tiendanube — ${today}`)
 
   try {
-    console.log('  📦 Fetching órdenes hoy...')
-    const ordersToday = await fetchOrders('today')
-    const summaryToday = buildTNSummary(ordersToday)
+    console.log('  📦 Fetching órdenes y carritos hoy...')
+    const [ordersToday, cartsToday] = await Promise.all([fetchOrders('today'), fetchCheckoutsCount('today')])
+    const summaryToday = buildTNSummary(ordersToday, cartsToday)
 
-    console.log('  📦 Fetching órdenes ayer...')
-    const ordersYesterday = await fetchOrders('yesterday')
-    const summaryYesterday = buildTNSummary(ordersYesterday)
+    console.log('  📦 Fetching órdenes y carritos ayer...')
+    const [ordersYesterday, cartsYesterday] = await Promise.all([fetchOrders('yesterday'), fetchCheckoutsCount('yesterday')])
+    const summaryYesterday = buildTNSummary(ordersYesterday, cartsYesterday)
 
-    console.log('  📦 Fetching órdenes últimos 7d...')
-    const orders7d = await fetchOrders('7d')
-    const summary7d = buildTNSummary(orders7d)
-    console.log(`  ✅ ${summary7d.total_orders} órdenes · $${summary7d.total_revenue.toLocaleString('es-AR')} ARS`)
+    console.log('  📦 Fetching órdenes y carritos últimos 7d...')
+    const [orders7d, carts7d] = await Promise.all([fetchOrders('7d'), fetchCheckoutsCount('7d')])
+    const summary7d = buildTNSummary(orders7d, carts7d)
+    console.log(`  ✅ ${summary7d.total_orders} órdenes · ${carts7d} carritos · $${summary7d.total_revenue.toLocaleString('es-AR')} ARS`)
 
-    console.log('  📦 Fetching órdenes últimos 30d...')
-    const orders30d = await fetchOrders('30d')
-    const summary30d = buildTNSummary(orders30d)
+    console.log('  📦 Fetching órdenes y carritos últimos 30d...')
+    const [orders30d, carts30d] = await Promise.all([fetchOrders('30d'), fetchCheckoutsCount('30d')])
+    const summary30d = buildTNSummary(orders30d, carts30d)
 
-    console.log('  📦 Fetching órdenes YTD...')
-    const ordersYTD = await fetchOrders('ytd')
-    const summaryYTD = buildTNSummary(ordersYTD)
+    console.log('  📦 Fetching órdenes y carritos YTD...')
+    const [ordersYTD, cartsYTD] = await Promise.all([fetchOrders('ytd'), fetchCheckoutsCount('ytd')])
+    const summaryYTD = buildTNSummary(ordersYTD, cartsYTD)
 
     const snapshot = {
       snapshot_date:     today,
@@ -258,8 +269,8 @@ async function main() {
     if (error) throw error
 
     console.log(`\n✅ Tiendanube sync completado — ${today}`)
-    console.log(`   Hoy:  ${summaryToday.total_orders} órdenes · $${summaryToday.total_revenue.toLocaleString('es-AR')}`)
-    console.log(`   7d:   ${summary7d.total_orders} órdenes · $${summary7d.total_revenue.toLocaleString('es-AR')} · AOV $${summary7d.aov.toLocaleString('es-AR')}`)
+    console.log(`   Hoy:  ${summaryToday.total_orders} órdenes · ${cartsToday} carritos · $${summaryToday.total_revenue.toLocaleString('es-AR')}`)
+    console.log(`   7d:   ${summary7d.total_orders} órdenes · ${carts7d} carritos · $${summary7d.total_revenue.toLocaleString('es-AR')} · AOV $${summary7d.aov.toLocaleString('es-AR')}`)
     console.log(`   30d:  ${summary30d.total_orders} órdenes · $${summary30d.total_revenue.toLocaleString('es-AR')}`)
     console.log(`   YTD:  ${summaryYTD.total_orders} órdenes · $${summaryYTD.total_revenue.toLocaleString('es-AR')}\n`)
 
