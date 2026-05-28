@@ -243,7 +243,3 @@ export async function getHistoricalSnapshots(limit = 30): Promise<{ snapshot_dat
     .limit(limit)
   return (data || []) as { snapshot_date: string; summary: Summary }[]
 }
-, { ascending: true })
-    .limit(limit)
-  return (data || []) as { snapshot_date: string; summary: Summary }[]
-}
