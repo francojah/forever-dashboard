@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import type { Adset, Ad } from '@/lib/supabase'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 
 const ROAS_TARGET = 3.0
 
@@ -211,9 +212,15 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
                   </>
                 )}
                 <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CTR</th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Frec.</th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Hook%</th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">View%</th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio: cuántas veces vio cada usuario este anuncio. Valores altos (>3x) pueden indicar saturación de audiencia y caída del CTR." /></span>
+                </th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">Hook%<InfoTooltip text="Hook Rate: % de personas que iniciaron la reproducción del video. Mide si el primer segundo captura atención. Referencia: bueno &gt;20%." /></span>
+                </th>
+                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">View%<InfoTooltip text="View Rate: % de personas que vieron al menos el 50% del video. Indica si el contenido retiene la atención tras el hook. Referencia: bueno &gt;25%." /></span>
+                </th>
                 <th className="px-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Accion</th>
               </tr>
             </thead>
@@ -336,7 +343,9 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
                   </>
                 )}
-                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Frec.</th>
+                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio: cuántas veces vio cada persona este anuncio en el período. Valores altos (>3x) pueden causar fatiga y reducir el CTR." /></span>
+                </th>
                 <th className="text-left  px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget</th>
               </tr>
             </thead>
@@ -346,7 +355,6 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                   .filter(a => a.adset_id === adset.id)
                   .sort((a, b) => (b.spend || 0) - (a.spend || 0))
                 const isExpanded = expandedIds.has(adset.id)
-                const cpc = (adset.spend && adset.clicks > 0) ? adset.spend / adset.clicks : null
 
                 return (
                   <React.Fragment key={adset.id}>

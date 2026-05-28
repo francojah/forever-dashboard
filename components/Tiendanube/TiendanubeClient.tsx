@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 
 type Period = 'today' | 'yesterday' | '7d' | '30d' | 'ytd'
 
@@ -88,9 +89,8 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const metaPurchases = meta?.total_purchases_7d ?? 0
 
   // Meta attributed revenue = Meta purchases × TN real AOV
-  // (More honest than spend × ROAS which overcounts due to Meta's 28-day attribution window)
   const metaAttributedRevenue = metaPurchases > 0 && tnAOV > 0
-    ? Math.min(metaPurchases * tnAOV, tnRevenue) // cap at 100%
+    ? Math.min(metaPurchases * tnAOV, tnRevenue)
     : 0
   const organicRevenue = Math.max(0, tnRevenue - metaAttributedRevenue)
   const metaPct    = tnRevenue > 0 ? (metaAttributedRevenue / tnRevenue) * 100 : 0
@@ -103,7 +103,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   // Organic orders
   const organicOrders = Math.max(0, tnOrders - metaPurchases)
 
-  // Days in period (for per-day calculations)
+  // Days in period
   const periodDays: Record<Period, number> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, ytd: new Date().getDate() + new Date().getMonth() * 30 }
   const days = periodDays[period]
   const revenuePerDay = tnRevenue > 0 ? tnRevenue / days : 0
@@ -185,11 +185,16 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
               Tiendanube · {PERIOD_LABELS[period]}
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-              <KpiCard label="Ventas totales"     value={fmt(tnRevenue)}         sub={`${fmt(revenuePerDay)}/día`}   color="indigo" />
-              <KpiCard label="Órdenes"             value={fmt(tnOrders, 'number')} sub={`${ordersPerDay.toFixed(1)}/día`} color="violet" />
-              <KpiCard label="Ticket promedio"     value={fmt(tn?.aov)}            sub="por orden"                     color="purple" />
-              <KpiCard label="Clientes únicos"     value={fmt(tn?.unique_customers, 'number')} sub="en el período"    color="fuchsia" />
-              <KpiCard label="Unidades vendidas"   value={fmt(tn?.total_units_sold, 'number')} sub="artículos" color="purple" />
+              <KpiCard label="Ventas totales"   value={fmt(tnRevenue)}         sub={`${fmt(revenuePerDay)}/día`}   color="indigo"
+                tooltip="Total facturado en Tiendanube en el período. Incluye todas las fuentes de tráfico, no solo Meta Ads." />
+              <KpiCard label="Órdenes"           value={fmt(tnOrders, 'number')} sub={`${ordersPerDay.toFixed(1)}/día`} color="violet"
+                tooltip="Cantidad de órdenes pagadas en el período. Es la base para calcular el ticket promedio y la conversión." />
+              <KpiCard label="Ticket promedio"   value={fmt(tn?.aov)}            sub="por orden"                    color="purple"
+                tooltip="Valor promedio por orden (AOV). Calculado como ventas totales ÷ cantidad de órdenes. Subir el AOV mejora el ROAS sin aumentar el gasto." />
+              <KpiCard label="Clientes únicos"   value={fmt(tn?.unique_customers, 'number')} sub="en el período"   color="fuchsia"
+                tooltip="Clientes con al menos una compra en el período. Un cliente que compra dos veces cuenta una sola vez." />
+              <KpiCard label="Unidades vendidas" value={fmt(tn?.total_units_sold, 'number')} sub="artículos"       color="purple"
+                tooltip="Total de artículos vendidos sumando las cantidades de todos los productos de las órdenes pagadas." />
             </div>
           </div>
 
@@ -200,10 +205,14 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                 Meta Ads · {PERIOD_LABELS[period]}
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <KpiCard label="Gasto Meta"          value={fmt(metaSpend)}                   sub="invertido en ads"          color="blue" />
-                <KpiCard label="Compras atribuidas"  value={fmt(metaPurchases, 'number')}      sub="reportadas por Meta"       color="sky" />
-                <KpiCard label="ROAS reportado"      value={metaRoas ? `${metaRoas.toFixed(2)}x` : '—'} sub="según Meta"     color="cyan" />
-                <KpiCard label="CPA"                 value={fmt(meta?.blended_cpa)}            sub="costo por compra"          color="teal" />
+                <KpiCard label="Gasto Meta"         value={fmt(metaSpend)}                            sub="invertido en ads"    color="blue"
+                  tooltip="Total invertido en Meta Ads en el período. Incluye todos los ad sets con actividad." />
+                <KpiCard label="Compras atribuidas" value={fmt(metaPurchases, 'number')}              sub="reportadas por Meta" color="sky"
+                  tooltip="Compras atribuidas por el pixel de Meta (ventana de 7 días click / 1 día view). Puede sobre-reportar porque incluye ventas influenciadas por anuncios anteriores." />
+                <KpiCard label="ROAS reportado"     value={metaRoas ? `${metaRoas.toFixed(2)}x` : '—'} sub="según Meta"        color="cyan"
+                  tooltip="ROAS según atribución de Meta. Puede estar inflado porque la ventana de 28 días captura ventas que habrían ocurrido de todas formas. Comparar con ROAS real abajo." />
+                <KpiCard label="CPA"                value={fmt(meta?.blended_cpa)}                   sub="costo por compra"    color="teal"
+                  tooltip="Costo promedio por compra atribuida según Meta. Es el gasto dividido las compras reportadas por el pixel." />
               </div>
             </div>
           )}
@@ -463,8 +472,8 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
 
 // ── Sub-components ─────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color }: {
-  label: string; value: string; sub: string; color: string
+function KpiCard({ label, value, sub, color, tooltip }: {
+  label: string; value: string; sub: string; color: string; tooltip?: string
 }) {
   const colors: Record<string, string> = {
     indigo:  'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400',
@@ -478,7 +487,10 @@ function KpiCard({ label, value, sub, color }: {
   }
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-      <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium mb-1">{label}</p>
+      <div className="flex items-center gap-1 mb-1">
+        <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">{label}</p>
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </div>
       <p className={`text-2xl font-semibold ${colors[color] ?? 'text-gray-900 dark:text-zinc-100'}`}>{value}</p>
       <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">{sub}</p>
     </div>
