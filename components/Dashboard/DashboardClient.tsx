@@ -9,13 +9,14 @@ import AlertsPanel from './AlertsPanel'
 
 const BREAKEVEN_CPA = 17500
 
-type Period = 'today' | 'yesterday' | 'last_7d' | 'last_30d'
+type Period = 'today' | 'yesterday' | 'last_7d' | 'last_30d' | 'custom'
 
 const PERIOD_LABELS: Record<Period, string> = {
   today:     'Hoy',
   yesterday: 'Ayer',
   last_7d:   'Ultimos 7d',
   last_30d:  'Ultimos 30d',
+  custom:    'Personalizado',
 }
 
 const PERIOD_SHORT: Record<Period, string> = {
@@ -23,6 +24,7 @@ const PERIOD_SHORT: Record<Period, string> = {
   yesterday: 'ayer',
   last_7d:   '7d',
   last_30d:  '30d',
+  custom:    'custom',
 }
 
 interface Props {
@@ -36,6 +38,15 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
   const [lastSynced, setLastSynced] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const router = useRouter()
+
+  // Custom period state
+  const today = new Date().toISOString().split('T')[0]
+  const [customFrom, setCustomFrom] = useState(today)
+  const [customTo, setCustomTo] = useState(today)
+  const [customData, setCustomData] = useState<PeriodMetrics | null>(null)
+  const [customTnRevenue, setCustomTnRevenue] = useState<number | null>(null)
+  const [customLoading, setCustomLoading] = useState(false)
+  const [customError, setCustomError] = useState<string | null>(null)
 
   const triggerSync = useCallback(async () => {
     setSyncing(true)
@@ -59,6 +70,22 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
     }
   }, [router])
 
+  const fetchCustom = useCallback(async () => {
+    setCustomLoading(true)
+    setCustomError(null)
+    try {
+      const res = await fetch('/api/sync-custom?from=' + customFrom + '&to=' + customTo)
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setCustomData(data.meta)
+      setCustomTnRevenue(data.tn_revenue ?? null)
+    } catch (e) {
+      setCustomError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setCustomLoading(false)
+    }
+  }, [customFrom, customTo])
+
   if (!snapshot) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
@@ -72,10 +99,11 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
     )
   }
 
+  // Period data selection
   const periodData: PeriodMetrics | null =
-    period === 'last_7d'
-      ? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary }
-      : (snapshot.periods?.[period] ?? null)
+    period === 'custom'   ? customData :
+    period === 'last_7d'  ? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary } :
+    (snapshot.periods?.[period] ?? null)
 
   const hasPeriodData = periodData !== null
   const { summary, campaigns, adsets, ads } = periodData ?? {
@@ -95,11 +123,19 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
   const syncTime = lastSynced
     ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 
-  // Real ROAS for "Hoy": TN revenue today / Meta spend today
-  const tnToday = tnSnapshot?.summary_today
-  const metaSpendToday = period === 'today' ? (summary.total_spend_7d || 0) : null
-  const realRoasToday = (period === 'today' && tnToday && metaSpendToday && metaSpendToday > 0)
-    ? tnToday.total_revenue / metaSpendToday
+  // TN revenue per period
+  const tnRevenue: number | null =
+    period === 'custom'    ? customTnRevenue :
+    period === 'today'     ? (tnSnapshot?.summary_today?.total_revenue ?? null) :
+    period === 'yesterday' ? (tnSnapshot?.summary_yesterday?.total_revenue ?? null) :
+    period === 'last_7d'   ? (tnSnapshot?.summary_7d?.total_revenue ?? null) :
+    period === 'last_30d'  ? (tnSnapshot?.summary_30d?.total_revenue ?? null) :
+    null
+
+  // Real ROAS = TN revenue / Meta spend for the same period
+  const metaSpend = summary.total_spend_7d || 0
+  const realRoas = tnRevenue != null && metaSpend > 0
+    ? parseFloat((tnRevenue / metaSpend).toFixed(2))
     : null
 
   return (
@@ -116,7 +152,7 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
                   {lastSynced ? 'Actualizado - ' : 'Sync '}{snapshot.snapshot_date} - {syncTime}
                 </span>
             }
-            {!hasPeriodData && period !== 'last_7d' && (
+            {!hasPeriodData && period !== 'last_7d' && period !== 'custom' && (
               <span className="ml-2 text-xs text-amber-500">
                 (sin datos para {PERIOD_LABELS[period]} - ejecuta un sync primero)
               </span>
@@ -156,6 +192,30 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
         </div>
       </div>
 
+      {/* Custom date picker */}
+      {period === 'custom' && (
+        <div className="mb-4 flex flex-wrap items-end gap-3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-4 py-3 shadow-sm">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Desde</label>
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+              className="text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Hasta</label>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+              className="text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          </div>
+          <button onClick={fetchCustom} disabled={customLoading}
+            className="px-4 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-all">
+            {customLoading ? 'Consultando...' : 'Consultar'}
+          </button>
+          {customError && <p className="text-xs text-red-500">{customError}</p>}
+          {!customData && !customLoading && !customError && (
+            <p className="text-xs text-gray-400 dark:text-zinc-600">Selecciona un rango y presiona Consultar</p>
+          )}
+        </div>
+      )}
+
       {/* Attribution note for Hoy */}
       {period === 'today' && hasPeriodData && (
         <div className="mb-4 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl px-4 py-2.5">
@@ -164,7 +224,7 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
           </svg>
           <p className="text-xs text-amber-700 dark:text-amber-400">
             <strong>ROAS real vs reportado:</strong> El ROAS reportado por Meta incluye conversiones de los ultimos 7d (ventana de atribucion). El ROAS real = Ventas TN del dia / Gasto Meta del dia.
-            {realRoasToday != null ? ' Hoy: ' + realRoasToday.toFixed(2) + 'x real vs ' + (summary.blended_roas?.toFixed(2) ?? '--') + 'x reportado.' : ''}
+            {realRoas != null ? ' Hoy: ' + realRoas.toFixed(2) + 'x real vs ' + (summary.blended_roas?.toFixed(2) ?? '--') + 'x reportado.' : ''}
           </p>
         </div>
       )}
@@ -181,13 +241,15 @@ export default function DashboardClient({ snapshot, tnSnapshot }: Props) {
       )}
 
       {/* KPIs */}
-      <KpiGrid
-        summary={summary}
-        breakeven={BREAKEVEN_CPA}
-        period={PERIOD_SHORT[period]}
-        tnRevenue={period === 'today' ? tnToday?.total_revenue ?? null : null}
-        realRoas={realRoasToday}
-      />
+      {(period !== 'custom' || customData) && (
+        <KpiGrid
+          summary={summary}
+          breakeven={BREAKEVEN_CPA}
+          period={PERIOD_SHORT[period]}
+          tnRevenue={tnRevenue}
+          realRoas={realRoas}
+        />
+      )}
 
       {summary.alerts && summary.alerts.length > 0 && (
         <AlertsPanel alerts={summary.alerts} />

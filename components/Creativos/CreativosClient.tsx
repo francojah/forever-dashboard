@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Snapshot } from '@/lib/supabase'
+import type { Snapshot, PeriodMetrics } from '@/lib/supabase'
 
 const BREAKEVEN_CPA = 17500
 const ROAS_MIN = 2.86
@@ -10,6 +10,14 @@ const ROAS_SCALE = 6
 interface Props { snapshot: Snapshot | null }
 
 type Action = 'scale' | 'maintain' | 'watch' | 'pause' | 'no_data' | 'traffic'
+type CreativoPeriod = 'last_7d' | 'today' | 'yesterday' | 'last_30d'
+
+const PERIOD_LABELS: Record<CreativoPeriod, string> = {
+  last_7d:   'Ultimos 7d',
+  today:     'Hoy',
+  yesterday: 'Ayer',
+  last_30d:  'Ultimos 30d',
+}
 
 interface CreativeRow {
   id: string
@@ -55,6 +63,7 @@ export default function CreativosClient({ snapshot }: Props) {
   const [filter, setFilter] = useState<FilterAction>('all')
   const [sort, setSort] = useState<SortKey>('spend')
   const [sortAsc, setSortAsc] = useState(false)
+  const [period, setPeriod] = useState<CreativoPeriod>('last_7d')
 
   if (!snapshot) {
     return (
@@ -66,16 +75,24 @@ export default function CreativosClient({ snapshot }: Props) {
     )
   }
 
-  const campMap: Record<string, string> = {}
-  snapshot.campaigns.forEach(c => { campMap[c.id] = c.name })
-  const adsetMap: Record<string, string> = {}
-  snapshot.adsets.forEach(s => { adsetMap[s.id] = s.name })
-  const adsetCampMap: Record<string, string> = {}
-  snapshot.adsets.forEach(s => { adsetCampMap[s.id] = s.campaign_id })
-  const adsetGoalMap: Record<string, string> = {}
-  snapshot.adsets.forEach(s => { adsetGoalMap[s.id] = s.optimization_goal })
+  // Select period data
+  const periodData: PeriodMetrics =
+    period === 'last_7d'
+      ? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary }
+      : (snapshot.periods?.[period] ?? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary })
 
-  const rows: CreativeRow[] = snapshot.ads
+  const { campaigns, adsets, ads } = periodData
+
+  const campMap: Record<string, string> = {}
+  campaigns.forEach(c => { campMap[c.id] = c.name })
+  const adsetMap: Record<string, string> = {}
+  adsets.forEach(s => { adsetMap[s.id] = s.name })
+  const adsetCampMap: Record<string, string> = {}
+  adsets.forEach(s => { adsetCampMap[s.id] = s.campaign_id })
+  const adsetGoalMap: Record<string, string> = {}
+  adsets.forEach(s => { adsetGoalMap[s.id] = s.optimization_goal })
+
+  const rows: CreativeRow[] = ads
     .filter(a => a.status === 'ACTIVE')
     .map(a => {
       const base: CreativeRow = {
@@ -113,11 +130,30 @@ export default function CreativosClient({ snapshot }: Props) {
     else { setSort(key); setSortAsc(false) }
   }
 
+  const hasPeriodData = period === 'last_7d' || !!(snapshot.periods?.[period])
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Analisis de creativos</h1>
-        <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">{rows.length} anuncios activos · datos ultimos 7d · {snapshot.snapshot_date}</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Analisis de creativos</h1>
+          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">{rows.length} anuncios activos · {snapshot.snapshot_date}</p>
+          {!hasPeriodData && (
+            <p className="text-xs text-amber-500 mt-0.5">Sin datos para este periodo — ejecuta un sync primero</p>
+          )}
+        </div>
+        <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5 w-fit">
+          {(Object.keys(PERIOD_LABELS) as CreativoPeriod[]).map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
+                period === p
+                  ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
+                  : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
+              )}>
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Filter chips */}
