@@ -33,20 +33,22 @@ function fmtPct(n: number | null | undefined): string {
 }
 
 interface PnLRow {
-  label:      string
-  value:      number | null
-  pct?:       number | null
+  label:       string
+  value:       number | null
+  pct?:        number | null
   isPositive?: boolean
   isNegative?: boolean
-  isTotal?:   boolean
-  indent?:    boolean
-  note?:      string
+  isTotal?:    boolean
+  isSeparator?: boolean
+  indent?:     boolean
+  note?:       string
 }
 
 export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Props) {
-  const [period, setPeriod]         = useState<Period>('30d')
-  const [manualShipping, setManual] = useState<string>('')
+  const [period, setPeriod]           = useState<Period>('30d')
+  const [manualShipping, setManual]   = useState<string>('')
   const [costPerUnit, setCostPerUnit] = useState<string>('')
+  const [gastosVar, setGastosVar]     = useState<string>('')
   const printRef = useRef<HTMLDivElement>(null)
 
   const tnData = period === 'today' ? tnSnapshot?.summary_today
@@ -54,36 +56,35 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
     : period === '30d' ? tnSnapshot?.summary_30d
     : tnSnapshot?.summary_ytd
 
-  // Meta spend for the selected period
-  const periodMetaSpend = period === '7d'   ? (metaSnapshot?.summary?.total_spend_7d ?? null)
-    : period === 'today'  ? (metaSnapshot?.periods?.today?.summary?.total_spend_7d ?? null)
-    : period === '30d'    ? (metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d ?? null)
-    : null  // ytd not available from Meta snapshots
+  const periodMetaSpend = period === '7d'  ? (metaSnapshot?.summary?.total_spend_7d ?? null)
+    : period === 'today' ? (metaSnapshot?.periods?.today?.summary?.total_spend_7d ?? null)
+    : period === '30d'   ? (metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d ?? null)
+    : null
 
   const ventas = tnData?.total_revenue ?? null
 
-  // Shipping: use actual TN shipping_revenue if available, else settings % estimate
   const shippingActual    = tnData?.shipping_revenue ?? null
   const shippingEstimated = ventas != null ? Math.round(ventas * (settings.shipping_pct / 100)) : null
-  const useManual = manualShipping !== ''
-  const shippingValue = useManual
+  const useManual         = manualShipping !== ''
+  const shippingValue     = useManual
     ? (parseFloat(manualShipping.replace(/\./g, '').replace(',', '.')) || 0)
     : (shippingActual ?? shippingEstimated)
 
   const comisionTN = ventas != null ? Math.round(ventas * (settings.tn_commission_pct / 100)) : null
 
-  // CMV = costo por unidad × unidades vendidas en el periodo
-  const unitCost = costPerUnit !== '' ? (parseFloat(costPerUnit.replace(/\./g, '').replace(',', '.')) || 0) : null
+  const unitCost  = costPerUnit !== '' ? (parseFloat(costPerUnit.replace(/\./g, '').replace(',', '.')) || 0) : null
   const unitsSold = tnData?.total_units_sold ?? null
-  const cmv = unitCost != null && unitsSold != null ? Math.round(unitCost * unitsSold) : null
+  const cmv       = unitCost != null && unitsSold != null ? Math.round(unitCost * unitsSold) : null
 
-  const resultadoBruto =
+  const gastosVarNum = gastosVar !== '' ? (parseFloat(gastosVar.replace(/\./g, '').replace(',', '.')) || 0) : null
+
+  const neto =
     ventas != null && periodMetaSpend != null && shippingValue != null && comisionTN != null
-      ? ventas - periodMetaSpend - shippingValue - comisionTN - (cmv ?? 0)
+      ? ventas - periodMetaSpend - shippingValue - comisionTN - (cmv ?? 0) - (gastosVarNum ?? 0)
       : null
 
-  const margen = ventas && ventas > 0 && resultadoBruto != null
-    ? (resultadoBruto / ventas) * 100
+  const margen = ventas && ventas > 0 && neto != null
+    ? (neto / ventas) * 100
     : null
 
   const rows: PnLRow[] = [
@@ -127,13 +128,20 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
         : 'Ingresa el costo promedio por unidad abajo',
     },
     {
-      label: 'Resultado Bruto',
-      value: resultadoBruto,
-      pct: null,  // rendered via the isTotal colored span to avoid duplication
-      isPositive: resultadoBruto != null && resultadoBruto >= 0,
-      isNegative: resultadoBruto != null && resultadoBruto < 0,
+      label: 'Gastos variables',
+      value: gastosVarNum != null ? -gastosVarNum : null,
+      pct: ventas && gastosVarNum ? (-gastosVarNum / ventas) * 100 : null,
+      isNegative: gastosVarNum != null && gastosVarNum > 0,
+      indent: true,
+      note: gastosVarNum == null ? 'Ingresa otros gastos variables abajo (ej: comisiones, empaque, etc.)' : undefined,
+    },
+    {
+      label: 'Resultado Neto',
+      value: neto,
+      pct: null,
+      isPositive: neto != null && neto >= 0,
+      isNegative: neto != null && neto < 0,
       isTotal: true,
-      note: 'Sin incluir CMV ni costos operativos',
     },
   ]
 
@@ -153,10 +161,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       const pct = r.pct != null ? r.pct.toFixed(1) + '%' : ''
       lines.push('"' + r.label + '",' + val + ',' + pct)
     })
-    lines.push('')
-    if (cmv != null) lines.push('"CMV",' + (-cmv) + ',' + (ventas ? ((-cmv/ventas)*100).toFixed(1) + '%' : ''))
 
-    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
@@ -171,7 +177,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Balance</h1>
-          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Resultado del negocio por periodo</p>
+          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Resultado neto del negocio por periodo</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={handlePrint}
@@ -184,7 +190,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
           <button onClick={handleExcelDownload}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
             </svg>
             Excel
           </button>
@@ -256,70 +262,76 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Pr
           </tbody>
         </table>
 
-        {/* Footer note */}
         <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-[11px] text-gray-400 dark:text-zinc-600">
-            Incluye CMV si cargaste el costo por unidad. No incluye sueldos ni otros costos operativos fijos.
+            Resultado Neto = Ventas − Gasto Meta − Envíos − Comisión TN − CMV − Gastos Variables.
           </p>
         </div>
       </div>
 
-      {/* CMV — costo por unidad */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Costo de mercaderia (CMV)</h3>
-        <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
-          {unitsSold != null
-            ? 'Se vendieron ' + unitsSold + ' unidades en el periodo. CMV = costo unitario × unidades.'
-            : 'Unidades vendidas no disponibles — ejecuta un nuevo sync.'}
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Costo prom. por unidad $</span>
-          <input
-            type="text"
-            placeholder="ej: 8000"
-            value={costPerUnit}
-            onChange={e => setCostPerUnit(e.target.value)}
-            className="w-32 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
-          />
-          {cmv != null && (
-            <span className="text-xs text-gray-500 dark:text-zinc-400">
-              = CMV <strong className="text-red-600 dark:text-red-400">${Math.round(cmv).toLocaleString('es-AR')}</strong>
-            </span>
-          )}
-          {costPerUnit && <button onClick={() => setCostPerUnit('')} className="text-xs text-gray-400 hover:text-gray-600">Limpiar</button>}
+      {/* Inputs: CMV + Gastos Variables */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {/* CMV */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Costo de mercadería (CMV)</h3>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
+            {unitsSold != null
+              ? unitsSold + ' unidades vendidas · CMV = costo × unidades'
+              : 'Ejecutá un nuevo sync para ver unidades.'}
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">$ costo/ud</span>
+            <input type="text" placeholder="ej: 8000" value={costPerUnit} onChange={e => setCostPerUnit(e.target.value)}
+              className="w-28 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
+            {cmv != null && (
+              <span className="text-xs text-red-600 dark:text-red-400 font-medium">{fmt(-cmv)}</span>
+            )}
+            {costPerUnit && <button onClick={() => setCostPerUnit('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
+          </div>
+        </div>
+
+        {/* Gastos variables */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Gastos variables</h3>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
+            Otros gastos del período: empaque, comisiones, logística, etc.
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">$</span>
+            <input type="text" placeholder="ej: 50000" value={gastosVar} onChange={e => setGastosVar(e.target.value)}
+              className="w-32 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
+            {gastosVarNum != null && gastosVarNum > 0 && (
+              <span className="text-xs text-red-600 dark:text-red-400 font-medium">{fmt(-gastosVarNum)}</span>
+            )}
+            {gastosVar && <button onClick={() => setGastosVar('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
+          </div>
         </div>
       </div>
 
       {/* Manual shipping override */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-3">Ajustar costo de envios</h3>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-3">Ajustar costo de envíos</h3>
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <p className="text-xs text-gray-400 dark:text-zinc-500 mb-1">
               {shippingActual != null
-                ? 'Tiendanube reporta ' + fmt(shippingActual) + ' cobrado por envios. Ajusta si el costo real es diferente.'
+                ? 'TN reporta ' + fmt(shippingActual) + ' cobrado. Ajustá si el costo real difiere.'
                 : 'Sin datos de TN. Estimado en ' + settings.shipping_pct + '% de ventas = ' + fmt(shippingEstimated)
               }
             </p>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-400">$</span>
-              <input
-                type="text"
+              <input type="text"
                 placeholder={shippingActual != null ? String(shippingActual) : String(shippingEstimated ?? '')}
-                value={manualShipping}
-                onChange={e => setManual(e.target.value)}
-                className="w-36 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-              {manualShipping && (
-                <button onClick={() => setManual('')} className="text-xs text-gray-400 hover:text-gray-600">Limpiar</button>
-              )}
+                value={manualShipping} onChange={e => setManual(e.target.value)}
+                className="w-36 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
+              {manualShipping && <button onClick={() => setManual('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
             </div>
           </div>
-          <div className="text-right">
-            <a href="/settings" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-              Ajustar % en configuracion
-            </a>
-          </div>
+          <a href="/settings" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline shrink-0">
+            Ajustar % en configuracion
+          </a>
         </div>
       </div>
 

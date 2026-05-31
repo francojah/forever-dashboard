@@ -4,7 +4,6 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Snapshot, PeriodMetrics, TNSnapshot } from '@/lib/supabase'
 import KpiGrid from './KpiGrid'
-import AdsetTable from './AdsetTable'
 import AlertsPanel from './AlertsPanel'
 
 const BREAKEVEN_CPA = 17500
@@ -96,6 +95,14 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
           El primer sync se va a ejecutar automaticamente a las 7am.
           O podes correrlo manualmente con el boton Actualizar.
         </p>
+        <button onClick={triggerSync} disabled={syncing}
+          className="mt-6 flex items-center gap-2 px-5 py-2.5 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-60 text-black font-semibold text-sm rounded-xl shadow-lg transition-all">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            className={'w-4 h-4 ' + (syncing ? 'animate-spin' : '')}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          {syncing ? 'Actualizando...' : 'Actualizar datos'}
+        </button>
       </div>
     )
   }
@@ -107,24 +114,13 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
     (snapshot.periods?.[period] ?? null)
 
   const hasPeriodData = periodData !== null
-  const { summary, campaigns, adsets, ads } = periodData ?? {
+  const { summary, campaigns } = periodData ?? {
     summary: snapshot.summary,
     campaigns: snapshot.campaigns,
-    adsets: snapshot.adsets,
-    ads: snapshot.ads,
   }
 
-  const campMap: Record<string, string> = {}
-  campaigns.forEach(c => { campMap[c.id] = c.name })
-
-  const activeAdsets = adsets
-    .filter(s => s.status === 'ACTIVE' && (s.spend || 0) > 0)
-    .sort((a, b) => (b.spend || 0) - (a.spend || 0))
-
-  const activeAdsetIds = new Set(activeAdsets.map(s => s.id))
-  const activeAds = ads
-    .filter(a => activeAdsetIds.has(a.adset_id) && (a.spend || 0) > 0)
-    .sort((a, b) => (b.spend || 0) - (a.spend || 0))
+  // suppress unused warning — campaigns kept for future use
+  void campaigns
 
   const syncTime = lastSynced
     ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -144,7 +140,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
     ? parseFloat((tnRevenue / metaSpend).toFixed(2))
     : null
 
-  // WoW prev summary (misma period de hace 7 dias)
+  // WoW prev summary
   const prevSummary = prevSnapshot
     ? (period === 'last_7d'
         ? prevSnapshot.summary
@@ -157,36 +153,38 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Dashboard Meta Ads</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Dashboard</h1>
           <p className="text-sm mt-0.5">
             {syncError
               ? <span className="text-red-500">Error: {syncError}</span>
               : <span className="text-gray-500 dark:text-zinc-500">
-                  {lastSynced ? 'Actualizado - ' : 'Sync '}{snapshot.snapshot_date} - {syncTime}
+                  {lastSynced ? 'Actualizado - ' : 'Sync '}{snapshot.snapshot_date} — {syncTime}
                 </span>
             }
             {!hasPeriodData && period !== 'last_7d' && period !== 'custom' && (
               <span className="ml-2 text-xs text-amber-500">
-                (sin datos para {PERIOD_LABELS[period]} - ejecuta un sync primero)
+                (sin datos para {PERIOD_LABELS[period]} — ejecuta un sync)
               </span>
             )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* ── Botón Actualizar único, verde ── */}
           <button
             onClick={triggerSync}
             disabled={syncing}
             title="Actualizar Meta + Tiendanube"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 disabled:opacity-50 text-black font-semibold text-sm rounded-xl shadow-md transition-all"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={'w-3.5 h-3.5 ' + (syncing ? 'animate-spin' : '')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              className={'w-4 h-4 ' + (syncing ? 'animate-spin' : '')}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
             {syncing ? 'Actualizando...' : 'Actualizar'}
           </button>
 
+          {/* Period tabs */}
           <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
             {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
               <button
@@ -265,18 +263,20 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
         />
       )}
 
+      {/* Alerts inline */}
       {summary.alerts && summary.alerts.length > 0 && (
         <AlertsPanel alerts={summary.alerts} />
       )}
 
-      <div className="mt-6">
-        <AdsetTable
-          adsets={activeAdsets}
-          ads={activeAds}
-          campaignMap={campMap}
-          breakeven={BREAKEVEN_CPA}
-          period={PERIOD_SHORT[period]}
-        />
+      {/* CTA to Campañas */}
+      <div className="mt-8 flex items-center justify-between">
+        <p className="text-xs text-gray-400 dark:text-zinc-600">
+          Para ver ad sets, creativos y presupuesto, accedé a la sección <strong>Campañas</strong> en el menú.
+        </p>
+        <a href="/campanias"
+          className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+          Ver Campañas →
+        </a>
       </div>
 
     </div>

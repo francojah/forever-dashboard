@@ -209,6 +209,7 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
                   <>
                     <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Impr.</th>
                     <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Clicks</th>
+                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPC</th>
                   </>
                 )}
                 <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CTR</th>
@@ -247,6 +248,9 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
                     <>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.impressions ? ad.impressions.toLocaleString('es-AR') : '—'}</td>
                       <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.clicks ? ad.clicks.toLocaleString('es-AR') : '—'}</td>
+                      <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">
+                        {ad.spend && ad.clicks ? '$' + Math.round(ad.spend / ad.clicks).toLocaleString('es-AR') : '—'}
+                      </td>
                     </>
                   )}
                   <td className="px-3 py-2 text-right"><CtrBadge ctr={ad.ctr} /></td>
@@ -340,6 +344,7 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                   <>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Impr.</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Clicks</th>
+                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CPC</th>
                     <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">CTR</th>
                   </>
                 )}
@@ -394,6 +399,9 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                         <>
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.impressions ? adset.impressions.toLocaleString('es-AR') : '—'}</td>
                           <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.clicks ? adset.clicks.toLocaleString('es-AR') : '—'}</td>
+                          <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">
+                            {adset.spend && adset.clicks > 0 ? '$' + Math.round(adset.spend / adset.clicks).toLocaleString('es-AR') : '—'}
+                          </td>
                           <td className="px-3 py-3 text-right"><CtrBadge ctr={adset.ctr} /></td>
                         </>
                       )}
