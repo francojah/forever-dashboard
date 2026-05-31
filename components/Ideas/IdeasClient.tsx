@@ -29,9 +29,15 @@ export default function IdeasClient({ snapshot }: Props) {
     setError('')
     try {
       const res = await fetch('/api/ai/ideas', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al generar')
-      setAnalysis(data)
+      const text = await res.text()
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(text)
+      } catch {
+        throw new Error('Error del servidor. Verificá que la API key de Anthropic esté configurada en Vercel.')
+      }
+      if (!res.ok) throw new Error((data.error as string) || 'Error al generar')
+      setAnalysis(data as unknown as import('@/lib/claude').CreativeAnalysis)
       setExpanded(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido')

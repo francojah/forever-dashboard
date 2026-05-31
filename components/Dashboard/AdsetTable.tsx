@@ -281,9 +281,18 @@ interface SectionProps {
 }
 
 function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period, onAction }: SectionProps) {
-  const [open, setOpen]           = useState(true)
-  const [expandedIds, setExpanded] = useState<Set<string>>(new Set())
+  const [open, setOpen]                     = useState(true)
+  const [expandedIds, setExpanded]          = useState<Set<string>>(new Set())
+  const [collapsedCamps, setCollapsedCamps] = useState<Set<string>>(new Set())
   const handleAction = onAction ?? (() => {})
+
+  const toggleCamp = (id: string) => {
+    setCollapsedCamps(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => {
@@ -355,7 +364,39 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
               </tr>
             </thead>
             <tbody>
-              {adsets.map(adset => {
+              {/* Group adsets by campaign */}
+              {Array.from(new Set(adsets.map(a => a.campaign_id))).map(campId => {
+                const campAdsets = adsets.filter(a => a.campaign_id === campId)
+                const campName   = campaignMap[campId] || 'Campaña sin nombre'
+                const campSpend  = campAdsets.reduce((s, a) => s + (a.spend || 0), 0)
+                const campBudget = campAdsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
+                const campOpen   = !collapsedCamps.has(campId)
+                const colCount   = isConv ? 9 : 9
+
+                return (
+                  <React.Fragment key={campId}>
+                    {/* ── Campaign header row ── */}
+                    <tr className="border-t-2 border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/60 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-zinc-800 transition-colors"
+                        onClick={() => toggleCamp(campId)}>
+                      <td colSpan={colCount} className="px-5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500 dark:text-zinc-400"><Chevron open={campOpen} /></span>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                          </svg>
+                          <span className="text-xs font-bold text-gray-700 dark:text-zinc-200">{campName}</span>
+                          <span className="text-[10px] text-gray-400 dark:text-zinc-600 bg-gray-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded-full">
+                            {campAdsets.length} ad set{campAdsets.length !== 1 ? 's' : ''}
+                          </span>
+                          <div className="ml-auto flex items-center gap-4 text-xs text-gray-400 dark:text-zinc-500">
+                            <span>Gasto: <strong className="text-gray-600 dark:text-zinc-300">${Math.round(campSpend).toLocaleString('es-AR')}</strong></span>
+                            {campBudget > 0 && <span>Budget: <strong className="text-gray-600 dark:text-zinc-300">${Math.round(campBudget).toLocaleString('es-AR')}/día</strong></span>}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {campOpen && campAdsets.map(adset => {
                 const adsetAds = ads
                   .filter(a => a.adset_id === adset.id)
                   .sort((a, b) => (b.spend || 0) - (a.spend || 0))
@@ -367,12 +408,11 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                       onClick={() => toggleExpand(adset.id)}
                       className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer"
                     >
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-3 pl-10">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400 dark:text-zinc-500"><Chevron open={isExpanded} /></span>
                           <div>
                             <p className="font-semibold text-gray-900 dark:text-white leading-tight">{adset.name}</p>
-                            <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{campaignMap[adset.campaign_id] || '—'}</p>
                           </div>
                         </div>
                       </td>
@@ -413,6 +453,9 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                     {isExpanded && (
                       <AdsSubTable ads={adsetAds} type={type} breakeven={breakeven} onAction={handleAction} />
                     )}
+                  </React.Fragment>
+                )
+              })}
                   </React.Fragment>
                 )
               })}

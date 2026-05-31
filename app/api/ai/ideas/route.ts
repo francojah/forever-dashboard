@@ -5,7 +5,8 @@ import { generateCreativeIdeas } from '@/lib/claude'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-export const maxDuration = 60 // Vercel: allow up to 60s for Claude call
+export const maxDuration = 60
+export const runtime = 'nodejs'
 
 export async function POST() {
   try {
