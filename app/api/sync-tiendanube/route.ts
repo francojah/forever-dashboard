@@ -1,11 +1,28 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const USER_ID      = process.env.TIENDANUBE_USER_ID!
-const TOKEN        = process.env.TIENDANUBE_ACCESS_TOKEN!
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const TN_API       = 'https://api.tiendanube.com/v1'
+
+// ── Credential resolver: Supabase first, env vars fallback ────────
+async function getCredentials(supabase: SupabaseClient): Promise<{ token: string; userId: string }> {
+  try {
+    const { data } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'tiendanube_credentials')
+      .single()
+    if (data?.value?.access_token && data?.value?.user_id) {
+      return { token: data.value.access_token, userId: data.value.user_id }
+    }
+  } catch { /* table may not exist yet */ }
+
+  const token  = process.env.TIENDANUBE_ACCESS_TOKEN
+  const userId = process.env.TIENDANUBE_USER_ID
+  if (!token || !userId) throw new Error('TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_USER_ID no están configurados')
+  return { token, userId }
+}
 
 function argentinaDateStr(date: Date): string {
   const ms = date.getTime() - 3 * 60 * 60 * 1000
@@ -17,12 +34,12 @@ function getRange(preset: string) {
   const todayAR = argentinaDateStr(now)
   const yearAR  = todayAR.slice(0, 4)
 
-  const startOfToday      = new Date(todayAR + 'T00:00:00.000-03:00')
-  const startOfYesterday  = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 1))
-  const endOfYesterday    = new Date(startOfToday.getTime() - 1)
-  const start7d           = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 6))
-  const start30d          = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 29))
-  const startYTD          = new Date(`${yearAR}-01-01T00:00:00.000-03:00`)
+  const startOfToday     = new Date(todayAR + 'T00:00:00.000-03:00')
+  const startOfYesterday = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 1))
+  const endOfYesterday   = new Date(startOfToday.getTime() - 1)
+  const start7d          = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 6))
+  const start30d         = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 29))
+  const startYTD         = new Date(`${yearAR}-01-01T00:00:00.000-03:00`)
 
   const fmt = (d: Date) => d.toISOString()
   switch (preset) {
@@ -35,22 +52,29 @@ function getRange(preset: string) {
   }
 }
 
-async function fetchOrders(preset: string) {
+async function fetchOrders(preset: string, token: string, userId: string) {
   const { created_at_min, created_at_max } = getRange(preset)
   const params = new URLSearchParams({
     created_at_min, created_at_max,
     status: 'open,closed,paid',
     per_page: '200',
   })
-  const res = await fetch(`${TN_API}/${USER_ID}/orders?${params}`, {
+  const res = await fetch(`${TN_API}/${userId}/orders?${params}`, {
     headers: {
-      'Authentication': `bearer ${TOKEN}`,
+      'Authentication': `bearer ${token}`,
       'User-Agent': 'ForeverDashboard/1.0 (francojah@gmail.com)',
     },
     cache: 'no-store',
   })
   const data = await res.json()
-  if (data.error || data.code) throw new Error(`TN orders [${preset}]: ${data.description || data.error}`)
+  if (data.error || data.code) {
+    const description = data.description || data.error || 'Error desconocido'
+    // Provide actionable hint for auth errors
+    const hint = (data.code === 401 || description.toLowerCase().includes('token') || description.toLowerCase().includes('access'))
+      ? ' — Reconectá Tiendanube en Configuración.'
+      : ''
+    throw new Error(`TN orders [${preset}]: ${description}${hint}`)
+  }
   return Array.isArray(data) ? data : []
 }
 
@@ -78,7 +102,6 @@ function buildSummary(orders: any[]) {
   const total_orders  = paid.length
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
-  // Products grouped by product_id, revenue proportional to o.total
   const productMap: Record<string, { name: string; quantity: number; revenue: number }> = {}
   paid.forEach((o: { total: string; products: { product_id: number; name: string; price: string; quantity: string }[] }) => {
     const items = o.products || []
@@ -101,14 +124,12 @@ function buildSummary(orders: any[]) {
     .slice(0, 10)
     .map(p => ({ ...p, revenue: Math.round(p.revenue) }))
 
-  // Payment methods
   const payment_methods: Record<string, number> = {}
   paid.forEach((o: { payment_details?: { method?: string } }) => {
     const m = o.payment_details?.method || 'otro'
     payment_methods[m] = (payment_methods[m] || 0) + 1
   })
 
-  // Shipping methods — normalized to 3 categories: Correo, Retiro, Moto
   const shippingCounts: Record<string, number> = {}
   paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string }) => {
     const cat = normalizeShipping(o)
@@ -119,11 +140,9 @@ function buildSummary(orders: any[]) {
   if (shippingCounts['Retiro']) shipping_methods['Retiro'] = shippingCounts['Retiro']
   if (shippingCounts['Moto'])   shipping_methods['Moto']   = shippingCounts['Moto']
 
-  // Total units sold
   const total_units_sold = paid.reduce((sum: number, o: { products?: { quantity?: string }[] }) =>
     sum + (o.products || []).reduce((s, p) => s + parseInt(p.quantity || '1'), 0), 0)
 
-  // Provinces
   const provinces: Record<string, number> = {}
   paid.forEach((o: { shipping_address?: { province?: string } }) => {
     const p = o.shipping_address?.province || 'Desconocida'
@@ -148,19 +167,34 @@ function buildSummary(orders: any[]) {
 }
 
 export async function POST() {
-  if (!USER_ID || !TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
-    return NextResponse.json({ error: 'Faltan variables de entorno de Tiendanube' }, { status: 500 })
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return NextResponse.json({ error: 'Faltan variables de entorno de Supabase' }, { status: 500 })
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+  let token: string
+  let userId: string
+  try {
+    const creds = await getCredentials(supabase)
+    token  = creds.token
+    userId = creds.userId
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error de credenciales'
+    return NextResponse.json({
+      error: msg + ' — Reconectá Tiendanube en Configuración.',
+    }, { status: 401 })
   }
 
   try {
     const today = argentinaDateStr(new Date())
 
     const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.all([
-      fetchOrders('today'),
-      fetchOrders('yesterday'),
-      fetchOrders('7d'),
-      fetchOrders('30d'),
-      fetchOrders('ytd'),
+      fetchOrders('today',     token, userId),
+      fetchOrders('yesterday', token, userId),
+      fetchOrders('7d',        token, userId),
+      fetchOrders('30d',       token, userId),
+      fetchOrders('ytd',       token, userId),
     ])
 
     const snapshot = {
@@ -173,7 +207,6 @@ export async function POST() {
       orders_count:      orders7d.length,
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     const { error } = await supabase
       .from('tiendanube_snapshots')
       .upsert({ ...snapshot, created_at: new Date().toISOString() }, { onConflict: 'snapshot_date' })

@@ -223,7 +223,11 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
           <h1 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Dashboard</h1>
           <p className="text-sm mt-0.5 text-gray-400 dark:text-zinc-500">
             Sync {snapshot.snapshot_date} — {syncTime}
-            {syncError && <span className="ml-2 text-red-500">Error: {syncError}</span>}
+            {syncError && (
+              syncError.toLowerCase().includes('token') || syncError.toLowerCase().includes('access') || syncError.toLowerCase().includes('reconect')
+                ? <span className="ml-2 text-red-500">⚠ Token TN inválido — <a href="/settings" className="underline hover:text-red-400">reconectá en Configuración</a></span>
+                : <span className="ml-2 text-red-500">Error: {syncError}</span>
+            )}
             {!hasPeriodData && period !== 'custom' && <span className="ml-2 text-amber-500"> · sin datos para {PERIOD_LABELS[period]}</span>}
           </p>
         </div>
@@ -481,7 +485,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
 
       {/* CTA */}
       <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
-        <p className="text-xs text-gray-400 dark:text-zinc-600">Para gestionar ad sets, creativos y presupuesto entrá a <strong className="text-gray-600 dark:text-zinc-400">Campañas</strong>.</p>
+        <p className="text-xs text-gray-400 dark:text-zinc-600">Para gestionar ad sets, creativos y presupuesto entrate a <strong className="text-gray-600 dark:text-zinc-400">Campañas</strong>.</p>
         <a href="/campanias" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Ver Campañas →</a>
       </div>
 
