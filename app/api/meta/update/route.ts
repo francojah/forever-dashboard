@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
 
 const META_API = 'https://graph.facebook.com/v21.0'
 
 export async function POST(request: Request) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const token = process.env.META_ACCESS_TOKEN
   if (!token) return NextResponse.json({ error: 'No META_ACCESS_TOKEN' }, { status: 500 })
 

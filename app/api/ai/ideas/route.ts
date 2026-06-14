@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 import { generateCreativeIdeas } from '@/lib/claude'
 
@@ -9,6 +10,9 @@ export const maxDuration = 60
 export const runtime = 'nodejs'
 
 export async function POST() {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 

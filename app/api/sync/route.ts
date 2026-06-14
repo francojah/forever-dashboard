@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
 const META_TOKEN   = process.env.META_ACCESS_TOKEN!
@@ -9,8 +10,30 @@ const META_API     = 'https://graph.facebook.com/v21.0'
 
 const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
 const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,frequency,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
-const BREAKEVEN_CPA  = 17500
-const ROAS_MIN       = 2.86
+
+// Default thresholds — overridden by app_settings in Supabase
+const DEFAULT_BREAKEVEN_CPA = 17500
+const DEFAULT_ROAS_MIN      = 2.86
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getThresholds(supabase: any) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await supabase
+      .from('app_settings')
+      .select('breakeven_cpa, roas_min')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single() as { data: { breakeven_cpa: number; roas_min: number } | null; error: unknown }
+    if (data) {
+      return {
+        breakeven_cpa: Number(data.breakeven_cpa) || DEFAULT_BREAKEVEN_CPA,
+        roas_min:      Number(data.roas_min)      || DEFAULT_ROAS_MIN,
+      }
+    }
+  } catch { /* table may not exist yet */ }
+  return { breakeven_cpa: DEFAULT_BREAKEVEN_CPA, roas_min: DEFAULT_ROAS_MIN }
+}
 
 // -- Helpers ------------------------------------------------------
 function fmt(str: string | null | undefined): number | null {
@@ -86,7 +109,7 @@ async function fetchAds(preset: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildSummary(adsets: any[]) {
+function buildSummary(adsets: any[], breakeven_cpa: number, roas_min: number) {
   const activeAdsets = adsets.filter((s: { status: string }) => s.status === 'ACTIVE')
   const totalSpend   = adsets.reduce((sum: number, s: { spend: number | null }) => sum + (s.spend || 0), 0)
   const totalBudget  = activeAdsets.reduce((sum: number, s: { daily_budget: number | null }) => sum + (s.daily_budget || 0), 0)
@@ -106,20 +129,20 @@ function buildSummary(adsets: any[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   activeAdsets.forEach((s: any) => {
     if (s.cost_per_result && s.optimization_goal === 'OFFSITE_CONVERSIONS') {
-      if (s.cost_per_result > BREAKEVEN_CPA) {
+      if (s.cost_per_result > breakeven_cpa) {
         alerts.push({
           type: 'cpa_exceeded', entity_type: 'adset', entity_id: s.id, entity_name: s.name,
           message: 'CPA $' + Math.round(s.cost_per_result).toLocaleString('es-AR') + ' supera el breakeven',
-          severity: s.cost_per_result > BREAKEVEN_CPA * 1.5 ? 'danger' : 'warning',
-          threshold: BREAKEVEN_CPA, actual_value: s.cost_per_result,
+          severity: s.cost_per_result > breakeven_cpa * 1.5 ? 'danger' : 'warning',
+          threshold: breakeven_cpa, actual_value: s.cost_per_result,
         })
       }
     }
-    if (s.roas && s.roas < ROAS_MIN && s.spend > 5000) {
+    if (s.roas && s.roas < roas_min && s.spend > 5000) {
       alerts.push({
         type: 'roas_drop', entity_type: 'adset', entity_id: s.id, entity_name: s.name,
-        message: 'ROAS ' + s.roas.toFixed(2) + 'x por debajo del minimo (' + ROAS_MIN + 'x)',
-        severity: 'warning', threshold: ROAS_MIN, actual_value: s.roas,
+        message: 'ROAS ' + s.roas.toFixed(2) + 'x por debajo del minimo (' + roas_min + 'x)',
+        severity: 'warning', threshold: roas_min, actual_value: s.roas,
       })
     }
   })
@@ -136,18 +159,21 @@ function buildSummary(adsets: any[]) {
   }
 }
 
-async function fetchPreset(preset: string) {
+async function fetchPreset(preset: string, breakeven_cpa: number, roas_min: number) {
   const [campaigns, adsets, ads] = await Promise.all([
     fetchCampaigns(preset),
     fetchAdsets(preset),
     fetchAds(preset),
   ])
-  const summary = buildSummary(adsets)
+  const summary = buildSummary(adsets, breakeven_cpa, roas_min)
   return { campaigns, adsets, ads, summary }
 }
 
 // -- Handler ------------------------------------------------------
 export async function POST() {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   if (!META_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
     return NextResponse.json({ error: 'Faltan variables de entorno' }, { status: 500 })
   }
@@ -155,22 +181,24 @@ export async function POST() {
   try {
     const today = new Date().toISOString().split('T')[0]
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const { breakeven_cpa, roas_min } = await getThresholds(supabase)
+
     // Primary fetch (last_7d)
-    const { campaigns, adsets, ads, summary } = await fetchPreset('last_7d')
+    const { campaigns, adsets, ads, summary } = await fetchPreset('last_7d', breakeven_cpa, roas_min)
 
     // Additional presets (best-effort, don't fail if one is slow)
     const periods: Record<string, object | null> = { last_7d: { campaigns, adsets, ads, summary } }
     await Promise.allSettled(
       ['today', 'yesterday', 'last_30d'].map(async preset => {
         try {
-          periods[preset] = await fetchPreset(preset)
+          periods[preset] = await fetchPreset(preset, breakeven_cpa, roas_min)
         } catch {
           periods[preset] = null
         }
       })
     )
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     const { error } = await supabase
       .from('meta_snapshots')
       .upsert({
@@ -212,7 +240,7 @@ export async function POST() {
       roas: summary.blended_roas,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error desconocido'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Error desconocido'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

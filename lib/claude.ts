@@ -175,31 +175,3 @@ Haz un analisis estrategico de posicionamiento y mensajeria. Responde en JSON:
     }
   }
 }
-
-// Chat asistente con contexto de metricas
-export async function chatWithContext(
-  userMessage: string,
-  snapshot: Snapshot | null,
-  history: Array<{ role: 'user' | 'assistant'; content: string }>
-): Promise<string> {
-  const contextMsg = snapshot
-    ? `\nDATOS ACTUALES (${snapshot.snapshot_date}):
-- Gasto 7d: $${snapshot.summary.total_spend_7d?.toLocaleString('es-AR')} ARS
-- Compras: ${snapshot.summary.total_purchases_7d}
-- ROAS: ${snapshot.summary.blended_roas}x
-- CPA: $${snapshot.summary.blended_cpa?.toLocaleString('es-AR')} ARS
-- Budget diario activo: $${snapshot.summary.daily_budget_active?.toLocaleString('es-AR')} ARS`
-    : ''
-
-  const message = await client.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 1000,
-    system: `${BRAND_CONTEXT}${contextMsg}\n\nSos conciso y accionable. Respondes en español rioplatense.`,
-    messages: [
-      ...history,
-      { role: 'user', content: userMessage },
-    ],
-  })
-
-  return message.content[0].type === 'text' ? message.content[0].text : ''
-}

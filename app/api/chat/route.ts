@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server'
+import { requireAuth } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
@@ -63,6 +64,9 @@ Siempre respondés en español argentino. Sos directo, usás números concretos,
 {META_CONTEXT}`
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const { messages } = await req.json()
   const metaContext = await getMetaContext()
   const systemWithContext = SYSTEM_PROMPT.replace('{META_CONTEXT}', metaContext)

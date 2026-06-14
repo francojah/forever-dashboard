@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Snapshot, PeriodMetrics, TNSnapshot } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend } from 'recharts'
 
 const BREAKEVEN_CPA = 17500
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
@@ -17,9 +18,10 @@ const PERIOD_SHORT: Record<Period, string> = {
 }
 
 interface Props {
-  snapshot:     Snapshot | null
-  tnSnapshot:   TNSnapshot | null
-  prevSnapshot?: Snapshot | null
+  snapshot:             Snapshot | null
+  tnSnapshot:           TNSnapshot | null
+  prevSnapshot?:        Snapshot | null
+  historicalSnapshots?: { snapshot_date: string; summary: { total_spend_7d: number | null; blended_roas: number | null; total_purchases_7d: number | null } }[]
 }
 
 function fmtM(n: number | null | undefined): string {
@@ -76,7 +78,7 @@ function SectionLabel({ icon, title, sub, color }: { icon: React.ReactNode; titl
   )
 }
 
-export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: Props) {
+export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, historicalSnapshots = [] }: Props) {
   const [period, setPeriod]     = useState<Period>('last_7d')
   const [syncing, setSyncing]   = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
@@ -336,6 +338,45 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot }: 
           )}
         </div>
       </div>
+
+
+      {/* 3.5 TENDENCIA HISTÓRICA */}
+      {historicalSnapshots.length >= 3 && (
+        <div>
+          <SectionLabel title="Tendencia 30 días" sub="ROAS blend. y gasto diario — últimos 30 snapshots"
+            color="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
+            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart
+                data={historicalSnapshots.map(s => ({
+                  date: s.snapshot_date.slice(5),  // MM-DD
+                  roas: s.summary.blended_roas ?? null,
+                  gasto: s.summary.total_spend_7d ? Math.round(s.summary.total_spend_7d / 1000) : null,
+                  compras: s.summary.total_purchases_7d ?? null,
+                }))}
+                margin={{ top: 4, right: 24, left: -8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} />
+                <YAxis yAxisId="roas" domain={[0, 'auto']} tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} tickFormatter={v => v + 'x'} width={32} />
+                <YAxis yAxisId="gasto" orientation="right" tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} tickFormatter={v => '$' + v + 'K'} width={44} />
+                <RechartTooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid rgba(128,128,128,0.2)', background: 'var(--tooltip-bg, #fff)' }}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'ROAS') return [value?.toFixed(2) + 'x', 'ROAS']
+                    if (name === 'Gasto') return ['$' + value + 'K', 'Gasto 7d']
+                    return [value, name]
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+                <Line yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                <Line yAxisId="gasto" type="monotone" dataKey="gasto" name="Gasto" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* 4. HIGHLIGHTS */}
       <div>

@@ -48,8 +48,8 @@ export default function LoginPage() {
           />
           <div>
             <p className="text-zinc-300 text-sm leading-relaxed">
-              Panel de control de Meta Ads.<br/>
-              Datos en tiempo real, análisis y decisiones.
+              Performance &amp; Ecommerce Intelligence.<br/>
+              Meta Ads · Tiendanube · IA · en tiempo real.
             </p>
           </div>
           <div className="w-8 h-px bg-zinc-600" />
