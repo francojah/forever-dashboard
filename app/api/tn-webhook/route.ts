@@ -74,17 +74,19 @@ export async function POST(req: NextRequest) {
     const revenue     = parseFloat(order.total || '0')
     const today       = new Date().toISOString().split('T')[0]
 
-    // Log webhook event to Supabase for visibility
-    await supabase.from('tn_webhook_events').upsert({
-      order_id:    order.id,
-      event_type:  event,
-      revenue,
-      status:      order.payment_status,
-      created_at:  new Date().toISOString(),
-      payload:     body,
-    }, { onConflict: 'order_id,event_type', ignoreDuplicates: true }).catch(() => {
-      // Table may not exist yet — non-critical
-    })
+    // Log webhook event to Supabase for visibility (non-critical — table may not exist yet)
+    try {
+      await supabase.from('tn_webhook_events').upsert({
+        order_id:    order.id,
+        event_type:  event,
+        revenue,
+        status:      order.payment_status,
+        created_at:  new Date().toISOString(),
+        payload:     body,
+      }, { onConflict: 'order_id,event_type', ignoreDuplicates: true })
+    } catch {
+      // silently ignore — table may not exist yet
+    }
 
     // Trigger a lightweight TN sync to update today's snapshot
     // Fire-and-forget to keep webhook response fast
