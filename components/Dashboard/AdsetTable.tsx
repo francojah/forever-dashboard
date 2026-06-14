@@ -226,8 +226,18 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
               </tr>
             </thead>
             <tbody>
-              {ads.map(ad => (
-                <tr key={ad.id} className="border-t border-gray-100 dark:border-zinc-700/50 hover:bg-white/50 dark:hover:bg-zinc-800/30">
+              {ads.map(ad => {
+                const adPaused  = ad.status === 'PAUSED'
+                const adRoas    = ad.roas
+                const adCpa     = ad.cost_per_result
+                const adSpend   = ad.spend || 0
+                const adTint    =
+                  adPaused                                          ? 'opacity-55'
+                  : (adRoas && adRoas >= 5)                         ? 'bg-emerald-50/40 dark:bg-emerald-950/15'
+                  : (adCpa && adCpa > breakeven && adSpend > 2000)  ? 'bg-red-50/40 dark:bg-red-950/10'
+                  : ''
+                return (
+                <tr key={ad.id} className={`border-t border-gray-100 dark:border-zinc-700/50 hover:bg-white/50 dark:hover:bg-zinc-800/30 ${adTint}`}>
                   <td className="pl-10 pr-3 py-2">
                     <div className="flex items-center gap-1.5">
                       {ad.status === 'PAUSED' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
@@ -259,7 +269,8 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
                   <td className="px-3 py-2 text-right"><VideoMetric value={ad.view_rate} label="View" greenThreshold={25} amberThreshold={12} /></td>
                   <td className="px-3 py-2"><AdActionButtons ad={ad} onDone={onAction} /></td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </td>
@@ -402,15 +413,33 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                   .sort((a, b) => (b.spend || 0) - (a.spend || 0))
                 const isExpanded = expandedIds.has(adset.id)
 
+                // Row tint based on performance
+                const isPaused  = adset.status === 'PAUSED'
+                const cpa       = adset.cost_per_result
+                const roas      = adset.roas
+                const spend     = adset.spend || 0
+                const rowTint   =
+                  isPaused                                      ? 'opacity-60'
+                  : (roas && roas >= 5)                         ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                  : (cpa && cpa > breakeven && spend > 3000)    ? 'bg-red-50/50 dark:bg-red-950/15'
+                  : (cpa && cpa > breakeven * 1.3 && spend > 1500) ? 'bg-amber-50/40 dark:bg-amber-950/10'
+                  : ''
+
                 return (
                   <React.Fragment key={adset.id}>
                     <tr
                       onClick={() => toggleExpand(adset.id)}
-                      className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer"
+                      className={`border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer ${rowTint}`}
                     >
                       <td className="px-5 py-3 pl-10">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400 dark:text-zinc-500"><Chevron open={isExpanded} /></span>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            isPaused ? 'bg-zinc-400' :
+                            (roas && roas >= 5) ? 'bg-emerald-400' :
+                            (cpa && cpa > breakeven) ? 'bg-red-400' :
+                            'bg-blue-400'
+                          }`} />
                           <div>
                             <p className="font-semibold text-gray-900 dark:text-white leading-tight">{adset.name}</p>
                           </div>

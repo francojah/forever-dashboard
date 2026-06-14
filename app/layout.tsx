@@ -6,8 +6,8 @@ import { ThemeProvider } from '@/lib/theme-context'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Forever Ads — Panel de Control',
-  description: 'Dashboard de Meta Ads para FOREVER BASICS',
+  title: 'Forever Intelligence',
+  description: 'Performance & Ecommerce Intelligence — Meta Ads · Tiendanube · IA',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" suppressHydrationWarning>
       <head>
         {/* Previene flash de pantalla blanca al cargar en dark mode */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('forever-theme');if(t==='dark'){document.documentElement.classList.add('dark')}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('forever-theme');if(!t||t==='dark'){document.documentElement.classList.add('dark')}})();` }} />
       </head>
       <body className={`${inter.className} antialiased bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100`}>
         <ThemeProvider>

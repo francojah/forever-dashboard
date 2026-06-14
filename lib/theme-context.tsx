@@ -5,15 +5,19 @@ import { createContext, useContext, useEffect, useState } from 'react'
 type Theme = 'light' | 'dark'
 interface ThemeCtx { theme: Theme; toggle: () => void }
 
-const ThemeContext = createContext<ThemeCtx>({ theme: 'light', toggle: () => {} })
+const ThemeContext = createContext<ThemeCtx>({ theme: 'dark', toggle: () => {} })
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light')
+  const [theme, setTheme] = useState<Theme>('dark')
 
   useEffect(() => {
-    const stored = (localStorage.getItem('forever-theme') as Theme) || 'light'
+    const stored = (localStorage.getItem('forever-theme') as Theme) || 'dark'
     setTheme(stored)
-    if (stored === 'dark') document.documentElement.classList.add('dark')
+    if (stored === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
   }, [])
 
   function toggle() {

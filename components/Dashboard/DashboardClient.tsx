@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Snapshot, PeriodMetrics, TNSnapshot } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend } from 'recharts'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ReferenceLine } from 'recharts'
 
 const BREAKEVEN_CPA = 17500
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
@@ -59,6 +59,30 @@ function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, to
         {delta != null && (
           <span className={`text-xs font-semibold ${pctColor}`}>
             {delta > 0 ? '+' : ''}{delta}%{Math.abs(delta) >= 2 ? (delta > 0 ? ' ↑' : ' ↓') : ''}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function HeroKpi({ label, value, sub, status = 'neutral', delta, invertDelta, accent }: {
+  label: string; value: string; sub?: string
+  status?: 'ok' | 'warn' | 'bad' | 'neutral'
+  delta?: number | null; invertDelta?: boolean; accent: string
+}) {
+  const valueColor = { ok: 'text-emerald-400', warn: 'text-amber-400', bad: 'text-red-400', neutral: 'text-white' }[status]
+  const pctColor = delta == null ? '' : Math.abs(delta) < 2 ? 'text-zinc-500' : (invertDelta ? delta < 0 : delta > 0) ? 'text-emerald-400' : 'text-red-400'
+  return (
+    <div className="flex-1 min-w-0 bg-zinc-900 dark:bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-4">
+      <div className={`w-5 h-0.5 rounded-full mb-3 ${accent}`} />
+      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
+      <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
+      <div className="flex items-center gap-2 mt-2 min-h-[16px]">
+        {sub && <p className="text-[11px] text-zinc-600">{sub}</p>}
+        {delta != null && (
+          <span className={`text-[11px] font-semibold ${pctColor}`}>
+            {delta > 0 ? '+' : ''}{delta}%
           </span>
         )}
       </div>
@@ -122,7 +146,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
         <div className="text-5xl mb-4">\U0001f4ed</div>
         <h2 className="text-lg font-semibold text-gray-800 dark:text-zinc-200 mb-2">Sin datos todavia</h2>
-        <p className="text-sm text-gray-500 dark:text-zinc-500 max-w-xs mb-6">El primer sync se ejecuta automáticamente a las 7am.</p>
+        <p className="text-sm text-gray-500 dark:text-zinc-500 max-w-xs mb-6">El primer sync se ejecuta automaticamente a las 7am.</p>
         <button onClick={triggerSync} disabled={syncing}
           className="flex items-center gap-2 px-5 py-2.5 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-60 text-black font-semibold text-sm rounded-xl shadow-lg transition-all">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={'w-4 h-4 ' + (syncing ? 'animate-spin' : '')}>
@@ -201,7 +225,6 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const metaPct       = tnRevenue && tnRevenue > 0 ? Math.round((metaAttr / tnRevenue) * 100) : 0
   const organicPct    = Math.max(0, 100 - metaPct)
 
-  const topProduct  = tnData?.top_products?.[0] ?? null
   const topProvince = tnData?.top_provinces?.[0] ?? null
 
   const syncTime   = lastSynced ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -222,15 +245,19 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Dashboard</h1>
-          <p className="text-sm mt-0.5 text-gray-400 dark:text-zinc-500">
-            Sync {snapshot.snapshot_date} — {syncTime}
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Dashboard</h1>
+            <span className={`w-2 h-2 rounded-full ${roasStatus === 'ok' ? 'bg-emerald-400' : roasStatus === 'warn' ? 'bg-amber-400' : roasStatus === 'bad' ? 'bg-red-400' : 'bg-zinc-600'}`} title={`ROAS: ${roasStatus}`} />
+          </div>
+          <p className="text-xs mt-0.5 text-gray-400 dark:text-zinc-500 flex items-center gap-1.5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Actualizado {syncTime} &middot; {snapshot.snapshot_date}
             {syncError && (
               syncError.toLowerCase().includes('token') || syncError.toLowerCase().includes('access') || syncError.toLowerCase().includes('reconect')
-                ? <span className="ml-2 text-red-500">⚠ Token TN inválido — <a href="/settings" className="underline hover:text-red-400">reconectá en Configuración</a></span>
-                : <span className="ml-2 text-red-500">Error: {syncError}</span>
+                ? <span className="text-red-500 ml-1">&#9888; <a href="/settings" className="underline hover:text-red-400">Reconectar TN</a></span>
+                : <span className="text-red-500 ml-1">Error: {syncError}</span>
             )}
-            {!hasPeriodData && period !== 'custom' && <span className="ml-2 text-amber-500"> · sin datos para {PERIOD_LABELS[period]}</span>}
+            {!hasPeriodData && period !== 'custom' && <span className="text-amber-500 ml-1"> &middot; sin datos para {PERIOD_LABELS[period]}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -248,6 +275,15 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             ))}
           </div>
         </div>
+      </div>
+
+      {/* HERO ROW - 5 KPIs clave */}
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        <HeroKpi label="ROAS Real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="TN ÷ gasto Meta" status={roasStatus} accent="bg-emerald-400" />
+        <HeroKpi label={`Ventas TN ${pLabel}`} value={fmtM(tnRevenue)} sub="todas las fuentes" accent="bg-violet-400" />
+        <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400" delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} />
+        <HeroKpi label="CPA blended" value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-amber-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} />
+        <HeroKpi label="Compras pixel" value={String(summary.total_purchases_7d || 0)} sub={summary.total_purchases_7d && periodDays > 1 ? `~${(summary.total_purchases_7d / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(summary.total_purchases_7d, prevSummary?.total_purchases_7d)} />
       </div>
 
       {/* Custom date picker */}
@@ -270,7 +306,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <p className="text-xs text-amber-700 dark:text-amber-400">
             {period === 'today'
               ? <><strong>ROAS real hoy: {realRoas?.toFixed(2) ?? '—'}x</strong> (ventas TN / gasto) vs <strong>{summary.blended_roas?.toFixed(2) ?? '—'}x</strong> reportado por Meta.</>
-              : 'ROAS de ayer puede incluir conversiones de días anteriores (ventana de atribución Meta).'}
+              : 'ROAS de ayer puede incluir conversiones de dias anteriores (ventana de atribucion Meta).'}
           </p>
         </div>
       )}
@@ -280,12 +316,30 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         <SectionLabel title={`Tiendanube · ${PERIOD_LABELS[period]}`} sub="Ventas reales de la tienda — todas las fuentes de tráfico"
           color="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>} />
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard label="Ventas totales" value={fmtM(tnRevenue)} sub={tnRevenue && periodDays > 1 ? fmtM(tnRevenue / periodDays) + '/día' : undefined} accent="bg-violet-400" tooltip="Total facturado en Tiendanube. Incluye todas las fuentes de tráfico." />
           <KpiCard label="Órdenes" value={tnData?.total_orders != null ? String(tnData.total_orders) : '—'} sub={tnData?.total_orders && periodDays > 1 ? `~${(tnData.total_orders / periodDays).toFixed(1)}/día` : undefined} accent="bg-violet-400" tooltip="Cantidad de órdenes pagadas en el período." />
           <KpiCard label="Ticket promedio" value={fmtM(tnData?.aov)} sub="por orden" accent="bg-violet-400" tooltip="Valor promedio por orden (AOV). Subir el AOV mejora el ROAS sin aumentar el gasto." />
           <KpiCard label="Clientes únicos" value={tnData?.unique_customers != null ? String(tnData.unique_customers) : '—'} sub="compradores" accent="bg-violet-400" tooltip="Clientes con al menos una compra en el período." />
           <KpiCard label="Unidades vendidas" value={tnData?.total_units_sold != null ? String(tnData.total_units_sold) : '—'} sub="artículos" accent="bg-violet-400" tooltip="Total de artículos vendidos sumando cantidades de todas las órdenes." />
+          <KpiCard
+            label="Órd./cliente"
+            value={
+              tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
+                ? (tnData.total_orders / tnData.unique_customers).toFixed(2)
+                : '—'
+            }
+            sub="ratio recompra"
+            accent="bg-violet-400"
+            status={
+              tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
+                ? (tnData.total_orders / tnData.unique_customers) >= 1.2 ? 'ok'
+                : (tnData.total_orders / tnData.unique_customers) >= 1.05 ? 'warn'
+                : 'neutral'
+                : 'neutral'
+            }
+            tooltip="Órdenes totales ÷ Clientes únicos. >1.2 = buena tasa de recompra. Ayuda a estimar LTV."
+          />
         </div>
       </div>
 
@@ -339,40 +393,51 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       </div>
 
-
-      {/* 3.5 TENDENCIA HISTÓRICA */}
+      {/* 3.5 TENDENCIA HISTORICA */}
       {historicalSnapshots.length >= 3 && (
         <div>
-          <SectionLabel title="Tendencia 30 días" sub="ROAS blend. y gasto diario — últimos 30 snapshots"
+          <SectionLabel title="Tendencia 30 días" sub="ROAS real y gasto semanal — últimos 30 snapshots"
             color="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
             icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart
                 data={historicalSnapshots.map(s => ({
-                  date: s.snapshot_date.slice(5),  // MM-DD
+                  date: s.snapshot_date.slice(5),
                   roas: s.summary.blended_roas ?? null,
                   gasto: s.summary.total_spend_7d ? Math.round(s.summary.total_spend_7d / 1000) : null,
-                  compras: s.summary.total_purchases_7d ?? null,
                 }))}
-                margin={{ top: 4, right: 24, left: -8, bottom: 0 }}
+                margin={{ top: 8, right: 28, left: -8, bottom: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.12)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} />
-                <YAxis yAxisId="roas" domain={[0, 'auto']} tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} tickFormatter={v => v + 'x'} width={32} />
-                <YAxis yAxisId="gasto" orientation="right" tick={{ fontSize: 10, fill: 'currentColor' }} className="text-gray-400 dark:text-zinc-500" tickLine={false} axisLine={false} tickFormatter={v => '$' + v + 'K'} width={44} />
+                <defs>
+                  <linearGradient id="roasGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="gastoGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.18}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis yAxisId="roas" domain={[0, 'auto']} tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} tickFormatter={v => v + 'x'} width={32} />
+                <YAxis yAxisId="gasto" orientation="right" tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} tickFormatter={v => '$' + v + 'K'} width={44} />
+                <ReferenceLine yAxisId="roas" y={2.86} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5}
+                  label={{ value: 'mín', position: 'right', fontSize: 9, fill: '#f59e0b', offset: 4 }} />
                 <RechartTooltip
-                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid rgba(128,128,128,0.2)', background: 'var(--tooltip-bg, #fff)' }}
+                  contentStyle={{ fontSize: 11, borderRadius: 10, border: '1px solid rgba(100,100,100,0.2)', background: '#18181b', color: '#e4e4e7', padding: '8px 12px' }}
+                  labelStyle={{ color: '#a1a1aa', marginBottom: 4 }}
                   formatter={(value: number, name: string) => {
-                    if (name === 'ROAS') return [value?.toFixed(2) + 'x', 'ROAS']
-                    if (name === 'Gasto') return ['$' + value + 'K', 'Gasto 7d']
+                    if (name === 'ROAS') return [value?.toFixed(2) + 'x', 'ROAS blend.']
+                    if (name === 'Gasto 7d') return ['$' + value + 'K ARS', 'Gasto 7d']
                     return [value, name]
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
-                <Line yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                <Line yAxisId="gasto" type="monotone" dataKey="gasto" name="Gasto" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-              </LineChart>
+                <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8, color: '#71717a' }} />
+                <Area yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke="#10b981" strokeWidth={2} fill="url(#roasGrad)" dot={false} activeDot={{ r: 4, fill: '#10b981' }} connectNulls />
+                <Area yAxisId="gasto" type="monotone" dataKey="gasto" name="Gasto 7d" stroke="#6366f1" strokeWidth={2} fill="url(#gastoGrad)" dot={false} activeDot={{ r: 4, fill: '#6366f1' }} connectNulls />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -384,7 +449,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           color="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>} />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Mejor Creativo Conversión */}
+          {/* Mejor Creativo Conversion */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -400,12 +465,12 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <span className="text-xs text-gray-400">ROAS</span>
                   <span className="text-xs text-gray-400 ml-auto">{fmtM(bestConvAd.spend)}</span>
                 </div>
-                {bestConvAd.results != null && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">{bestConvAd.results} compras · CPA {fmtM(bestConvAd.cost_per_result)}</p>}
+                {bestConvAd.results != null && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">{bestConvAd.results} compras &middot; CPA {fmtM(bestConvAd.cost_per_result)}</p>}
               </>
             ) : <p className="text-xs text-gray-400 dark:text-zinc-600">Sin creativos con ROAS calculado</p>}
           </div>
 
-          {/* Mejor Creativo Tráfico */}
+          {/* Mejor Creativo Trafico */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
@@ -421,12 +486,12 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <span className="text-xs text-gray-400">CPC</span>
                   <span className="text-xs text-gray-400 ml-auto">{bestTrafAd.clicks?.toLocaleString('es-AR')} clicks</span>
                 </div>
-                {bestTrafAd.ctr != null && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">CTR {bestTrafAd.ctr.toFixed(2)}% · {fmtM(bestTrafAd.spend)} gasto</p>}
+                {bestTrafAd.ctr != null && <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">CTR {bestTrafAd.ctr.toFixed(2)}% &middot; {fmtM(bestTrafAd.spend)} gasto</p>}
               </>
             ) : <p className="text-xs text-gray-400 dark:text-zinc-600">Sin creativos de tráfico con datos</p>}
           </div>
 
-          {/* Ventas Meta vs Orgánico */}
+          {/* Ventas Meta vs Organico */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -439,7 +504,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-indigo-500 inline-block"/>Meta</span>
-                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{fmtM(metaAttr)} · {metaPct}%</span>
+                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{fmtM(metaAttr)} &middot; {metaPct}%</span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-2">
                     <div className="h-2 rounded-full bg-indigo-500 transition-all" style={{ width: `${Math.min(metaPct,100)}%` }} />
@@ -448,7 +513,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block"/>Orgánico</span>
-                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{fmtM(organicRev)} · {organicPct}%</span>
+                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{fmtM(organicRev)} &middot; {organicPct}%</span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-2">
                     <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(organicPct,100)}%` }} />
@@ -486,19 +551,36 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           </div>
         </div>
 
-        {/* Top producto */}
-        {topProduct && (
-          <div className="mt-3 bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm flex items-center gap-4">
-            <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-violet-600 dark:text-violet-400" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        {/* Top 5 productos */}
+        {tnData?.top_products && tnData.top_products.length > 0 && (
+          <div className="mt-3 bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
+              <div className="w-6 h-6 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+              </div>
+              <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Top productos &middot; {PERIOD_LABELS[period]}</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-0.5">Producto más vendido · {PERIOD_LABELS[period]}</p>
-              <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200 truncate">{topProduct.name}</p>
-            </div>
-            <div className="flex items-center gap-6 shrink-0">
-              <div className="text-center"><p className="text-lg font-bold text-violet-600 dark:text-violet-400">{fmtM(topProduct.revenue)}</p><p className="text-[10px] text-gray-400">facturado</p></div>
-              <div className="text-center"><p className="text-lg font-bold text-gray-700 dark:text-zinc-300">{topProduct.quantity}</p><p className="text-[10px] text-gray-400">unidades</p></div>
+            <div className="divide-y divide-gray-50 dark:divide-zinc-800/60">
+              {tnData.top_products.slice(0, 5).map((p: { name: string; quantity: number; revenue: number }, i: number) => {
+                const maxRev = tnData.top_products[0].revenue || 1
+                const barPct = Math.round((p.revenue / maxRev) * 100)
+                const metaAdMatch = adsets.find((a: { name: string }) => a.name.toLowerCase().split(' ').some((w: string) => w.length > 4 && p.name.toLowerCase().includes(w)))
+                return (
+                  <div key={p.name} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="text-[10px] text-gray-400 dark:text-zinc-600 w-3 font-mono shrink-0">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 dark:text-zinc-200 truncate">{p.name}</p>
+                      <div className="mt-1 h-1 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden w-full">
+                        <div className="h-full bg-violet-400 rounded-full" style={{ width: `${barPct}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0 text-right">
+                      <div><p className="text-xs font-bold text-gray-700 dark:text-zinc-200">{fmtM(p.revenue)}</p><p className="text-[10px] text-gray-400">{p.quantity} uds</p></div>
+                      {metaAdMatch && <div className="hidden sm:block text-[10px] text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full max-w-[80px] truncate" title={(metaAdMatch as { name: string }).name}>&harr; Meta</div>}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -524,9 +606,110 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       )}
 
+      {/* 5. FUNNEL + RECONCILIACION */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        {/* Funnel de conversion Meta -> TN */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Funnel Meta → Tiendanube</p>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500">{PERIOD_LABELS[period]}</p>
+            </div>
+          </div>
+          {(() => {
+            const totalClicks = [...convAdsets, ...trafAdsets].reduce((s, a) => s + (a.clicks || 0), 0)
+            const metaPurchases = summary.total_purchases_7d || 0
+            const tnOrders = tnData?.total_orders || 0
+            const ctr2pur = totalClicks > 0 && metaPurchases > 0 ? (metaPurchases / totalClicks * 100).toFixed(2) : null
+            const attrRate = tnOrders > 0 && metaPurchases > 0 ? Math.round(metaPurchases / tnOrders * 100) : null
+            const steps = [
+              { label: 'Clicks Meta', value: totalClicks, color: 'bg-blue-400', pct: 100 },
+              { label: 'Compras pixel', value: metaPurchases, color: 'bg-indigo-400', pct: totalClicks > 0 ? Math.round(metaPurchases / totalClicks * 100) : 0 },
+              { label: 'Órdenes TN', value: tnOrders, color: 'bg-violet-400', pct: totalClicks > 0 ? Math.round(tnOrders / totalClicks * 100) : 0 },
+            ]
+            return (
+              <div className="space-y-3">
+                {steps.map((step, i) => (
+                  <div key={step.label} className="flex items-center gap-3">
+                    <div className="w-24 shrink-0">
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">{step.label}</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-zinc-200">{step.value.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${step.color} transition-all`} style={{ width: `${Math.max(step.pct, 2)}%` }} />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-zinc-500 w-10 text-right">{i === 0 ? '100%' : step.pct + '%'}</p>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-4 text-xs text-gray-400 dark:text-zinc-500">
+                  {ctr2pur && <span>Click→compra: <strong className="text-gray-600 dark:text-zinc-300">{ctr2pur}%</strong></span>}
+                  {attrRate && <span>Atribución pixel: <strong className={attrRate >= 60 ? 'text-emerald-500' : attrRate >= 40 ? 'text-amber-500' : 'text-red-500'}>{attrRate}%</strong></span>}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* Reconciliacion pixel vs TN */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-amber-600 dark:text-amber-400" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Reconciliación &middot; Meta vs TN</p>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500">Pixel reportado vs ventas reales</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                <p className="text-xs font-medium text-gray-700 dark:text-zinc-300">Meta pixel (atribuido)</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{summary.total_purchases_7d || 0} compras</p>
+                <p className="text-[10px] text-gray-400">ROAS {summary.blended_roas?.toFixed(2) ?? '—'}x</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                <p className="text-xs font-medium text-gray-700 dark:text-zinc-300">Tiendanube (real)</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-violet-600 dark:text-violet-400">{tnData?.total_orders ?? '—'} órdenes</p>
+                <p className="text-[10px] text-gray-400">ROAS {realRoas?.toFixed(2) ?? '—'}x</p>
+              </div>
+            </div>
+            {tnData?.total_orders != null && summary.total_purchases_7d != null && (
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700">
+                <p className="text-xs text-gray-500 dark:text-zinc-400">Gap de atribución</p>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-gray-600 dark:text-zinc-300">
+                    {tnData.total_orders - (summary.total_purchases_7d || 0)} órdenes no capturadas
+                  </p>
+                  <p className="text-[10px] text-gray-400">
+                    {tnData.total_orders > 0
+                      ? Math.round(((tnData.total_orders - (summary.total_purchases_7d || 0)) / tnData.total_orders) * 100)
+                      : 0}% sin atribución Meta
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* CTA */}
       <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
-        <p className="text-xs text-gray-400 dark:text-zinc-600">Para gestionar ad sets, creativos y presupuesto entrate a <strong className="text-gray-600 dark:text-zinc-400">Campañas</strong>.</p>
+        <p className="text-xs text-gray-400 dark:text-zinc-600">Para gestionar ad sets, creativos y presupuesto entrá a <strong className="text-gray-600 dark:text-zinc-400">Campañas</strong>.</p>
         <a href="/campanias" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Ver Campañas →</a>
       </div>
 
