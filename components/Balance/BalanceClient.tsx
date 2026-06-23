@@ -202,8 +202,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
     tn_revenue: tnSnapshot?.summary_30d?.total_revenue   ?? 0,
     tn_orders:  tnSnapshot?.summary_30d?.total_orders    ?? 0,
     tn_units:   tnSnapshot?.summary_30d?.total_units_sold ?? 0,
-    meta_spend: metaSnapshot?.periods?.last_30d?.summary?.total_spend
-             ?? metaSnapshot?.summary?.total_spend
+    meta_spend: metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d
+             ?? metaSnapshot?.summary?.total_spend_7d
              ?? 0,
     source: 'live',
   }), [tnSnapshot, metaSnapshot])
