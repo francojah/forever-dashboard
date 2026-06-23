@@ -434,24 +434,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             {tn?.payment_methods && Object.keys(tn.payment_methods).length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de pago</h2>
-                <div className="space-y-2.5">
-                  {Object.entries(tn.payment_methods as Record<string, number>)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([method, count]) => {
-                      const pct = tn.total_orders > 0 ? (count / tn.total_orders) * 100 : 0
-                      return (
-                        <div key={method}>
-                          <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
-                            <span className="capitalize">{method.replace(/_/g, ' ')}</span>
-                            <span className="font-medium">{count} · {pct.toFixed(0)}%</span>
-                          </div>
-                          <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full bg-violet-400" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
+                <DonutChart
+                  items={Object.entries(tn.payment_methods as Record<string, number>).sort((a, b) => b[1] - a[1])}
+                  total={tn.total_orders}
+                  hue="violet"
+                />
               </div>
             )}
 
@@ -459,24 +446,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             {tn?.shipping_methods && Object.keys(tn.shipping_methods).length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de envío</h2>
-                <div className="space-y-2.5">
-                  {Object.entries(tn.shipping_methods as Record<string, number>)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([method, count]) => {
-                      const pct = tn.total_orders > 0 ? (count / tn.total_orders) * 100 : 0
-                      return (
-                        <div key={method}>
-                          <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
-                            <span className="capitalize">{method.replace(/_/g, ' ')}</span>
-                            <span className="font-medium">{count} · {pct.toFixed(0)}%</span>
-                          </div>
-                          <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full bg-sky-400" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
+                <DonutChart
+                  items={Object.entries(tn.shipping_methods as Record<string, number>).sort((a, b) => b[1] - a[1])}
+                  total={tn.total_orders}
+                  hue="sky"
+                />
               </div>
             )}
 
@@ -612,6 +586,95 @@ function MetricRow({ label, value, note, highlight }: {
       <p className={`text-base font-semibold shrink-0 ${colors[highlight]}`}>{value}</p>
     </div>
   )
+}
+
+function DonutChart({ items, total, hue }: {
+  items: [string, number][];
+  total: number;
+  hue: 'violet' | 'sky';
+}) {
+  const cx = 40, cy = 40, r = 28, sw = 11;
+
+  const palettes = {
+    violet: ['#7c3aed', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'],
+    sky:    ['#0284c7', '#38bdf8', '#7dd3fc', '#bae6fd', '#e0f2fe'],
+  };
+  const palette = palettes[hue];
+
+  function polarXY(angleDeg: number) {
+    const rad = (angleDeg - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  let offset = 0;
+  const topLabel = items[0]?.[0]?.replace(/_/g, ' ') ?? '';
+  const topPct   = total > 0 ? ((items[0]?.[1] ?? 0) / total) * 100 : 0;
+  const shortLabel = topLabel.length > 9 ? topLabel.slice(0, 8) + '…' : topLabel;
+
+  return (
+    <div>
+      <svg viewBox="0 0 80 80" className="w-full max-w-[120px] mx-auto block">
+        {/* Track ring */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          strokeWidth={sw} stroke="currentColor"
+          className="text-gray-100 dark:text-zinc-800" />
+
+        {/* Segments */}
+        {items.map(([name, count], i) => {
+          const frac = total > 0 ? count / total : 0;
+          const startDeg = offset * 360;
+          const endDeg   = (offset + frac) * 360;
+          offset += frac;
+          const diff = endDeg - startDeg;
+          if (diff <= 0) return null;
+          const color = palette[i % palette.length];
+          if (diff >= 359.9) {
+            return (
+              <circle key={name} cx={cx} cy={cy} r={r}
+                fill="none" stroke={color} strokeWidth={sw} />
+            );
+          }
+          const s = polarXY(startDeg);
+          const e = polarXY(endDeg);
+          const large = diff > 180 ? 1 : 0;
+          return (
+            <path key={name}
+              d={`M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r} 0 ${large} 1 ${e.x.toFixed(2)},${e.y.toFixed(2)}`}
+              fill="none" stroke={color} strokeWidth={sw} strokeLinecap="butt" />
+          );
+        })}
+
+        {/* Center labels */}
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="10" fontWeight="700"
+          className="fill-gray-800 dark:fill-zinc-200">
+          {topPct.toFixed(0)}%
+        </text>
+        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="5.5"
+          className="fill-gray-400 dark:fill-zinc-500 capitalize">
+          {shortLabel}
+        </text>
+      </svg>
+
+      <div className="space-y-1.5 mt-3">
+        {items.map(([name, count], i) => {
+          const pct = total > 0 ? (count / total) * 100 : 0;
+          return (
+            <div key={name} className="flex items-center justify-between text-xs gap-1">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-400 min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: palette[i % palette.length] }} />
+                <span className="truncate capitalize">{name.replace(/_/g, ' ')}</span>
+              </span>
+              <span className="font-semibold text-gray-700 dark:text-zinc-300 shrink-0">
+                {pct.toFixed(0)}%
+                <span className="font-normal text-gray-400 dark:text-zinc-600 ml-1">({count})</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function StatPill({ label, value }: { label: string; value: string }) {
