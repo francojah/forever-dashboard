@@ -8,7 +8,8 @@ import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ReferenceLine } from 'recharts'
 
 const BREAKEVEN_CPA = 17500
-const AUTO_REFRESH_SECS = 180 // 3 min auto-poll fallback
+const MARGIN        = 0.48
+const AUTO_REFRESH_SECS = 180
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
 
 type Period = 'today' | 'yesterday' | 'last_7d' | 'last_30d' | 'custom'
@@ -44,15 +45,19 @@ function fmtCountdown(secs: number): string {
   return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')
 }
 
-function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, tooltip, accent }: {
+function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, tooltip, accent, anomaly }: {
   label: string; value: string; sub?: string
   status?: 'ok' | 'warn' | 'bad' | 'neutral'
   delta?: number | null; invertDelta?: boolean; tooltip?: string; accent?: string
+  anomaly?: { label: string; color: string } | null
 }) {
   const valueColor = { ok: 'text-emerald-500 dark:text-emerald-400', warn: 'text-amber-500 dark:text-amber-400', bad: 'text-red-500 dark:text-red-400', neutral: 'text-gray-900 dark:text-white' }[status]
   const pctColor = delta == null ? '' : Math.abs(delta) < 2 ? 'text-gray-400' : (invertDelta ? delta < 0 : delta > 0) ? 'text-emerald-500' : 'text-red-500'
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm hover:shadow-md transition-shadow relative">
+      {anomaly && (
+        <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${anomaly.color}`}>{anomaly.label}</span>
+      )}
       {accent && <div className={`w-6 h-0.5 rounded-full mb-2.5 ${accent}`} />}
       <div className="flex items-center gap-1 mb-1.5">
         <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
@@ -111,33 +116,60 @@ function SectionLabel({ icon, title, sub, color }: { icon: React.ReactNode; titl
   )
 }
 
+// Sparkline mini chart
+function Sparkline({ data, color = '#10b981' }: { data: (number | null)[]; color?: string }) {
+  const valid = data.filter((v): v is number => v != null)
+  if (valid.length < 2) return null
+  const min = Math.min(...valid), max = Math.max(...valid)
+  const range = max - min || 1
+  const w = 60, h = 24
+  const pts = data
+    .map((v, i) => v == null ? null : [
+      (i / (data.length - 1)) * w,
+      h - ((v - min) / range) * (h - 4) - 2,
+    ])
+    .filter((p): p is [number, number] => p != null)
+  if (pts.length < 2) return null
+  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+  return (
+    <svg width={w} height={h} className="shrink-0 opacity-70">
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, historicalSnapshots = [] }: Props) {
-  const [period, setPeriod]     = useState<Period>('last_7d')
-  const [syncing, setSyncing]   = useState(false)
-  const [lastSynced, setLastSynced] = useState<string | null>(null)
-  const [syncError, setSyncError]   = useState<string | null>(null)
+  const [period, setPeriod]           = useState<Period>('last_7d')
+  const [syncing, setSyncing]         = useState(false)
+  const [lastSynced, setLastSynced]   = useState<string | null>(null)
+  const [syncError, setSyncError]     = useState<string | null>(null)
   const router = useRouter()
 
   // Live dashboard state
-  const [isLive, setIsLive]         = useState(false)
-  const [countdown, setCountdown]   = useState(AUTO_REFRESH_SECS)
-  const [showToast, setShowToast]   = useState(false)
-  const [notifEnabled, setNotifEnabled] = useState(false)
+  const [isLive, setIsLive]               = useState(false)
+  const [countdown, setCountdown]         = useState(AUTO_REFRESH_SECS)
+  const [showToast, setShowToast]         = useState(false)
+  const [notifEnabled, setNotifEnabled]   = useState(false)
 
-  // Intraday Meta data (period=today only)
-  const [todayMeta, setTodayMeta]   = useState<{ spend: number; purchases: number } | null>(null)
-  const [todayLoading, setTodayLoading] = useState(false)
+  // AI Summary state
+  const [aiSummary, setAiSummary]         = useState<string | null>(null)
+  const [aiLoading, setAiLoading]         = useState(false)
+  const [aiExpanded, setAiExpanded]       = useState(true)
+
+  // Intraday Meta data
+  const [todayMeta, setTodayMeta]         = useState<{ spend: number; purchases: number } | null>(null)
+  const [todayLoading, setTodayLoading]   = useState(false)
 
   // Custom period
   const today = new Date().toISOString().split('T')[0]
-  const [customFrom, setCustomFrom] = useState(today)
-  const [customTo, setCustomTo]     = useState(today)
-  const [customData, setCustomData] = useState<PeriodMetrics | null>(null)
+  const [customFrom, setCustomFrom]       = useState(today)
+  const [customTo, setCustomTo]           = useState(today)
+  const [customData, setCustomData]       = useState<PeriodMetrics | null>(null)
   const [customTnRevenue, setCustomTnRevenue] = useState<number | null>(null)
-  const [customLoading, setCustomLoading]     = useState(false)
-  const [customError, setCustomError]         = useState<string | null>(null)
+  const [customLoading, setCustomLoading] = useState(false)
+  const [customError, setCustomError]     = useState<string | null>(null)
 
-  // ── Auto-polling every 3 min (fallback) ──────────────────────────
+  // ── Auto-polling every 3 min ──────────────────────────────────────
   useEffect(() => {
     let secs = AUTO_REFRESH_SECS
     setCountdown(secs)
@@ -155,7 +187,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     return () => clearInterval(tick)
   }, [router])
 
-  // ── Supabase Realtime — auto-refresh on new snapshot ─────────────
+  // ── Supabase Realtime ─────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClientBrowser()
     const ch = supabase
@@ -170,7 +202,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     return () => { void supabase.removeChannel(ch) }
   }, [router])
 
-  // ── Intraday spend for "Hoy" period ──────────────────────────────
+  // ── Intraday spend for "Hoy" ──────────────────────────────────────
   useEffect(() => {
     if (period !== 'today') { setTodayMeta(null); return }
     setTodayLoading(true)
@@ -181,11 +213,27 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
       .finally(() => setTodayLoading(false))
   }, [period, snapshot?.id])
 
-  // ── Browser notifications permission ─────────────────────────────
+  // ── Browser notifications ─────────────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined') return
     const stored = localStorage.getItem('forever-notif')
     if (stored === 'granted' && Notification.permission === 'granted') setNotifEnabled(true)
+  }, [])
+
+  // ── Listen for CommandPalette events ─────────────────────────────
+  useEffect(() => {
+    const onPeriod = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail as Period
+      if (detail) setPeriod(detail)
+    }
+    const onSync = () => triggerSync()
+    window.addEventListener('forever:period', onPeriod)
+    window.addEventListener('forever:sync', onSync)
+    return () => {
+      window.removeEventListener('forever:period', onPeriod)
+      window.removeEventListener('forever:sync', onSync)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── triggerSync ───────────────────────────────────────────────────
@@ -222,7 +270,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     }
   }, [])
 
-  // ── Empty state ────────────────────────────────────────────────────
+  // ── Empty state ───────────────────────────────────────────────────
   if (!snapshot) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
@@ -240,7 +288,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     )
   }
 
-  // ── Period data ────────────────────────────────────────────────────
+  // ── Period data ───────────────────────────────────────────────────
   const periodData: PeriodMetrics =
     period === 'custom'  ? (customData ?? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary }) :
     period === 'last_7d' ? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary } :
@@ -256,15 +304,15 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     period === 'last_7d'   ? tnSnapshot?.summary_7d :
     period === 'last_30d'  ? tnSnapshot?.summary_30d : null
 
-  const tnRevenue = period === 'custom' ? customTnRevenue : (tnData?.total_revenue ?? null)
-  const metaSpend = period === 'today' && todayMeta ? todayMeta.spend : (summary.total_spend_7d || 0)
-  const realRoas  = tnRevenue != null && metaSpend > 0 ? parseFloat((tnRevenue / metaSpend).toFixed(2)) : null
+  const tnRevenue    = period === 'custom' ? customTnRevenue : (tnData?.total_revenue ?? null)
+  const metaSpend    = period === 'today' && todayMeta ? todayMeta.spend : (summary.total_spend_7d || 0)
+  const realRoas     = tnRevenue != null && metaSpend > 0 ? parseFloat((tnRevenue / metaSpend).toFixed(2)) : null
 
   const prevSummary = prevSnapshot
     ? (period === 'last_7d' ? prevSnapshot.summary : (prevSnapshot.periods?.[period as 'today' | 'yesterday' | 'last_30d']?.summary ?? null))
     : null
 
-  // ── Adset analysis ─────────────────────────────────────────────────
+  // ── Adset analysis ────────────────────────────────────────────────
   const activeAdsets = adsets.filter(a => (a.spend || 0) > 0)
   const isTraffic    = (a: typeof adsets[0]) => TRAFFIC_GOALS.includes(a.optimization_goal || '')
   const convAdsets   = activeAdsets.filter(a => !isTraffic(a))
@@ -275,9 +323,9 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     const clicks = group.reduce((s, a) => s + (a.clicks || 0), 0)
     return {
       impressions: impr,
-      ctr:  impr  > 0 ? (clicks / impr) * 100 : null,
+      ctr:  impr   > 0 ? (clicks / impr) * 100 : null,
       cpc:  clicks > 0 && spend > 0 ? spend / clicks : null,
-      freq: impr  > 0 && group.length > 0
+      freq: impr   > 0 && group.length > 0
         ? group.reduce((s, a) => s + ((a.frequency || 0) * (a.impressions || 0)), 0) / impr
         : null,
     }
@@ -287,8 +335,8 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const convQ = qMetrics(convAdsets, convSpend)
   const trafQ = qMetrics(trafAdsets, trafSpend)
 
-  const activeAds = ads.filter(a => (a.spend || 0) > 0)
-  const adsetType = new Map(activeAdsets.map(a => [a.id, isTraffic(a) ? 'traf' : 'conv']))
+  const activeAds   = ads.filter(a => (a.spend || 0) > 0)
+  const adsetType   = new Map(activeAdsets.map(a => [a.id, isTraffic(a) ? 'traf' : 'conv']))
 
   const bestConvAd = [...activeAds]
     .filter(a => adsetType.get(a.adset_id) === 'conv' && a.roas != null && a.roas > 0)
@@ -311,17 +359,104 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
 
   const topProvince = tnData?.top_provinces?.[0] ?? null
 
-  // ── Budget pacing (only meaningful for "today") ────────────────────
-  const dailyBudget    = summary.daily_budget_active || 0
-  const spendToday     = period === 'today' ? (todayMeta?.spend ?? (snapshot.periods?.today?.summary.total_spend_7d ?? 0)) : null
-  const hoursNow       = new Date().getHours() + new Date().getMinutes() / 60
-  const pacePct        = spendToday != null && dailyBudget > 0 ? (spendToday / dailyBudget) * 100 : null
-  const expectedPct    = (hoursNow / 24) * 100
-  const pacingRatio    = pacePct != null && expectedPct > 0 ? pacePct / expectedPct : null
-  const pacingLabel    = pacingRatio == null ? '' : pacingRatio > 1.2 ? 'Adelantado' : pacingRatio < 0.8 ? 'Atrasado' : 'En ritmo'
-  const pacingStatus   = (pacingRatio == null ? 'neutral' : pacingRatio > 1.2 ? 'bad' : pacingRatio < 0.8 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
+  // ── Budget pacing ─────────────────────────────────────────────────
+  const dailyBudget  = summary.daily_budget_active || 0
+  const spendToday   = period === 'today' ? (todayMeta?.spend ?? (snapshot.periods?.today?.summary.total_spend_7d ?? 0)) : null
+  const hoursNow     = new Date().getHours() + new Date().getMinutes() / 60
+  const pacePct      = spendToday != null && dailyBudget > 0 ? (spendToday / dailyBudget) * 100 : null
+  const expectedPct  = (hoursNow / 24) * 100
+  const pacingRatio  = pacePct != null && expectedPct > 0 ? pacePct / expectedPct : null
+  const pacingLabel  = pacingRatio == null ? '' : pacingRatio > 1.2 ? 'Adelantado' : pacingRatio < 0.8 ? 'Atrasado' : 'En ritmo'
+  const pacingStatus = (pacingRatio == null ? 'neutral' : pacingRatio > 1.2 ? 'bad' : pacingRatio < 0.8 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
 
-  // ── Status vars ────────────────────────────────────────────────────
+  // ── Anomaly detection (vs prevSnapshot) ──────────────────────────
+  function anomalyBadge(curr: number | null | undefined, prev: number | null | undefined, invertBad = false) {
+    const delta = calcDelta(curr, prev)
+    if (delta == null || Math.abs(delta) < 25) return null
+    const isBad = invertBad ? delta > 0 : delta < 0
+    return {
+      label: (delta > 0 ? '+' : '') + delta + '%',
+      color: isBad
+        ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400'
+        : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+    }
+  }
+  const spendAnomaly    = anomalyBadge(metaSpend,           prevSummary?.total_spend_7d)
+  const purchAnomaly    = anomalyBadge(metaPurchases,        prevSummary?.total_purchases_7d)
+  const cpaAnomaly      = anomalyBadge(summary.blended_cpa,  prevSummary?.blended_cpa, true)
+
+  // ── Financial insights ────────────────────────────────────────────
+  const periodDays       = period === 'last_30d' ? 30 : period === 'last_7d' ? 7 : 1
+  const grossProfit      = tnRevenue != null ? Math.round(tnRevenue * MARGIN - metaSpend) : null
+  const contributionPct  = tnRevenue != null && tnRevenue > 0 ? Math.round((grossProfit ?? 0) / tnRevenue * 100) : null
+
+  // Break-even tracker (purchases needed to reach breakeven daily spend)
+  const beTargetPurchases  = dailyBudget > 0 ? Math.ceil(dailyBudget / BREAKEVEN_CPA) : null
+  const beCurrentPurchases = period === 'today' ? (todayMeta?.purchases ?? 0) : null
+  const beRemaining        = beTargetPurchases != null && beCurrentPurchases != null
+    ? Math.max(0, beTargetPurchases - beCurrentPurchases)
+    : null
+  const bePct              = beTargetPurchases && beCurrentPurchases != null
+    ? Math.min(100, Math.round((beCurrentPurchases / beTargetPurchases) * 100))
+    : null
+
+  // Month projection (based on 7d average daily spend & ROAS)
+  const now               = new Date()
+  const daysInMonth       = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const dayOfMonth        = now.getDate()
+  const daysRemaining     = daysInMonth - dayOfMonth
+  const dailySpendAvg7d   = summary.total_spend_7d ? summary.total_spend_7d / 7 : 0
+  const projSpendMonth    = dailySpendAvg7d > 0 ? Math.round(metaSpend + dailySpendAvg7d * daysRemaining) : null
+  const projRevenueMonth  = projSpendMonth != null && realRoas != null ? Math.round(projSpendMonth * realRoas) : null
+  const projProfitMonth   = projRevenueMonth != null && projSpendMonth != null
+    ? Math.round(projRevenueMonth * MARGIN - projSpendMonth)
+    : null
+
+  // Fatigue predictor
+  const convFreq = convQ.freq ?? 0
+  const fatiguePct = Math.min(100, Math.round((convFreq / 5) * 100))
+  const fatigueStatus = convFreq >= 4 ? 'bad' : convFreq >= 2.5 ? 'warn' : 'ok'
+  const fatigueMsg = convFreq >= 4
+    ? 'Audiencia saturada — rotá creativos urgente'
+    : convFreq >= 2.5
+    ? 'Frecuencia en zona de alerta — monitorá CTR'
+    : 'Frecuencia saludable'
+
+  // YoY (using ytd vs same period last year — approximate from snapshot)
+  const tnYTD     = tnSnapshot?.summary_ytd
+  const ytdRev    = tnYTD?.total_revenue ?? null
+  const ytdOrders = tnYTD?.total_orders  ?? null
+
+  // Sparkline data from historical
+  const sparkRoas  = historicalSnapshots.slice(-7).map(s => s.summary.blended_roas)
+  const sparkSpend = historicalSnapshots.slice(-7).map(s => s.summary.total_spend_7d)
+
+  // ── AI Summary fetch ──────────────────────────────────────────────
+  const fetchAiSummary = useCallback(async () => {
+    if (!snapshot) return
+    setAiLoading(true)
+    try {
+      const topAdset = convAdsets.sort((a, b) => (b.roas || 0) - (a.roas || 0))[0]?.name ?? null
+      const res = await fetch('/api/ai-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spend: metaSpend, purchases: metaPurchases, roas: realRoas, cpa: summary.blended_cpa,
+          tnRevenue, topAdset,
+          alerts: summary.alerts?.slice(0, 3) ?? [],
+          period: PERIOD_SHORT[period],
+          breakeven: BREAKEVEN_CPA,
+          dailyBudget,
+          activeAdsets: summary.active_adsets ?? 0,
+        }),
+      })
+      const data = await res.json()
+      if (data.summary) setAiSummary(data.summary)
+    } catch { /* silent */ }
+    finally { setAiLoading(false) }
+  }, [snapshot, convAdsets, metaSpend, metaPurchases, realRoas, summary, tnRevenue, period, dailyBudget])
+
+  // ── Status vars ───────────────────────────────────────────────────
   const syncTime   = lastSynced ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   const pLabel     = PERIOD_SHORT[period] === 'custom' ? 'rango' : PERIOD_SHORT[period]
   const roasStatus = !realRoas ? 'neutral' : realRoas >= 5 ? 'ok' : realRoas >= 3 ? 'warn' : 'bad'
@@ -330,21 +465,18 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const freqTrafSt = (!trafQ.freq ? 'neutral' : trafQ.freq >= 4 ? 'bad' : trafQ.freq >= 2.5 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
   const ctrConvSt  = (!convQ.ctr ? 'neutral' : convQ.ctr >= 1.2 ? 'ok' : convQ.ctr >= 0.6 ? 'warn' : 'bad') as 'ok'|'warn'|'bad'|'neutral'
   const ctrTrafSt  = (!trafQ.ctr ? 'neutral' : trafQ.ctr >= 1.2 ? 'ok' : trafQ.ctr >= 0.6 ? 'warn' : 'bad') as 'ok'|'warn'|'bad'|'neutral'
-  const periodDays = period === 'last_30d' ? 30 : period === 'last_7d' ? 7 : 1
 
   const syncIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={'w-4 h-4 ' + (syncing ? 'animate-spin' : '')}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
 
-      {/* Top loading bar while syncing */}
       {syncing && (
         <div className="fixed top-0 left-0 right-0 h-0.5 z-50 overflow-hidden">
           <div className="h-full bg-emerald-400 animate-pulse w-full" />
         </div>
       )}
 
-      {/* Toast notification */}
       {showToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs px-4 py-2.5 rounded-full shadow-xl z-50 flex items-center gap-2 pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
@@ -357,8 +489,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Dashboard</h1>
-            <span className={`w-2 h-2 rounded-full ${roasStatus === 'ok' ? 'bg-emerald-400' : roasStatus === 'warn' ? 'bg-amber-400' : roasStatus === 'bad' ? 'bg-red-400' : 'bg-zinc-600'}`} title={`ROAS: ${roasStatus}`} />
-            {/* Live indicator */}
+            <span className={`w-2 h-2 rounded-full ${roasStatus === 'ok' ? 'bg-emerald-400' : roasStatus === 'warn' ? 'bg-amber-400' : roasStatus === 'bad' ? 'bg-red-400' : 'bg-zinc-600'}`} />
             <div className="flex items-center gap-1.5 ml-1">
               <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
               <span className={`text-[10px] font-semibold ${isLive ? 'text-emerald-500 dark:text-emerald-400' : 'text-zinc-600'}`}>{isLive ? 'EN VIVO' : 'offline'}</span>
@@ -378,7 +509,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {!notifEnabled && (
-            <button onClick={enableNotifications} title="Activar alertas push de frecuencia alta"
+            <button onClick={enableNotifications} title="Activar alertas push"
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-xl transition-all border border-zinc-200 dark:border-zinc-700">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
               Alertas
@@ -400,9 +531,58 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       </div>
 
+      {/* AI SUMMARY */}
+      <div className="bg-gradient-to-r from-indigo-950/60 to-violet-950/60 rounded-xl border border-indigo-800/40 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-indigo-400"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+            </div>
+            <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Resumen IA del día</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!aiSummary && !aiLoading && (
+              <button onClick={fetchAiSummary}
+                className="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-all">
+                Generar
+              </button>
+            )}
+            {aiSummary && (
+              <button onClick={() => setAiExpanded(e => !e)} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 transition-transform ${aiExpanded ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+            )}
+            {aiSummary && (
+              <button onClick={fetchAiSummary} title="Regenerar" className="text-indigo-500 hover:text-indigo-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+              </button>
+            )}
+          </div>
+        </div>
+        {aiLoading && (
+          <div className="px-4 pb-4 flex items-center gap-2">
+            <div className="flex gap-1">
+              {[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: i * 0.15 + 's' }} />)}
+            </div>
+            <span className="text-xs text-indigo-400">Claude está analizando tus datos...</span>
+          </div>
+        )}
+        {aiSummary && aiExpanded && (
+          <div className="px-4 pb-4">
+            <p className="text-sm text-indigo-100 leading-relaxed">{aiSummary}</p>
+          </div>
+        )}
+        {!aiSummary && !aiLoading && (
+          <div className="px-4 pb-3">
+            <p className="text-xs text-indigo-600">Presá &ldquo;Generar&rdquo; para que Claude analice el estado actual de tus campañas.</p>
+          </div>
+        )}
+      </div>
+
       {/* HERO ROW */}
       <div className="flex gap-3 overflow-x-auto pb-1">
-        <HeroKpi label="ROAS Real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="TN ÷ gasto Meta" status={roasStatus} accent="bg-emerald-400" />
+        <HeroKpi label="ROAS Real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="TN ÷ gasto Meta" status={roasStatus} accent="bg-emerald-400"
+          delta={calcDelta(realRoas, prevSnapshot?.summary?.blended_roas)} />
         <HeroKpi label={`Ventas TN ${pLabel}`} value={fmtM(tnRevenue)} sub="todas las fuentes" accent="bg-violet-400" />
         <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400"
           delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} loading={period === 'today' && todayLoading} />
@@ -429,11 +609,109 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-amber-500 shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
           <p className="text-xs text-amber-700 dark:text-amber-400">
             {period === 'today'
-              ? <><strong>ROAS real hoy: {realRoas?.toFixed(2) ?? '—'}x</strong> (ventas TN / gasto) vs <strong>{summary.blended_roas?.toFixed(2) ?? '—'}x</strong> reportado por Meta. Gasto actualizado en tiempo real.</>
+              ? <><strong>ROAS real hoy: {realRoas?.toFixed(2) ?? '—'}x</strong> (ventas TN / gasto) vs <strong>{summary.blended_roas?.toFixed(2) ?? '—'}x</strong> reportado por Meta.</>
               : 'ROAS de ayer puede incluir conversiones de dias anteriores (ventana de atribucion Meta).'}
           </p>
         </div>
       )}
+
+      {/* FINANCIAL INSIGHTS ROW */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+
+        {/* Ganancia Bruta */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="w-4 h-0.5 rounded-full bg-emerald-400" />
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ganancia Bruta</p>
+            <InfoTooltip text={`Ventas TN × margen ${Math.round(MARGIN*100)}% − gasto Meta. Margen bruto después de publicidad.`} />
+          </div>
+          <p className={`text-2xl font-bold tabular-nums ${grossProfit == null ? 'text-gray-300 dark:text-zinc-700' : grossProfit >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+            {grossProfit != null ? fmtM(grossProfit) : '—'}
+          </p>
+          <div className="mt-1.5 flex items-center gap-2">
+            {contributionPct != null && (
+              <span className="text-xs text-gray-400">{contributionPct}% de ventas</span>
+            )}
+            <Sparkline data={sparkSpend.map((s, i) => {
+              const r = historicalSnapshots[historicalSnapshots.length - 7 + i]?.summary?.blended_roas ?? null
+              return s && r ? Math.round(s * r * MARGIN - s) : null
+            })} color="#10b981" />
+          </div>
+        </div>
+
+        {/* Break-even del día */}
+        {period === 'today' && dailyBudget > 0 ? (
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="w-4 h-0.5 rounded-full bg-amber-400" />
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Break-even Hoy</p>
+              <InfoTooltip text={`Necesitás ${beTargetPurchases ?? '?'} compras para cubrir el gasto de hoy (budget/da ${fmtM(dailyBudget)} ÷ CPA bk ${fmtM(BREAKEVEN_CPA)}).`} />
+            </div>
+            <p className={`text-2xl font-bold tabular-nums ${bePct == null ? 'text-gray-300 dark:text-zinc-700' : bePct >= 100 ? 'text-emerald-500 dark:text-emerald-400' : bePct >= 60 ? 'text-amber-500 dark:text-amber-400' : 'text-red-500 dark:text-red-400'}`}>
+              {beCurrentPurchases ?? 0}/{beTargetPurchases ?? '?'}
+            </p>
+            <div className="mt-2">
+              <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${(bePct ?? 0) >= 100 ? 'bg-emerald-400' : (bePct ?? 0) >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                     style={{ width: `${Math.min(bePct ?? 0, 100)}%` }} />
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">
+                {beRemaining === 0 ? '✔ Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} compras`}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="w-4 h-0.5 rounded-full bg-amber-400" />
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">CPA vs Breakeven</p>
+            </div>
+            <p className={`text-2xl font-bold tabular-nums ${cpaStatus === 'ok' ? 'text-emerald-500 dark:text-emerald-400' : cpaStatus === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-red-500 dark:text-red-400'}`}>
+              {summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1.5">bk {fmtM(BREAKEVEN_CPA)} &middot; {summary.blended_cpa && summary.blended_cpa > 0 ? Math.round((summary.blended_cpa / BREAKEVEN_CPA) * 100) + '% del limíte' : ''}</p>
+          </div>
+        )}
+
+        {/* Proyección del mes */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="w-4 h-0.5 rounded-full bg-violet-400" />
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Proyección Mes</p>
+            <InfoTooltip text={`Basado en el promedio diario de los últimos 7 días y el ROAS real actual. Quedan ${daysRemaining} días del mes.`} />
+          </div>
+          <p className={`text-2xl font-bold tabular-nums ${projRevenueMonth == null ? 'text-gray-300 dark:text-zinc-700' : 'text-violet-500 dark:text-violet-400'}`}>
+            {projRevenueMonth != null ? fmtM(projRevenueMonth) : '—'}
+          </p>
+          <div className="mt-1.5 space-y-0.5">
+            {projSpendMonth != null && <p className="text-[10px] text-gray-400">Gasto proy.: {fmtM(projSpendMonth)}</p>}
+            {projProfitMonth != null && (
+              <p className={`text-[10px] font-semibold ${projProfitMonth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                Ganancia proy.: {fmtM(projProfitMonth)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Fatiga de creativos */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className={`w-4 h-0.5 rounded-full ${fatigueStatus === 'bad' ? 'bg-red-400' : fatigueStatus === 'warn' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fatiga Creativos</p>
+            <InfoTooltip text="Frecuencia promedio de conv. Mayor frecuencia = mayor probabilidad de saturation de audiencia y caída del CTR." />
+          </div>
+          <p className={`text-2xl font-bold tabular-nums ${fatigueStatus === 'bad' ? 'text-red-500 dark:text-red-400' : fatigueStatus === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
+            {convFreq > 0 ? convFreq.toFixed(1) + 'x' : '—'}
+          </p>
+          <div className="mt-2">
+            <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${fatigueStatus === 'bad' ? 'bg-red-400' : fatigueStatus === 'warn' ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                   style={{ width: `${fatiguePct}%` }} />
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">{fatigueMsg}</p>
+          </div>
+        </div>
+      </div>
 
       {/* 1. TIENDANUBE */}
       <div>
@@ -441,30 +719,35 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           color="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>} />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Ventas totales" value={fmtM(tnRevenue)} sub={tnRevenue && periodDays > 1 ? fmtM(tnRevenue / periodDays) + '/día' : undefined} accent="bg-violet-400" tooltip="Total facturado en Tiendanube. Incluye todas las fuentes de tráfico." />
-          <KpiCard label="Órdenes" value={tnData?.total_orders != null ? String(tnData.total_orders) : '—'} sub={tnData?.total_orders && periodDays > 1 ? `~${(tnData.total_orders / periodDays).toFixed(1)}/día` : undefined} accent="bg-violet-400" tooltip="Cantidad de órdenes pagadas en el período." />
-          <KpiCard label="Ticket promedio" value={fmtM(tnData?.aov)} sub="por orden" accent="bg-violet-400" tooltip="Valor promedio por orden (AOV). Subir el AOV mejora el ROAS sin aumentar el gasto." />
-          <KpiCard label="Clientes únicos" value={tnData?.unique_customers != null ? String(tnData.unique_customers) : '—'} sub="compradores" accent="bg-violet-400" tooltip="Clientes con al menos una compra en el período." />
-          <KpiCard label="Unidades vendidas" value={tnData?.total_units_sold != null ? String(tnData.total_units_sold) : '—'} sub="artículos" accent="bg-violet-400" tooltip="Total de artículos vendidos sumando cantidades de todas las órdenes." />
+          <KpiCard label="Ventas totales" value={fmtM(tnRevenue)} sub={tnRevenue && periodDays > 1 ? fmtM(tnRevenue / periodDays) + '/día' : undefined} accent="bg-violet-400" tooltip="Total facturado en Tiendanube." />
+          <KpiCard label="Órdenes" value={tnData?.total_orders != null ? String(tnData.total_orders) : '—'} sub={tnData?.total_orders && periodDays > 1 ? `~${(tnData.total_orders / periodDays).toFixed(1)}/día` : undefined} accent="bg-violet-400" tooltip="Órdenes pagadas en el período." />
+          <KpiCard label="Ticket promedio" value={fmtM(tnData?.aov)} sub="por orden" accent="bg-violet-400" tooltip="Valor promedio por orden (AOV)." />
+          <KpiCard label="Clientes únicos" value={tnData?.unique_customers != null ? String(tnData.unique_customers) : '—'} sub="compradores" accent="bg-violet-400" tooltip="Clientes con al menos una compra." />
+          <KpiCard label="Unidades vendidas" value={tnData?.total_units_sold != null ? String(tnData.total_units_sold) : '—'} sub="artículos" accent="bg-violet-400" tooltip="Total de artículos vendidos." />
           <KpiCard
             label="Órd./cliente"
-            value={
-              tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
-                ? (tnData.total_orders / tnData.unique_customers).toFixed(2)
-                : '—'
-            }
+            value={tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
+              ? (tnData.total_orders / tnData.unique_customers).toFixed(2) : '—'}
             sub="ratio recompra"
             accent="bg-violet-400"
-            status={
-              tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
-                ? (tnData.total_orders / tnData.unique_customers) >= 1.2 ? 'ok'
-                : (tnData.total_orders / tnData.unique_customers) >= 1.05 ? 'warn'
-                : 'neutral'
-                : 'neutral'
-            }
-            tooltip="Órdenes totales ÷ Clientes únicos. >1.2 = buena tasa de recompra."
+            status={tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
+              ? (tnData.total_orders / tnData.unique_customers) >= 1.2 ? 'ok' : (tnData.total_orders / tnData.unique_customers) >= 1.05 ? 'warn' : 'neutral'
+              : 'neutral'}
+            tooltip="Órdenes ÷ Clientes. >1.2 = buena recompra."
           />
         </div>
+        {/* YTD Summary */}
+        {ytdRev != null && (
+          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 rounded-xl px-4 py-2.5 border border-gray-100 dark:border-zinc-800">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-violet-400 shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span className="font-semibold text-gray-600 dark:text-zinc-400">Año en curso:</span>
+            <span>Ventas YTD: <strong className="text-violet-500">{fmtM(ytdRev)}</strong></span>
+            {ytdOrders != null && <span>Órdenes: <strong className="text-violet-500">{ytdOrders}</strong></span>}
+            {ytdRev != null && ytdOrders != null && ytdOrders > 0 && (
+              <span>AOV: <strong className="text-violet-500">{fmtM(Math.round(ytdRev / ytdOrders))}</strong></span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2. META ADS */}
@@ -473,16 +756,16 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           color="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
           icon={<svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96C18.34 21.21 22 17.06 22 12.06C22 6.53 17.5 2.04 12 2.04Z"/></svg>} />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label={`Gasto ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400" delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} tooltip="Total invertido en Meta Ads en el período." />
-          <KpiCard label="Budget/día" value={fmtM(summary.daily_budget_active)} sub="ARS activo" accent="bg-blue-400" tooltip="Presupuesto diario total de todos los ad sets ACTIVE en este momento." />
-          <KpiCard label={`Compras ${pLabel}`} value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(metaPurchases, prevSummary?.total_purchases_7d)} tooltip="Compras atribuidas por el pixel de Meta (ventana 7d click / 1d view)." />
-          <KpiCard label="ROAS real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="ventas TN / gasto" status={roasStatus} accent="bg-blue-400" tooltip="ROAS real = ventas totales de Tiendanube ÷ gasto Meta." />
-          <KpiCard label="CPA blend." value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-blue-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} tooltip={`Costo por compra atribuida. Verde = por debajo del breakeven (${fmtM(BREAKEVEN_CPA)}).`} />
-          <KpiCard label="Ad sets activos" value={String(summary.active_adsets || 0)} sub="corriendo" accent="bg-blue-400" tooltip="Ad sets con estado ACTIVE en este momento." />
+          <KpiCard label={`Gasto ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400" delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} tooltip="Total invertido en Meta Ads." anomaly={spendAnomaly} />
+          <KpiCard label="Budget/día" value={fmtM(summary.daily_budget_active)} sub="ARS activo" accent="bg-blue-400" tooltip="Presupuesto diario activo." />
+          <KpiCard label={`Compras ${pLabel}`} value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(metaPurchases, prevSummary?.total_purchases_7d)} tooltip="Compras atribuidas por pixel Meta." anomaly={purchAnomaly} />
+          <KpiCard label="ROAS real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="ventas TN / gasto" status={roasStatus} accent="bg-blue-400" tooltip="ROAS real = ventas TN ÷ gasto Meta." />
+          <KpiCard label="CPA blend." value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-blue-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} tooltip={`Costo por compra. Verde = debajo de ${fmtM(BREAKEVEN_CPA)}.`} anomaly={cpaAnomaly} />
+          <KpiCard label="Ad sets activos" value={String(summary.active_adsets || 0)} sub="corriendo" accent="bg-blue-400" tooltip="Ad sets ACTIVE en este momento." />
         </div>
       </div>
 
-      {/* BUDGET PACING — solo para Hoy */}
+      {/* BUDGET PACING */}
       {period === 'today' && dailyBudget > 0 && pacePct != null && (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -500,19 +783,16 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             </span>
           </div>
           <div className="relative h-3 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-            {/* Expected pace marker */}
-            <div className="absolute top-0 bottom-0 w-px bg-zinc-400 dark:bg-zinc-500 opacity-50 z-10"
-                 style={{ left: `${Math.min(expectedPct, 99)}%` }} />
-            {/* Actual spend bar */}
+            <div className="absolute top-0 bottom-0 w-px bg-zinc-400 dark:bg-zinc-500 opacity-50 z-10" style={{ left: `${Math.min(expectedPct, 99)}%` }} />
             <div className={`h-full rounded-full transition-all duration-500 ${pacingStatus === 'ok' ? 'bg-emerald-400' : pacingStatus === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`}
                  style={{ width: `${Math.min(pacePct, 100)}%` }} />
           </div>
           <div className="flex justify-between text-[10px] text-gray-400 dark:text-zinc-600 mt-2">
-            <span>Gastado: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(spendToday)}</strong> ({pacePct.toFixed(0)}% del budget)</span>
-            <span>Budget diario: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(dailyBudget)}</strong></span>
+            <span>Gastado: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(spendToday)}</strong> ({pacePct.toFixed(0)}%)</span>
+            <span>Budget: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(dailyBudget)}</strong></span>
           </div>
           <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">
-            Ritmo esperado a esta hora: {expectedPct.toFixed(0)}% &middot; {pacingRatio != null ? `${(pacingRatio * 100).toFixed(0)}% del ritmo esperado` : ''}
+            Ritmo esperado: {expectedPct.toFixed(0)}% &middot; {pacingRatio != null ? `${(pacingRatio * 100).toFixed(0)}% del ritmo` : ''}
           </p>
         </div>
       )}
@@ -529,10 +809,10 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" /> Conversión
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KpiCard label="Impresiones" value={convQ.impressions > 0 ? fmtImpr(convQ.impressions) : '—'} sub="vistas" accent="bg-blue-400" tooltip="Impresiones totales de campañas de conversión." />
-                <KpiCard label="CTR" value={convQ.ctr ? convQ.ctr.toFixed(2) + '%' : '—'} sub="clicks / impr." status={ctrConvSt} accent="bg-blue-400" tooltip="Click-through rate de conversión. Bueno >1.2%, aceptable >0.6%." />
-                <KpiCard label="Frecuencia" value={convQ.freq ? convQ.freq.toFixed(1) + 'x' : '—'} sub="veces/persona" status={freqConvSt} invertDelta accent="bg-blue-400" tooltip="Veces que cada usuario vio los anuncios de conversión. >3x puede causar fatiga." />
-                <KpiCard label="CPC conv." value={convQ.cpc ? fmtM(convQ.cpc) : '—'} sub="costo por click" accent="bg-blue-400" tooltip="Costo promedio por click en campañas de conversión." />
+                <KpiCard label="Impresiones" value={convQ.impressions > 0 ? fmtImpr(convQ.impressions) : '—'} sub="vistas" accent="bg-blue-400" tooltip="Impresiones totales de conv." />
+                <KpiCard label="CTR" value={convQ.ctr ? convQ.ctr.toFixed(2) + '%' : '—'} sub="clicks / impr." status={ctrConvSt} accent="bg-blue-400" tooltip="CTR conv. >1.2% bueno." />
+                <KpiCard label="Frecuencia" value={convQ.freq ? convQ.freq.toFixed(1) + 'x' : '—'} sub="veces/persona" status={freqConvSt} invertDelta accent="bg-blue-400" tooltip=">3x puede causar fatiga." />
+                <KpiCard label="CPC conv." value={convQ.cpc ? fmtM(convQ.cpc) : '—'} sub="costo por click" accent="bg-blue-400" tooltip="CPC campañas de conv." />
               </div>
             </div>
           )}
@@ -542,10 +822,10 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block" /> Tráfico web
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KpiCard label="Impresiones" value={trafQ.impressions > 0 ? fmtImpr(trafQ.impressions) : '—'} sub="vistas" accent="bg-violet-400" tooltip="Impresiones totales de campañas de tráfico." />
-                <KpiCard label="CTR" value={trafQ.ctr ? trafQ.ctr.toFixed(2) + '%' : '—'} sub="clicks / impr." status={ctrTrafSt} accent="bg-violet-400" tooltip="Click-through rate de tráfico. Bueno >1.2%." />
-                <KpiCard label="Frecuencia" value={trafQ.freq ? trafQ.freq.toFixed(1) + 'x' : '—'} sub="veces/persona" status={freqTrafSt} invertDelta accent="bg-violet-400" tooltip="Veces que cada usuario vio los anuncios de tráfico. >4x indica saturación." />
-                <KpiCard label="CPC tráfico" value={trafQ.cpc ? fmtM(trafQ.cpc) : '—'} sub="costo por click" accent="bg-violet-400" tooltip="Costo por click en campañas de tráfico web." />
+                <KpiCard label="Impresiones" value={trafQ.impressions > 0 ? fmtImpr(trafQ.impressions) : '—'} sub="vistas" accent="bg-violet-400" tooltip="Impresiones tráfico." />
+                <KpiCard label="CTR" value={trafQ.ctr ? trafQ.ctr.toFixed(2) + '%' : '—'} sub="clicks / impr." status={ctrTrafSt} accent="bg-violet-400" tooltip="CTR tráfico." />
+                <KpiCard label="Frecuencia" value={trafQ.freq ? trafQ.freq.toFixed(1) + 'x' : '—'} sub="veces/persona" status={freqTrafSt} invertDelta accent="bg-violet-400" tooltip=">4x indica saturación." />
+                <KpiCard label="CPC tráfico" value={trafQ.cpc ? fmtM(trafQ.cpc) : '—'} sub="costo por click" accent="bg-violet-400" tooltip="CPC tráfico web." />
               </div>
             </div>
           )}
@@ -767,7 +1047,6 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
 
       {/* FUNNEL + RECONCILIACION */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
