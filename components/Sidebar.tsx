@@ -28,31 +28,31 @@ const NAV_SECTIONS = [
   {
     label: 'Visión general',
     items: [
-      { href: '/',           label: 'Dashboard',  icon: 'dashboard',  accent: 'text-zinc-400 dark:text-zinc-500' },
-      { href: '/tiendanube', label: 'Tiendanube', icon: 'tiendanube', accent: 'text-violet-500 dark:text-violet-400' },
-      { href: '/historico',  label: 'Historial',  icon: 'historico',  accent: 'text-zinc-400 dark:text-zinc-500' },
-      { href: '/balance',    label: 'Balance',    icon: 'balance',    accent: 'text-emerald-500 dark:text-emerald-400' },
+      { href: '/',           label: 'Dashboard',  icon: 'dashboard',  accent: 'text-blue-600 dark:text-blue-400',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
+      { href: '/tiendanube', label: 'Tiendanube', icon: 'tiendanube', accent: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/30' },
+      { href: '/historico',  label: 'Historial',  icon: 'historico',  accent: 'text-sky-600 dark:text-sky-400',      bg: 'bg-sky-50 dark:bg-sky-950/30' },
+      { href: '/balance',    label: 'Balance',    icon: 'balance',    accent: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
     ],
   },
   {
     label: 'Meta Ads',
     items: [
-      { href: '/campanias', label: 'Campañas',  icon: 'campanias', accent: 'text-blue-500 dark:text-blue-400' },
-      { href: '/creativos', label: 'Creativos', icon: 'creativos', accent: 'text-blue-500 dark:text-blue-400' },
+      { href: '/campanias', label: 'Campañas',  icon: 'campanias', accent: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
+      { href: '/creativos', label: 'Creativos', icon: 'creativos', accent: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
     ],
   },
   {
     label: 'Inteligencia',
     items: [
-      { href: '/competencia', label: 'Competencia', icon: 'competencia', accent: 'text-amber-500 dark:text-amber-400' },
-      { href: '/resumen',     label: 'Resumen IA',  icon: 'resumen',     accent: 'text-emerald-500 dark:text-emerald-400' },
-      { href: '/assistant',   label: 'AI Assistant',icon: 'assistant',   accent: 'text-emerald-500 dark:text-emerald-400' },
+      { href: '/competencia', label: 'Competencia', icon: 'competencia', accent: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
+      { href: '/resumen',     label: 'Resumen IA',  icon: 'resumen',     accent: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
+      { href: '/assistant',   label: 'AI Assistant',icon: 'assistant',   accent: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
     ],
   },
   {
     label: 'Sistema',
     items: [
-      { href: '/settings', label: 'Configuración', icon: 'settings', accent: 'text-zinc-400 dark:text-zinc-500' },
+      { href: '/settings', label: 'Configuración', icon: 'settings', accent: 'text-zinc-500 dark:text-zinc-400', bg: 'bg-zinc-100 dark:bg-zinc-800/60' },
     ],
   },
 ]
@@ -136,16 +136,16 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
                   <Link key={item.href} href={item.href} onClick={onClose}
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-all duration-150 ${
                       isActive
-                        ? 'bg-zinc-100 dark:bg-zinc-800 text-gray-900 dark:text-white font-medium'
+                        ? `${item.bg} ${item.accent} font-medium`
                         : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100'
                     }`}
                   >
-                    <span className={isActive ? item.accent : 'text-gray-400 dark:text-zinc-600'}>
+                    <span className={`${item.accent} transition-opacity ${isActive ? 'opacity-100' : 'opacity-40'}`}>
                       {icons[item.icon as keyof typeof icons]}
                     </span>
                     {item.label}
                     {isActive && (
-                      <span className="ml-auto w-1 h-1 rounded-full bg-current opacity-60" />
+                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current opacity-70" />
                     )}
                   </Link>
                 )

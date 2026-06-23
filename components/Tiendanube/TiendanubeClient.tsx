@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import ArgentinaMap from '@/components/ArgentinaMap'
 
 type Period = 'today' | 'yesterday' | '7d' | '30d' | 'ytd'
 
@@ -109,6 +110,18 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const revenuePerDay = tnRevenue > 0 ? tnRevenue / days : 0
   const ordersPerDay  = tnOrders  > 0 ? tnOrders  / days : 0
 
+  // ── Derived customer metrics ──────────────────────────────────
+  const uniqueCustomers = tn?.unique_customers ?? 0
+  const totalUnitsSold  = tn?.total_units_sold ?? 0
+  const revenuePerCustomer = uniqueCustomers > 0 ? tnRevenue / uniqueCustomers : 0
+  const ordersPerCustomer  = uniqueCustomers > 0 ? tnOrders  / uniqueCustomers : 0
+  const repeatRate         = ordersPerCustomer > 1 ? ((ordersPerCustomer - 1) * 100) : 0
+  const unitsPerOrder      = tnOrders > 0 ? totalUnitsSold / tnOrders : 0
+  const topProvinces       = (tn?.top_provinces ?? []) as { name: string; count: number }[]
+  const top3PctNum         = tnOrders > 0 && topProvinces.length >= 3
+    ? (topProvinces.slice(0, 3).reduce((s, p) => s + p.count, 0) / tnOrders) * 100
+    : 0
+
   const hasData = tn != null
   const hasMetaData = meta != null && metaSpend > 0
 
@@ -197,6 +210,45 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                 tooltip="Total de artículos vendidos sumando las cantidades de todos los productos de las órdenes pagadas." />
             </div>
           </div>
+
+          {/* ── Métricas derivadas de clientes ── */}
+          {uniqueCustomers > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">
+                Comportamiento de clientes · {PERIOD_LABELS[period]}
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <KpiCard
+                  label="Revenue / cliente"
+                  value={fmt(revenuePerCustomer)}
+                  sub="facturado por cliente"
+                  color="violet"
+                  tooltip="Total vendido dividido la cantidad de clientes únicos. Muestra cuánto vale en promedio cada cliente en el período."
+                />
+                <KpiCard
+                  label="Órdenes / cliente"
+                  value={ordersPerCustomer.toFixed(2)}
+                  sub={repeatRate > 5 ? `${repeatRate.toFixed(0)}% recompra` : 'sin recompra significativa'}
+                  color={repeatRate > 10 ? 'emerald' : repeatRate > 5 ? 'amber' : 'slate'}
+                  tooltip="Cantidad promedio de órdenes por cliente. Si es mayor a 1, hay clientes que compraron más de una vez en el período — señal de fidelización."
+                />
+                <KpiCard
+                  label="Unidades / orden"
+                  value={unitsPerOrder.toFixed(2)}
+                  sub="artículos por compra"
+                  color="sky"
+                  tooltip="Promedio de artículos por orden. Subir esta cifra (upsell, combos) mejora el AOV sin aumentar el costo de adquisición."
+                />
+                <KpiCard
+                  label="Concentración geog."
+                  value={top3PctNum > 0 ? `${top3PctNum.toFixed(0)}%` : '—'}
+                  sub={topProvinces.length >= 3 ? `de ${topProvinces[0]?.name ?? ''}, ${topProvinces[1]?.name ?? ''}, ${topProvinces[2]?.name ?? ''}` : 'top 3 provincias'}
+                  color={top3PctNum > 80 ? 'amber' : 'slate'}
+                  tooltip="Porcentaje de órdenes que vienen de las 3 provincias principales. Más del 80% indica concentración geográfica alta — oportunidad de expandir en otras regiones."
+                />
+              </div>
+            </div>
+          )}
 
           {/* ── KPIs Meta ── */}
           {hasMetaData && (
@@ -428,25 +480,38 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
               </div>
             )}
 
-            {/* Provincias */}
-            {tn?.top_provinces && tn.top_provinces.length > 0 && (
-              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-                <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Top provincias</h2>
-                <div className="space-y-2.5">
-                  {tn.top_provinces.map((prov: { name: string; count: number }) => {
-                    const pct = tn.total_orders > 0 ? (prov.count / tn.total_orders) * 100 : 0
-                    return (
-                      <div key={prov.name}>
-                        <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
-                          <span>{prov.name}</span>
-                          <span className="font-medium">{prov.count} · {pct.toFixed(0)}%</span>
+            {/* Provincias — mapa coroplético */}
+            {topProvinces.length > 0 && (
+              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm lg:col-span-1">
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Ventas por provincia</h2>
+                <div className="flex gap-4 items-start">
+                  {/* SVG map */}
+                  <div className="w-[120px] shrink-0">
+                    <ArgentinaMap
+                      provinces={topProvinces}
+                      totalOrders={tnOrders}
+                    />
+                  </div>
+                  {/* Ranked list */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {topProvinces.slice(0, 8).map((prov, i) => {
+                      const pct = tnOrders > 0 ? (prov.count / tnOrders) * 100 : 0
+                      return (
+                        <div key={prov.name}>
+                          <div className="flex items-center justify-between text-xs mb-0.5">
+                            <span className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-400 min-w-0">
+                              <span className="text-[10px] text-gray-300 dark:text-zinc-600 w-3 shrink-0">{i + 1}</span>
+                              <span className="truncate">{prov.name}</span>
+                            </span>
+                            <span className="font-medium text-violet-600 dark:text-violet-400 shrink-0 ml-2">{pct.toFixed(0)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1">
+                            <div className="h-1 rounded-full bg-violet-400" style={{ width: `${pct}%` }} />
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full bg-fuchsia-400" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -475,24 +540,56 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
 function KpiCard({ label, value, sub, color, tooltip }: {
   label: string; value: string; sub: string; color: string; tooltip?: string
 }) {
-  const colors: Record<string, string> = {
-    indigo:  'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400',
-    violet:  'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400',
-    purple:  'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400',
-    fuchsia: 'bg-fuchsia-50 dark:bg-fuchsia-950/30 text-fuchsia-600 dark:text-fuchsia-400',
-    blue:    'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400',
-    sky:     'bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400',
-    cyan:    'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400',
-    teal:    'bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400',
+  const borderL: Record<string, string> = {
+    indigo:  'border-l-indigo-400 dark:border-l-indigo-500',
+    violet:  'border-l-violet-400 dark:border-l-violet-500',
+    purple:  'border-l-purple-400 dark:border-l-purple-500',
+    fuchsia: 'border-l-fuchsia-400 dark:border-l-fuchsia-500',
+    blue:    'border-l-blue-400 dark:border-l-blue-500',
+    sky:     'border-l-sky-400 dark:border-l-sky-500',
+    cyan:    'border-l-cyan-400 dark:border-l-cyan-500',
+    teal:    'border-l-teal-400 dark:border-l-teal-500',
+    emerald: 'border-l-emerald-400 dark:border-l-emerald-500',
+    amber:   'border-l-amber-400 dark:border-l-amber-500',
+    slate:   'border-l-slate-300 dark:border-l-slate-600',
   }
+  const bgGrad: Record<string, string> = {
+    indigo:  'bg-gradient-to-br from-indigo-50/60 to-white dark:from-indigo-950/20 dark:to-zinc-900',
+    violet:  'bg-gradient-to-br from-violet-50/60 to-white dark:from-violet-950/20 dark:to-zinc-900',
+    purple:  'bg-gradient-to-br from-purple-50/60 to-white dark:from-purple-950/20 dark:to-zinc-900',
+    fuchsia: 'bg-gradient-to-br from-fuchsia-50/60 to-white dark:from-fuchsia-950/20 dark:to-zinc-900',
+    blue:    'bg-gradient-to-br from-blue-50/60 to-white dark:from-blue-950/20 dark:to-zinc-900',
+    sky:     'bg-gradient-to-br from-sky-50/60 to-white dark:from-sky-950/20 dark:to-zinc-900',
+    cyan:    'bg-gradient-to-br from-cyan-50/60 to-white dark:from-cyan-950/20 dark:to-zinc-900',
+    teal:    'bg-gradient-to-br from-teal-50/60 to-white dark:from-teal-950/20 dark:to-zinc-900',
+    emerald: 'bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900',
+    amber:   'bg-gradient-to-br from-amber-50/60 to-white dark:from-amber-950/20 dark:to-zinc-900',
+    slate:   'bg-white dark:bg-zinc-900',
+  }
+  const valueColor: Record<string, string> = {
+    indigo:  'text-indigo-600 dark:text-indigo-400',
+    violet:  'text-violet-600 dark:text-violet-400',
+    purple:  'text-purple-600 dark:text-purple-400',
+    fuchsia: 'text-fuchsia-600 dark:text-fuchsia-400',
+    blue:    'text-blue-600 dark:text-blue-400',
+    sky:     'text-sky-600 dark:text-sky-400',
+    cyan:    'text-cyan-600 dark:text-cyan-400',
+    teal:    'text-teal-600 dark:text-teal-400',
+    emerald: 'text-emerald-600 dark:text-emerald-400',
+    amber:   'text-amber-600 dark:text-amber-400',
+    slate:   'text-gray-700 dark:text-zinc-300',
+  }
+  const bl  = borderL[color]  ?? 'border-l-gray-200 dark:border-l-zinc-700'
+  const bg  = bgGrad[color]   ?? 'bg-white dark:bg-zinc-900'
+  const vc  = valueColor[color] ?? 'text-gray-900 dark:text-zinc-100'
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-      <div className="flex items-center gap-1 mb-1">
-        <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">{label}</p>
+    <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${bl} ${bg} p-4 shadow-sm hover:shadow-md transition-shadow overflow-hidden`}>
+      <div className="flex items-center gap-1 mb-1.5">
+        <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
         {tooltip && <InfoTooltip text={tooltip} />}
       </div>
-      <p className={`text-2xl font-semibold ${colors[color] ?? 'text-gray-900 dark:text-zinc-100'}`}>{value}</p>
-      <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">{sub}</p>
+      <p className={`text-3xl font-bold tabular-nums leading-none ${vc}`}>{value}</p>
+      <p className="text-xs text-gray-400 dark:text-zinc-600 mt-2">{sub}</p>
     </div>
   )
 }

@@ -51,24 +51,41 @@ function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, to
   delta?: number | null; invertDelta?: boolean; tooltip?: string; accent?: string
   anomaly?: { label: string; color: string } | null
 }) {
-  const valueColor = { ok: 'text-emerald-500 dark:text-emerald-400', warn: 'text-amber-500 dark:text-amber-400', bad: 'text-red-500 dark:text-red-400', neutral: 'text-gray-900 dark:text-white' }[status]
-  const pctColor = delta == null ? '' : Math.abs(delta) < 2 ? 'text-gray-400' : (invertDelta ? delta < 0 : delta > 0) ? 'text-emerald-500' : 'text-red-500'
+  const borderL = {
+    ok:      'border-l-emerald-400 dark:border-l-emerald-500',
+    warn:    'border-l-amber-400 dark:border-l-amber-500',
+    bad:     'border-l-red-400 dark:border-l-red-500',
+    neutral: 'border-l-gray-100 dark:border-l-zinc-800',
+  }[status]
+  const bgGrad = {
+    ok:      'bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900',
+    warn:    'bg-gradient-to-br from-amber-50/60 to-white dark:from-amber-950/20 dark:to-zinc-900',
+    bad:     'bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900',
+    neutral: 'bg-white dark:bg-zinc-900',
+  }[status]
+  const valueColor = { ok: 'text-emerald-600 dark:text-emerald-400', warn: 'text-amber-600 dark:text-amber-400', bad: 'text-red-600 dark:text-red-400', neutral: 'text-gray-900 dark:text-white' }[status]
+  const isPosDelta = delta != null && delta > 0
+  const isGoodDelta = delta == null ? null : (invertDelta ? delta < 0 : delta > 0)
+  const deltaCls = delta == null ? '' : Math.abs(delta) < 2
+    ? 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'
+    : isGoodDelta
+    ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+    : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400'
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm hover:shadow-md transition-shadow relative">
+    <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${borderL} ${bgGrad} p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden`}>
       {anomaly && (
         <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${anomaly.color}`}>{anomaly.label}</span>
       )}
-      {accent && <div className={`w-6 h-0.5 rounded-full mb-2.5 ${accent}`} />}
       <div className="flex items-center gap-1 mb-1.5">
         <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
         {tooltip && <InfoTooltip text={tooltip} />}
       </div>
-      <p className={`text-2xl font-bold tabular-nums ${valueColor}`}>{value}</p>
-      <div className="flex items-center gap-2 mt-1.5 min-h-[18px]">
+      <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
+      <div className="flex items-center gap-2 mt-2 min-h-[20px] flex-wrap">
         {sub && <p className="text-xs text-gray-400 dark:text-zinc-600">{sub}</p>}
         {delta != null && (
-          <span className={`text-xs font-semibold ${pctColor}`}>
-            {delta > 0 ? '+' : ''}{delta}%{Math.abs(delta) >= 2 ? (delta > 0 ? ' ↑' : ' ↓') : ''}
+          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${deltaCls}`}>
+            {isPosDelta ? '+' : ''}{delta}%
           </span>
         )}
       </div>
@@ -81,10 +98,23 @@ function HeroKpi({ label, value, sub, status = 'neutral', delta, invertDelta, ac
   status?: 'ok' | 'warn' | 'bad' | 'neutral'
   delta?: number | null; invertDelta?: boolean; accent: string; loading?: boolean
 }) {
+  const glowBg: Record<string, string> = {
+    ok:      'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, transparent 55%)',
+    warn:    'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, transparent 55%)',
+    bad:     'linear-gradient(135deg, rgba(239,68,68,0.10) 0%, transparent 55%)',
+    neutral: 'none',
+  }
+  const glowBorder: Record<string, string> = {
+    ok:      'rgba(16,185,129,0.28)',
+    warn:    'rgba(245,158,11,0.28)',
+    bad:     'rgba(239,68,68,0.28)',
+    neutral: '#27272a',
+  }
   const valueColor = { ok: 'text-emerald-400', warn: 'text-amber-400', bad: 'text-red-400', neutral: 'text-white' }[status]
   const pctColor = delta == null ? '' : Math.abs(delta) < 2 ? 'text-zinc-500' : (invertDelta ? delta < 0 : delta > 0) ? 'text-emerald-400' : 'text-red-400'
   return (
-    <div className="flex-1 min-w-[130px] bg-zinc-900 dark:bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-4">
+    <div className="flex-1 min-w-[130px] rounded-xl border px-4 py-4"
+         style={{ background: `${glowBg[status]}, #18181b`, borderColor: glowBorder[status] }}>
       <div className={`w-5 h-0.5 rounded-full mb-3 ${accent}`} />
       <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
       {loading ? (
