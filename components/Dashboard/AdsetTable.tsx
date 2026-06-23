@@ -69,7 +69,7 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
-// ── Pause/Activate button ─────────────────────────────────────────
+// ── Ad pause/activate button ──────────────────────────────────────
 function AdActionButtons({ ad, onDone }: { ad: Ad; onDone: () => void }) {
   const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
   const [confirm, setConfirm] = useState<{ action: string; label: string } | null>(null)
@@ -123,11 +123,11 @@ function AdActionButtons({ ad, onDone }: { ad: Ad; onDone: () => void }) {
   )
 }
 
-// ── Inline budget editor ──────────────────────────────────────────
+// ── Inline budget editor (click to edit) ─────────────────────────
 function InlineBudgetEdit({ adset, onDone }: { adset: Adset; onDone: () => void }) {
-  const [editing, setEditing]   = useState(false)
-  const [value, setValue]       = useState(String(adset.daily_budget || ''))
-  const [state, setState]       = useState<'idle'|'loading'|'done'|'error'>('idle')
+  const [editing, setEditing] = useState(false)
+  const [value, setValue]     = useState(String(adset.daily_budget || ''))
+  const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
@@ -184,12 +184,14 @@ function InlineBudgetEdit({ adset, onDone }: { adset: Adset; onDone: () => void 
       className="text-xs text-gray-500 dark:text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors flex items-center gap-1 group"
     >
       <span className="tabular-nums">${budget.toLocaleString('es-AR')}</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+      </svg>
     </button>
   )
 }
 
-// ── +/- Budget buttons ────────────────────────────────────────────
+// ── +/- budget adjustment buttons ────────────────────────────────
 function AdsetBudgetButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) {
   const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
   const [confirm, setConfirm] = useState<{ action: string; label: string; value: number } | null>(null)
@@ -245,15 +247,17 @@ function AdsetBudgetButtons({ adset, onDone }: { adset: Adset; onDone: () => voi
 }
 
 // ── Sub-tabla de creativos ────────────────────────────────────────
-function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'conversion' | 'traffic'; breakeven: number; onAction: () => void }) {
+function AdsSubTable({ ads, type, breakeven, onAction, colCount }: {
+  ads: Ad[]; type: 'conversion' | 'traffic'; breakeven: number; onAction: () => void; colCount: number
+}) {
   if (ads.length === 0) return (
-    <tr><td colSpan={10} className="px-8 py-3 text-xs text-gray-400 dark:text-zinc-600 italic">Sin creativos con datos en este periodo.</td></tr>
+    <tr><td colSpan={colCount} className="px-8 py-3 text-xs text-gray-400 dark:text-zinc-600 italic">Sin creativos con datos en este periodo.</td></tr>
   )
   const isConv = type === 'conversion'
   return (
     <>
       <tr className="bg-gray-50/80 dark:bg-zinc-800/60">
-        <td colSpan={10} className="px-0 py-0">
+        <td colSpan={colCount} className="px-0 py-0">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-t border-gray-100 dark:border-zinc-700">
@@ -340,16 +344,15 @@ function AdsSubTable({ ads, type, breakeven, onAction }: { ads: Ad[]; type: 'con
 }
 
 // ── Bulk action bar ───────────────────────────────────────────────
-function BulkBar({ selected, adsets, onDone, onClear }: {
+// IMPORTANT: all hooks must come BEFORE any conditional returns
+function BulkBar({ selected, onDone, onClear }: {
   selected: Set<string>
-  adsets: Adset[]
   onDone: () => void
   onClear: () => void
 }) {
-  const [state, setState]   = useState<'idle'|'loading'|'done'|'error'>('idle')
-  const [confirm, setConfirm] = useState<string | null>(null)
-  const count = selected.size
-  if (count === 0) return null
+  // All hooks declared first — no conditional returns before this point
+  const [state, setState]       = useState<'idle'|'loading'|'done'|'error'>('idle')
+  const [confirm, setConfirm]   = useState<string | null>(null)
 
   const doBulk = useCallback(async (action: string) => {
     setState('loading')
@@ -364,17 +367,24 @@ function BulkBar({ selected, adsets, onDone, onClear }: {
       ))
       setState('done')
       setTimeout(() => { setState('idle'); onClear(); onDone() }, 2000)
-    } catch { setState('error'); setTimeout(() => setState('idle'), 2500) }
+    } catch {
+      setState('error')
+      setTimeout(() => setState('idle'), 2500)
+    }
     setConfirm(null)
   }, [selected, onClear, onDone])
 
+  // Conditional logic comes AFTER all hooks
+  const count = selected.size
+  if (count === 0) return null
+
   if (state === 'loading') return (
-    <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3 bg-indigo-600 text-white text-sm rounded-xl shadow-lg mb-2">
+    <div className="flex items-center gap-3 px-5 py-3 bg-indigo-600 text-white text-sm rounded-xl shadow-lg mb-2">
       <span className="animate-pulse">Ejecutando en {count} ad set{count !== 1 ? 's' : ''}...</span>
     </div>
   )
   if (state === 'done') return (
-    <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3 bg-emerald-600 text-white text-sm rounded-xl shadow-lg mb-2">
+    <div className="flex items-center gap-3 px-5 py-3 bg-emerald-600 text-white text-sm rounded-xl shadow-lg mb-2">
       <span>✓ Acción completada en {count} ad set{count !== 1 ? 's' : ''}</span>
     </div>
   )
@@ -382,7 +392,7 @@ function BulkBar({ selected, adsets, onDone, onClear }: {
   if (confirm) {
     const labels: Record<string, string> = { pause: 'Pausar', activate: 'Activar' }
     return (
-      <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3 bg-zinc-900 text-white text-sm rounded-xl shadow-lg mb-2">
+      <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 text-white text-sm rounded-xl shadow-lg mb-2">
         <span className="text-zinc-300">¿{labels[confirm]} {count} ad set{count !== 1 ? 's' : ''}?</span>
         <button onClick={() => doBulk(confirm)} className="px-3 py-1 bg-white text-zinc-900 rounded-lg font-semibold text-xs hover:bg-zinc-100">Sí</button>
         <button onClick={() => setConfirm(null)} className="px-3 py-1 border border-zinc-600 text-zinc-300 rounded-lg text-xs hover:bg-zinc-800">No</button>
@@ -392,7 +402,7 @@ function BulkBar({ selected, adsets, onDone, onClear }: {
   }
 
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3 bg-zinc-900 border border-zinc-700 rounded-xl shadow-lg mb-2">
+    <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 border border-zinc-700 rounded-xl shadow-lg mb-2">
       <span className="text-xs font-semibold text-indigo-400">{count} seleccionado{count !== 1 ? 's' : ''}</span>
       <div className="flex items-center gap-2 ml-2">
         <button onClick={() => setConfirm('pause')}
@@ -411,7 +421,7 @@ function BulkBar({ selected, adsets, onDone, onClear }: {
   )
 }
 
-// ── Seccion acordeon ──────────────────────────────────────────────
+// ── Adset section with checkboxes ─────────────────────────────────
 interface SectionProps {
   title: string
   type: 'conversion' | 'traffic'
@@ -448,9 +458,9 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
     })
   }
 
-  const sectionIds    = adsets.map(a => a.id)
-  const allSelected   = sectionIds.length > 0 && sectionIds.every(id => selectedIds.has(id))
-  const someSelected  = sectionIds.some(id => selectedIds.has(id))
+  const sectionIds   = adsets.map(a => a.id)
+  const allSelected  = sectionIds.length > 0 && sectionIds.every(id => selectedIds.has(id))
+  const someSelected = sectionIds.some(id => selectedIds.has(id))
 
   const totalSpend  = adsets.reduce((s, a) => s + (a.spend  || 0), 0)
   const totalBudget = adsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
@@ -461,12 +471,13 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
     ? 'Gasto ' + (period === 'hoy' ? 'Hoy' : period === 'ayer' ? 'Ayer' : period === '30d' ? '30d' : '7d')
     : 'Gasto 7d'
 
-  const colCount = isConv ? 10 : 10
+  // Total columns: checkbox(1) + name(1) + budget-inline(1) + gasto(1) + 4 metrics(4) + freq(1) + ajuste(1) = 11
+  const TOTAL_COLS = 11
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm">
 
-      {/* Header */}
+      {/* Section header */}
       <button onClick={() => setOpen(o => !o)}
         className={`w-full bg-gradient-to-r ${gradient} px-5 py-3.5 flex items-center justify-between hover:opacity-95 transition-opacity`}>
         <div className="flex items-center gap-2.5">
@@ -495,7 +506,6 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-800/40">
-                {/* Select-all checkbox */}
                 <th className="px-3 py-2.5 w-8">
                   <input
                     type="checkbox"
@@ -507,12 +517,11 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                         onSelectAll(sectionIds.filter(id => !selectedIds.has(id)))
                       }
                     }}
-                    onClick={e => e.stopPropagation()}
-                    className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                   />
                 </th>
                 <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ad Set</th>
-                <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/dia</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/dia</th>
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">{spendLabel}</th>
                 {isConv ? (
                   <>
@@ -532,40 +541,38 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
                   <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio. >3x puede causar fatiga." /></span>
                 </th>
-                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget</th>
                 <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ajuste</th>
               </tr>
             </thead>
             <tbody>
               {Array.from(new Set(adsets.map(a => a.campaign_id))).map(campId => {
-                const campAdsets = adsets.filter(a => a.campaign_id === campId)
-                const campName   = campaignMap[campId] || 'Campaña sin nombre'
-                const campSpend  = campAdsets.reduce((s, a) => s + (a.spend || 0), 0)
-                const campBudget = campAdsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
-                const campOpen   = !collapsedCamps.has(campId)
+                const campAdsets  = adsets.filter(a => a.campaign_id === campId)
+                const campName    = campaignMap[campId] || 'Campaña sin nombre'
+                const campSpend   = campAdsets.reduce((s, a) => s + (a.spend || 0), 0)
+                const campBudget  = campAdsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
+                const campOpen    = !collapsedCamps.has(campId)
+                const campAllSel  = campAdsets.every(a => selectedIds.has(a.id))
 
                 return (
                   <React.Fragment key={campId}>
                     {/* Campaign header row */}
                     <tr className="border-t-2 border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/60 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-zinc-800 transition-colors"
                         onClick={() => toggleCamp(campId)}>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          checked={campAdsets.every(a => selectedIds.has(a.id))}
-                          onChange={e => {
-                            e.stopPropagation()
-                            if (campAdsets.every(a => selectedIds.has(a.id))) {
+                          checked={campAllSel}
+                          onChange={() => {
+                            if (campAllSel) {
                               campAdsets.forEach(a => { if (selectedIds.has(a.id)) onToggleSelect(a.id) })
                             } else {
                               onSelectAll(campAdsets.filter(a => !selectedIds.has(a.id)).map(a => a.id))
                             }
                           }}
-                          onClick={e => e.stopPropagation()}
-                          className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
                       </td>
-                      <td colSpan={colCount} className="px-3 py-2.5">
+                      <td colSpan={TOTAL_COLS - 1} className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-500 dark:text-zinc-400"><Chevron open={campOpen} /></span>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500">
@@ -584,20 +591,20 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                     </tr>
 
                     {campOpen && campAdsets.map(adset => {
-                      const adsetAds  = ads.filter(a => a.adset_id === adset.id).sort((a, b) => (b.spend || 0) - (a.spend || 0))
+                      const adsetAds   = ads.filter(a => a.adset_id === adset.id).sort((a, b) => (b.spend || 0) - (a.spend || 0))
                       const isExpanded = expandedIds.has(adset.id)
                       const isSelected = selectedIds.has(adset.id)
 
-                      const isPaused  = adset.status === 'PAUSED'
-                      const cpa       = adset.cost_per_result
-                      const roas      = adset.roas
-                      const spend     = adset.spend || 0
-                      const rowTint   =
-                        isSelected                                        ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
-                        : isPaused                                        ? 'opacity-60'
-                        : (roas && roas >= 5)                            ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
-                        : (cpa && cpa > breakeven && spend > 3000)       ? 'bg-red-50/50 dark:bg-red-950/15'
-                        : (cpa && cpa > breakeven * 1.3 && spend > 1500) ? 'bg-amber-50/40 dark:bg-amber-950/10'
+                      const isPaused = adset.status === 'PAUSED'
+                      const cpa      = adset.cost_per_result
+                      const roas     = adset.roas
+                      const spend    = adset.spend || 0
+                      const rowTint  =
+                        isSelected                                           ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
+                        : isPaused                                           ? 'opacity-60'
+                        : (roas && roas >= 5)                               ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                        : (cpa && cpa > breakeven && spend > 3000)          ? 'bg-red-50/50 dark:bg-red-950/15'
+                        : (cpa && cpa > breakeven * 1.3 && spend > 1500)   ? 'bg-amber-50/40 dark:bg-amber-950/10'
                         : ''
 
                       return (
@@ -609,9 +616,10 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => onToggleSelect(adset.id)}
-                                className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500"
+                                className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                               />
                             </td>
+                            {/* Name — click to expand */}
                             <td className="px-3 py-3 pl-6 cursor-pointer" onClick={() => toggleExpand(adset.id)}>
                               <div className="flex items-center gap-2">
                                 <span className="text-gray-400 dark:text-zinc-500"><Chevron open={isExpanded} /></span>
@@ -624,7 +632,7 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                                 <p className="font-semibold text-gray-900 dark:text-white leading-tight text-sm">{adset.name}</p>
                               </div>
                             </td>
-                            {/* Inline budget */}
+                            {/* Inline budget edit */}
                             <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                               <InlineBudgetEdit adset={adset} onDone={handleAction} />
                             </td>
@@ -655,18 +663,12 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                               </>
                             )}
                             <td className="px-3 py-3 text-right"><FreqBadge freq={adset.frequency} /></td>
-                            <td className="px-3 py-3 text-right">
-                              {/* Budget display (read-only, click InlineBudgetEdit on the left) */}
-                              <span className="text-xs text-gray-400 dark:text-zinc-600">
-                                {adset.daily_budget ? '' : '—'}
-                              </span>
-                            </td>
                             <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                               <AdsetBudgetButtons adset={adset} onDone={handleAction} />
                             </td>
                           </tr>
                           {isExpanded && (
-                            <AdsSubTable ads={adsetAds} type={type} breakeven={breakeven} onAction={handleAction} />
+                            <AdsSubTable ads={adsetAds} type={type} breakeven={breakeven} onAction={handleAction} colCount={TOTAL_COLS} />
                           )}
                         </React.Fragment>
                       )
@@ -723,8 +725,7 @@ export default function AdsetTable({ adsets, ads, campaignMap, breakeven, period
 
   return (
     <div className="space-y-6">
-      {/* Bulk action bar */}
-      <BulkBar selected={selectedIds} adsets={adsets} onDone={handleDone} onClear={clearSelection} />
+      <BulkBar selected={selectedIds} onDone={handleDone} onClear={clearSelection} />
 
       {convAdsets.length > 0 && (
         <AdsetSection
