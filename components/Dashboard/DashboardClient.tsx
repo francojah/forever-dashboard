@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Snapshot, PeriodMetrics, TNSnapshot } from '@/lib/supabase'
+import { createClientBrowser } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ReferenceLine } from 'recharts'
 
 const BREAKEVEN_CPA = 17500
+const AUTO_REFRESH_SECS = 180 // 3 min auto-poll fallback
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
 
 type Period = 'today' | 'yesterday' | 'last_7d' | 'last_30d' | 'custom'
@@ -38,6 +40,9 @@ function calcDelta(curr: number | null | undefined, prev: number | null | undefi
   if (curr == null || prev == null || prev === 0) return null
   return parseFloat(((curr - prev) / Math.abs(prev) * 100).toFixed(1))
 }
+function fmtCountdown(secs: number): string {
+  return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')
+}
 
 function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, tooltip, accent }: {
   label: string; value: string; sub?: string
@@ -66,18 +71,22 @@ function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, to
   )
 }
 
-function HeroKpi({ label, value, sub, status = 'neutral', delta, invertDelta, accent }: {
+function HeroKpi({ label, value, sub, status = 'neutral', delta, invertDelta, accent, loading }: {
   label: string; value: string; sub?: string
   status?: 'ok' | 'warn' | 'bad' | 'neutral'
-  delta?: number | null; invertDelta?: boolean; accent: string
+  delta?: number | null; invertDelta?: boolean; accent: string; loading?: boolean
 }) {
   const valueColor = { ok: 'text-emerald-400', warn: 'text-amber-400', bad: 'text-red-400', neutral: 'text-white' }[status]
   const pctColor = delta == null ? '' : Math.abs(delta) < 2 ? 'text-zinc-500' : (invertDelta ? delta < 0 : delta > 0) ? 'text-emerald-400' : 'text-red-400'
   return (
-    <div className="flex-1 min-w-0 bg-zinc-900 dark:bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-4">
+    <div className="flex-1 min-w-[130px] bg-zinc-900 dark:bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-4">
       <div className={`w-5 h-0.5 rounded-full mb-3 ${accent}`} />
       <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
-      <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
+      {loading ? (
+        <div className="h-9 w-20 bg-zinc-800 rounded-lg animate-pulse" />
+      ) : (
+        <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
+      )}
       <div className="flex items-center gap-2 mt-2 min-h-[16px]">
         {sub && <p className="text-[11px] text-zinc-600">{sub}</p>}
         {delta != null && (
@@ -109,6 +118,17 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const [syncError, setSyncError]   = useState<string | null>(null)
   const router = useRouter()
 
+  // Live dashboard state
+  const [isLive, setIsLive]         = useState(false)
+  const [countdown, setCountdown]   = useState(AUTO_REFRESH_SECS)
+  const [showToast, setShowToast]   = useState(false)
+  const [notifEnabled, setNotifEnabled] = useState(false)
+
+  // Intraday Meta data (period=today only)
+  const [todayMeta, setTodayMeta]   = useState<{ spend: number; purchases: number } | null>(null)
+  const [todayLoading, setTodayLoading] = useState(false)
+
+  // Custom period
   const today = new Date().toISOString().split('T')[0]
   const [customFrom, setCustomFrom] = useState(today)
   const [customTo, setCustomTo]     = useState(today)
@@ -117,6 +137,58 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const [customLoading, setCustomLoading]     = useState(false)
   const [customError, setCustomError]         = useState<string | null>(null)
 
+  // ── Auto-polling every 3 min (fallback) ──────────────────────────
+  useEffect(() => {
+    let secs = AUTO_REFRESH_SECS
+    setCountdown(secs)
+    const tick = setInterval(() => {
+      secs--
+      setCountdown(secs)
+      if (secs <= 0) {
+        router.refresh()
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 3000)
+        secs = AUTO_REFRESH_SECS
+        setCountdown(secs)
+      }
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [router])
+
+  // ── Supabase Realtime — auto-refresh on new snapshot ─────────────
+  useEffect(() => {
+    const supabase = createClientBrowser()
+    const ch = supabase
+      .channel('dashboard-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'meta_snapshots' }, () => {
+        router.refresh()
+        setCountdown(AUTO_REFRESH_SECS)
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 3000)
+      })
+      .subscribe(status => setIsLive(status === 'SUBSCRIBED'))
+    return () => { void supabase.removeChannel(ch) }
+  }, [router])
+
+  // ── Intraday spend for "Hoy" period ──────────────────────────────
+  useEffect(() => {
+    if (period !== 'today') { setTodayMeta(null); return }
+    setTodayLoading(true)
+    fetch('/api/meta-today')
+      .then(r => r.json())
+      .then(d => { if (!d.error) setTodayMeta(d) })
+      .catch(() => {})
+      .finally(() => setTodayLoading(false))
+  }, [period, snapshot?.id])
+
+  // ── Browser notifications permission ─────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem('forever-notif')
+    if (stored === 'granted' && Notification.permission === 'granted') setNotifEnabled(true)
+  }, [])
+
+  // ── triggerSync ───────────────────────────────────────────────────
   const triggerSync = useCallback(async () => {
     setSyncing(true); setSyncError(null)
     try {
@@ -141,6 +213,16 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     finally { setCustomLoading(false) }
   }, [customFrom, customTo])
 
+  const enableNotifications = useCallback(async () => {
+    if (!('Notification' in window)) return
+    const perm = await Notification.requestPermission()
+    if (perm === 'granted') {
+      setNotifEnabled(true)
+      localStorage.setItem('forever-notif', 'granted')
+    }
+  }, [])
+
+  // ── Empty state ────────────────────────────────────────────────────
   if (!snapshot) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
@@ -158,6 +240,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     )
   }
 
+  // ── Period data ────────────────────────────────────────────────────
   const periodData: PeriodMetrics =
     period === 'custom'  ? (customData ?? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary }) :
     period === 'last_7d' ? { campaigns: snapshot.campaigns, adsets: snapshot.adsets, ads: snapshot.ads, summary: snapshot.summary } :
@@ -174,13 +257,14 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     period === 'last_30d'  ? tnSnapshot?.summary_30d : null
 
   const tnRevenue = period === 'custom' ? customTnRevenue : (tnData?.total_revenue ?? null)
-  const metaSpend = summary.total_spend_7d || 0
+  const metaSpend = period === 'today' && todayMeta ? todayMeta.spend : (summary.total_spend_7d || 0)
   const realRoas  = tnRevenue != null && metaSpend > 0 ? parseFloat((tnRevenue / metaSpend).toFixed(2)) : null
 
   const prevSummary = prevSnapshot
     ? (period === 'last_7d' ? prevSnapshot.summary : (prevSnapshot.periods?.[period as 'today' | 'yesterday' | 'last_30d']?.summary ?? null))
     : null
 
+  // ── Adset analysis ─────────────────────────────────────────────────
   const activeAdsets = adsets.filter(a => (a.spend || 0) > 0)
   const isTraffic    = (a: typeof adsets[0]) => TRAFFIC_GOALS.includes(a.optimization_goal || '')
   const convAdsets   = activeAdsets.filter(a => !isTraffic(a))
@@ -219,7 +303,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     })[0] ?? null
 
   const tnAOV         = tnData?.aov ?? 0
-  const metaPurchases = summary.total_purchases_7d ?? 0
+  const metaPurchases = period === 'today' && todayMeta ? todayMeta.purchases : (summary.total_purchases_7d ?? 0)
   const metaAttr      = metaPurchases > 0 && tnAOV > 0 ? Math.min(metaPurchases * tnAOV, tnRevenue ?? 0) : 0
   const organicRev    = Math.max(0, (tnRevenue ?? 0) - metaAttr)
   const metaPct       = tnRevenue && tnRevenue > 0 ? Math.round((metaAttr / tnRevenue) * 100) : 0
@@ -227,6 +311,17 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
 
   const topProvince = tnData?.top_provinces?.[0] ?? null
 
+  // ── Budget pacing (only meaningful for "today") ────────────────────
+  const dailyBudget    = summary.daily_budget_active || 0
+  const spendToday     = period === 'today' ? (todayMeta?.spend ?? (snapshot.periods?.today?.summary.total_spend_7d ?? 0)) : null
+  const hoursNow       = new Date().getHours() + new Date().getMinutes() / 60
+  const pacePct        = spendToday != null && dailyBudget > 0 ? (spendToday / dailyBudget) * 100 : null
+  const expectedPct    = (hoursNow / 24) * 100
+  const pacingRatio    = pacePct != null && expectedPct > 0 ? pacePct / expectedPct : null
+  const pacingLabel    = pacingRatio == null ? '' : pacingRatio > 1.2 ? 'Adelantado' : pacingRatio < 0.8 ? 'Atrasado' : 'En ritmo'
+  const pacingStatus   = (pacingRatio == null ? 'neutral' : pacingRatio > 1.2 ? 'bad' : pacingRatio < 0.8 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
+
+  // ── Status vars ────────────────────────────────────────────────────
   const syncTime   = lastSynced ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   const pLabel     = PERIOD_SHORT[period] === 'custom' ? 'rango' : PERIOD_SHORT[period]
   const roasStatus = !realRoas ? 'neutral' : realRoas >= 5 ? 'ok' : realRoas >= 3 ? 'warn' : 'bad'
@@ -242,16 +337,37 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   return (
     <div className="max-w-7xl mx-auto space-y-8">
 
+      {/* Top loading bar while syncing */}
+      {syncing && (
+        <div className="fixed top-0 left-0 right-0 h-0.5 z-50 overflow-hidden">
+          <div className="h-full bg-emerald-400 animate-pulse w-full" />
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {showToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs px-4 py-2.5 rounded-full shadow-xl z-50 flex items-center gap-2 pointer-events-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+          Datos actualizados
+        </div>
+      )}
+
       {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Dashboard</h1>
             <span className={`w-2 h-2 rounded-full ${roasStatus === 'ok' ? 'bg-emerald-400' : roasStatus === 'warn' ? 'bg-amber-400' : roasStatus === 'bad' ? 'bg-red-400' : 'bg-zinc-600'}`} title={`ROAS: ${roasStatus}`} />
+            {/* Live indicator */}
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+              <span className={`text-[10px] font-semibold ${isLive ? 'text-emerald-500 dark:text-emerald-400' : 'text-zinc-600'}`}>{isLive ? 'EN VIVO' : 'offline'}</span>
+            </div>
           </div>
-          <p className="text-xs mt-0.5 text-gray-400 dark:text-zinc-500 flex items-center gap-1.5">
+          <p className="text-xs mt-0.5 text-gray-400 dark:text-zinc-500 flex items-center gap-1.5 flex-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Actualizado {syncTime} &middot; {snapshot.snapshot_date}
+            <span className="text-zinc-600">&middot; ↺ {fmtCountdown(countdown)}</span>
             {syncError && (
               syncError.toLowerCase().includes('token') || syncError.toLowerCase().includes('access') || syncError.toLowerCase().includes('reconect')
                 ? <span className="text-red-500 ml-1">&#9888; <a href="/settings" className="underline hover:text-red-400">Reconectar TN</a></span>
@@ -261,15 +377,22 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {!notifEnabled && (
+            <button onClick={enableNotifications} title="Activar alertas push de frecuencia alta"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 rounded-xl transition-all border border-zinc-200 dark:border-zinc-700">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+              Alertas
+            </button>
+          )}
           <button onClick={triggerSync} disabled={syncing}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 disabled:opacity-50 text-black font-bold text-sm rounded-xl shadow-md transition-all">
             {syncIcon}
             {syncing ? 'Actualizando...' : 'Actualizar'}
           </button>
-          <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-xl p-0.5 gap-0.5">
+          <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-xl p-0.5 gap-0.5 flex-wrap">
             {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
               <button key={p} onClick={() => setPeriod(p)}
-                className={'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ' + (period === p ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200')}>
+                className={'px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all ' + (period === p ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200')}>
                 {PERIOD_LABELS[p]}
               </button>
             ))}
@@ -277,13 +400,14 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       </div>
 
-      {/* HERO ROW - 5 KPIs clave */}
+      {/* HERO ROW */}
       <div className="flex gap-3 overflow-x-auto pb-1">
         <HeroKpi label="ROAS Real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="TN ÷ gasto Meta" status={roasStatus} accent="bg-emerald-400" />
         <HeroKpi label={`Ventas TN ${pLabel}`} value={fmtM(tnRevenue)} sub="todas las fuentes" accent="bg-violet-400" />
-        <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400" delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} />
+        <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400"
+          delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} loading={period === 'today' && todayLoading} />
         <HeroKpi label="CPA blended" value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-amber-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} />
-        <HeroKpi label="Compras pixel" value={String(summary.total_purchases_7d || 0)} sub={summary.total_purchases_7d && periodDays > 1 ? `~${(summary.total_purchases_7d / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(summary.total_purchases_7d, prevSummary?.total_purchases_7d)} />
+        <HeroKpi label="Compras pixel" value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" loading={period === 'today' && todayLoading} />
       </div>
 
       {/* Custom date picker */}
@@ -305,7 +429,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-amber-500 shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
           <p className="text-xs text-amber-700 dark:text-amber-400">
             {period === 'today'
-              ? <><strong>ROAS real hoy: {realRoas?.toFixed(2) ?? '—'}x</strong> (ventas TN / gasto) vs <strong>{summary.blended_roas?.toFixed(2) ?? '—'}x</strong> reportado por Meta.</>
+              ? <><strong>ROAS real hoy: {realRoas?.toFixed(2) ?? '—'}x</strong> (ventas TN / gasto) vs <strong>{summary.blended_roas?.toFixed(2) ?? '—'}x</strong> reportado por Meta. Gasto actualizado en tiempo real.</>
               : 'ROAS de ayer puede incluir conversiones de dias anteriores (ventana de atribucion Meta).'}
           </p>
         </div>
@@ -338,7 +462,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 : 'neutral'
                 : 'neutral'
             }
-            tooltip="Órdenes totales ÷ Clientes únicos. >1.2 = buena tasa de recompra. Ayuda a estimar LTV."
+            tooltip="Órdenes totales ÷ Clientes únicos. >1.2 = buena tasa de recompra."
           />
         </div>
       </div>
@@ -351,12 +475,47 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard label={`Gasto ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400" delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} tooltip="Total invertido en Meta Ads en el período." />
           <KpiCard label="Budget/día" value={fmtM(summary.daily_budget_active)} sub="ARS activo" accent="bg-blue-400" tooltip="Presupuesto diario total de todos los ad sets ACTIVE en este momento." />
-          <KpiCard label={`Compras ${pLabel}`} value={String(summary.total_purchases_7d || 0)} sub={summary.total_purchases_7d && periodDays > 1 ? `~${(summary.total_purchases_7d / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(summary.total_purchases_7d, prevSummary?.total_purchases_7d)} tooltip="Compras atribuidas por el pixel de Meta (ventana 7d click / 1d view)." />
-          <KpiCard label="ROAS real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="ventas TN / gasto" status={roasStatus} accent="bg-blue-400" tooltip="ROAS real = ventas totales de Tiendanube ÷ gasto Meta. Más conservador que el ROAS de Meta." />
+          <KpiCard label={`Compras ${pLabel}`} value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(metaPurchases, prevSummary?.total_purchases_7d)} tooltip="Compras atribuidas por el pixel de Meta (ventana 7d click / 1d view)." />
+          <KpiCard label="ROAS real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="ventas TN / gasto" status={roasStatus} accent="bg-blue-400" tooltip="ROAS real = ventas totales de Tiendanube ÷ gasto Meta." />
           <KpiCard label="CPA blend." value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-blue-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} tooltip={`Costo por compra atribuida. Verde = por debajo del breakeven (${fmtM(BREAKEVEN_CPA)}).`} />
           <KpiCard label="Ad sets activos" value={String(summary.active_adsets || 0)} sub="corriendo" accent="bg-blue-400" tooltip="Ad sets con estado ACTIVE en este momento." />
         </div>
       </div>
+
+      {/* BUDGET PACING — solo para Hoy */}
+      {period === 'today' && dailyBudget > 0 && pacePct != null && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Pacing del día</p>
+                <p className="text-[10px] text-gray-400 dark:text-zinc-500">Gasto vs ritmo esperado a las {new Date().getHours()}h</p>
+              </div>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${pacingStatus === 'ok' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : pacingStatus === 'warn' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400'}`}>
+              {pacingLabel}
+            </span>
+          </div>
+          <div className="relative h-3 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            {/* Expected pace marker */}
+            <div className="absolute top-0 bottom-0 w-px bg-zinc-400 dark:bg-zinc-500 opacity-50 z-10"
+                 style={{ left: `${Math.min(expectedPct, 99)}%` }} />
+            {/* Actual spend bar */}
+            <div className={`h-full rounded-full transition-all duration-500 ${pacingStatus === 'ok' ? 'bg-emerald-400' : pacingStatus === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`}
+                 style={{ width: `${Math.min(pacePct, 100)}%` }} />
+          </div>
+          <div className="flex justify-between text-[10px] text-gray-400 dark:text-zinc-600 mt-2">
+            <span>Gastado: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(spendToday)}</strong> ({pacePct.toFixed(0)}% del budget)</span>
+            <span>Budget diario: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(dailyBudget)}</strong></span>
+          </div>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">
+            Ritmo esperado a esta hora: {expectedPct.toFixed(0)}% &middot; {pacingRatio != null ? `${(pacingRatio * 100).toFixed(0)}% del ritmo esperado` : ''}
+          </p>
+        </div>
+      )}
 
       {/* 3. CALIDAD PUBLICITARIA */}
       <div>
@@ -393,7 +552,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       </div>
 
-      {/* 3.5 TENDENCIA HISTORICA */}
+      {/* TENDENCIA HISTORICA */}
       {historicalSnapshots.length >= 3 && (
         <div>
           <SectionLabel title="Tendencia 30 días" sub="ROAS real y gasto semanal — últimos 30 snapshots"
@@ -443,7 +602,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       )}
 
-      {/* 4. HIGHLIGHTS */}
+      {/* HIGHLIGHTS */}
       <div>
         <SectionLabel title="Highlights del período" sub="Lo más relevante de un vistazo"
           color="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
@@ -491,7 +650,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             ) : <p className="text-xs text-gray-400 dark:text-zinc-600">Sin creativos de tráfico con datos</p>}
           </div>
 
-          {/* Ventas Meta vs Organico */}
+          {/* Ventas por origen */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -595,7 +754,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <div className="space-y-2">
             {summary.alerts.slice(0,5).map((alert, i) => (
               <div key={i} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${alert.severity==='danger'?'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50':alert.severity==='warning'?'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50':'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50'}`}>
-                <span className={`mt-0.5 ${alert.severity==='danger'?'text-red-500':alert.severity==='warning'?'text-amber-500':'text-blue-500'}`}>{alert.severity==='danger'?'🔴':alert.severity==='warning'?'🟡':'ℹ️'}</span>
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${alert.severity==='danger'?'bg-red-500':alert.severity==='warning'?'bg-amber-500':'bg-blue-500'}`} />
                 <div>
                   <p className={`font-semibold text-sm ${alert.severity==='danger'?'text-red-800 dark:text-red-300':alert.severity==='warning'?'text-amber-800 dark:text-amber-300':'text-blue-800 dark:text-blue-300'}`}>{alert.entity_name}</p>
                   <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">{alert.message}</p>
@@ -606,10 +765,9 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       )}
 
-      {/* 5. FUNNEL + RECONCILIACION */}
+      {/* FUNNEL + RECONCILIACION */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* Funnel de conversion Meta -> TN */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -622,7 +780,6 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           </div>
           {(() => {
             const totalClicks = [...convAdsets, ...trafAdsets].reduce((s, a) => s + (a.clicks || 0), 0)
-            const metaPurchases = summary.total_purchases_7d || 0
             const tnOrders = tnData?.total_orders || 0
             const ctr2pur = totalClicks > 0 && metaPurchases > 0 ? (metaPurchases / totalClicks * 100).toFixed(2) : null
             const attrRate = tnOrders > 0 && metaPurchases > 0 ? Math.round(metaPurchases / tnOrders * 100) : null
@@ -656,7 +813,6 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           })()}
         </div>
 
-        {/* Reconciliacion pixel vs TN */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -674,7 +830,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <p className="text-xs font-medium text-gray-700 dark:text-zinc-300">Meta pixel (atribuido)</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{summary.total_purchases_7d || 0} compras</p>
+                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{metaPurchases} compras</p>
                 <p className="text-[10px] text-gray-400">ROAS {summary.blended_roas?.toFixed(2) ?? '—'}x</p>
               </div>
             </div>
@@ -688,16 +844,16 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 <p className="text-[10px] text-gray-400">ROAS {realRoas?.toFixed(2) ?? '—'}x</p>
               </div>
             </div>
-            {tnData?.total_orders != null && summary.total_purchases_7d != null && (
+            {tnData?.total_orders != null && metaPurchases != null && (
               <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700">
                 <p className="text-xs text-gray-500 dark:text-zinc-400">Gap de atribución</p>
                 <div className="text-right">
                   <p className="text-sm font-bold text-gray-600 dark:text-zinc-300">
-                    {tnData.total_orders - (summary.total_purchases_7d || 0)} órdenes no capturadas
+                    {tnData.total_orders - metaPurchases} órdenes no capturadas
                   </p>
                   <p className="text-[10px] text-gray-400">
                     {tnData.total_orders > 0
-                      ? Math.round(((tnData.total_orders - (summary.total_purchases_7d || 0)) / tnData.total_orders) * 100)
+                      ? Math.round(((tnData.total_orders - metaPurchases) / tnData.total_orders) * 100)
                       : 0}% sin atribución Meta
                   </p>
                 </div>
