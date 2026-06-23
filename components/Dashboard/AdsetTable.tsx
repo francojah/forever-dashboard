@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState } from 'react'
 import type { Adset, Ad } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 
-const ROAS_TARGET = 3.0
+const BREAKEVEN_CPA = 30462
+const ROAS_BE       = 1.77   // 1 / 0.53 margen
 
 function isTrafficAdset(a: Adset, campaignMap: Record<string, string>): boolean {
   const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
@@ -13,33 +14,59 @@ function isTrafficAdset(a: Adset, campaignMap: Record<string, string>): boolean 
   return campName.includes('trafico') || campName.includes('tráfico') || campName.includes('traffic')
 }
 
-// ── Mini components ───────────────────────────────────────────────
+// ── Health status dot ─────────────────────────────────────────────
+function healthStatus(cpa: number | null | undefined, roas: number | null | undefined, freq: number | null | undefined, spend: number): 'ok' | 'warn' | 'bad' | 'neutral' {
+  if (!spend || spend < 500) return 'neutral'
+  if (freq && freq >= 4)                          return 'bad'
+  if (cpa  && cpa > BREAKEVEN_CPA * 1.3)         return 'bad'
+  if (freq && freq >= 2.5)                        return 'warn'
+  if (cpa  && cpa > BREAKEVEN_CPA)               return 'warn'
+  if (roas && roas < ROAS_BE && spend > 2000)    return 'warn'
+  return 'ok'
+}
+
+function HealthDot({ cpa, roas, freq, spend }: { cpa?: number | null; roas?: number | null; freq?: number | null; spend: number }) {
+  const s = healthStatus(cpa, roas, freq, spend)
+  const map = {
+    ok:      { dot: 'bg-emerald-400', label: 'Saludable',  tip: 'CPA ok · ROAS ok · Frecuencia normal' },
+    warn:    { dot: 'bg-amber-400',   label: 'Atención',   tip: cpa && cpa > BREAKEVEN_CPA ? `CPA $${Math.round(cpa/1000)}K supera BE $${Math.round(BREAKEVEN_CPA/1000)}K` : freq && freq >= 2.5 ? `Frecuencia ${freq?.toFixed(1)}x en zona de alerta` : 'Revisar métricas' },
+    bad:     { dot: 'bg-red-400',     label: 'Crítico',    tip: cpa && cpa > BREAKEVEN_CPA * 1.3 ? `CPA $${Math.round(cpa!/1000)}K muy alto — ${Math.round(cpa!/BREAKEVEN_CPA*100-100)}% sobre BE` : `Frecuencia ${freq?.toFixed(1)}x — audiencia saturada` },
+    neutral: { dot: 'bg-gray-300 dark:bg-zinc-600', label: 'Sin datos', tip: 'Gasto insuficiente para evaluar' },
+  }[s]
+  return (
+    <span className="inline-flex items-center gap-1.5 group relative">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${map.dot}`} />
+      <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 hidden sm:inline">{map.label}</span>
+      <span className="absolute bottom-full left-0 mb-1.5 w-52 text-[11px] bg-gray-900 text-white rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
+        {map.tip}
+      </span>
+    </span>
+  )
+}
+
+// ── Visual sub-components ─────────────────────────────────────────
 function RoasBar({ roas }: { roas?: number | null }) {
   if (!roas) return <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
-  const pct  = Math.min((roas / (ROAS_TARGET * 2)) * 100, 100)
-  const color = roas >= ROAS_TARGET * 1.5 ? 'bg-emerald-400' : roas >= ROAS_TARGET ? 'bg-blue-400' : roas >= 1.5 ? 'bg-amber-400' : 'bg-red-400'
+  const pct   = Math.min((roas / (ROAS_BE * 3)) * 100, 100)
+  const color = roas >= ROAS_BE * 3 ? 'bg-emerald-400' : roas >= ROAS_BE * 2 ? 'bg-blue-400' : roas >= ROAS_BE ? 'bg-amber-400' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2 min-w-[80px]">
       <div className="flex-1 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: pct + '%' }} />
       </div>
-      <span className={`text-xs font-bold tabular-nums ${roas >= ROAS_TARGET ? 'text-emerald-600 dark:text-emerald-400' : roas >= 1.5 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500'}`}>
+      <span className={`text-xs font-bold tabular-nums ${roas >= ROAS_BE ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
         {roas.toFixed(2)}x
       </span>
     </div>
   )
 }
 
-function CpaChip({ cpa, breakeven }: { cpa?: number | null; breakeven: number }) {
+function CpaChip({ cpa }: { cpa?: number | null }) {
   if (!cpa) return <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
-  const color = cpa <= breakeven ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
-    : cpa <= breakeven * 1.3 ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30'
+  const color = cpa <= BREAKEVEN_CPA       ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
+    : cpa <= BREAKEVEN_CPA * 1.3           ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30'
     : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30'
-  return (
-    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md tabular-nums ${color}`}>
-      ${Math.round(cpa).toLocaleString('es-AR')}
-    </span>
-  )
+  return <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md tabular-nums ${color}`}>${Math.round(cpa).toLocaleString('es-AR')}</span>
 }
 
 function CtrBadge({ ctr }: { ctr?: number | null }) {
@@ -50,11 +77,11 @@ function CtrBadge({ ctr }: { ctr?: number | null }) {
 
 function FreqBadge({ freq }: { freq?: number | null }) {
   if (!freq) return <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
-  const color = freq >= 4 ? 'text-red-500' : freq >= 2.5 ? 'text-amber-500 dark:text-amber-400' : 'text-gray-500 dark:text-zinc-400'
-  return <span className={`text-xs font-medium tabular-nums ${color}`}>{freq.toFixed(1)}x</span>
+  const color = freq >= 4 ? 'text-red-500 font-bold' : freq >= 2.5 ? 'text-amber-500 dark:text-amber-400' : 'text-gray-500 dark:text-zinc-400'
+  return <span className={`text-xs tabular-nums ${color}`}>{freq.toFixed(1)}x</span>
 }
 
-function VideoMetric({ value, label, greenThreshold, amberThreshold }: { value?: number | null; label: string; greenThreshold: number; amberThreshold: number }) {
+function VideoMetric({ value, greenThreshold, amberThreshold }: { value?: number | null; greenThreshold: number; amberThreshold: number }) {
   if (value == null) return <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
   const color = value >= greenThreshold ? 'text-emerald-600 dark:text-emerald-400' : value >= amberThreshold ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-zinc-600'
   return <span className={`text-xs font-medium tabular-nums ${color}`}>{value.toFixed(1)}%</span>
@@ -69,410 +96,175 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
-// ── Ad pause/activate button ──────────────────────────────────────
-function AdActionButtons({ ad, onDone }: { ad: Ad; onDone: () => void }) {
-  const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
-  const [confirm, setConfirm] = useState<{ action: string; label: string } | null>(null)
-  const [msg, setMsg]         = useState('')
+// ── Creative performance badge ────────────────────────────────────
+type CreativeRank = 'top' | 'mid' | 'low' | 'fatigued' | 'paused'
 
-  const doAction = useCallback(async (action: string, label: string) => {
-    setState('loading')
-    try {
-      const res = await fetch('/api/meta/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity: 'ad', id: ad.id, action }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Error')
-      setMsg(label + ' ✓'); setState('done')
-      setTimeout(() => { setState('idle'); onDone() }, 2000)
-    } catch { setState('error'); setTimeout(() => setState('idle'), 2500) }
-    setConfirm(null)
-  }, [ad.id, onDone])
+function getCreativeRank(ad: Ad, allAds: Ad[], type: 'conversion' | 'traffic'): CreativeRank {
+  if (ad.status === 'PAUSED') return 'paused'
+  if (ad.frequency && ad.frequency >= 4) return 'fatigued'
 
-  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">...</span>
-  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
-  if (state === 'error')   return <span className="text-xs text-red-500">Error</span>
+  const activeAds = allAds.filter(a => a.status === 'ACTIVE' && (a.spend || 0) > 500)
+  if (activeAds.length < 2) return 'mid'
 
-  if (confirm) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-gray-500 dark:text-zinc-400">{confirm.label}?</span>
-        <button onClick={() => doAction(confirm.action, confirm.label)}
-          className="text-xs px-1.5 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium">Si</button>
-        <button onClick={() => setConfirm(null)}
-          className="text-xs px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400">No</button>
-      </div>
-    )
+  if (type === 'conversion') {
+    const cpas = activeAds.map(a => a.cost_per_result).filter(Boolean) as number[]
+    if (!cpas.length || !ad.cost_per_result) return 'mid'
+    const sorted = [...cpas].sort((a, b) => a - b)
+    const rank   = sorted.indexOf(ad.cost_per_result)
+    if (rank === 0) return 'top'
+    if (rank >= sorted.length - 1) return 'low'
+  } else {
+    const ctrs = activeAds.map(a => a.ctr).filter(Boolean) as number[]
+    if (!ctrs.length || !ad.ctr) return 'mid'
+    const sorted = [...ctrs].sort((a, b) => b - a)
+    const rank   = sorted.indexOf(ad.ctr)
+    if (rank === 0) return 'top'
+    if (rank >= sorted.length - 1) return 'low'
   }
+  return 'mid'
+}
 
-  if (ad.status === 'ACTIVE') {
-    return (
-      <button onClick={() => setConfirm({ action: 'pause', label: 'Pausar' })}
-        className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 hover:text-red-500 transition-colors">
-        Pausar
-      </button>
-    )
-  }
+function CreativeBadge({ rank }: { rank: CreativeRank }) {
+  const map = {
+    top:      { label: 'TOP',      cls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
+    mid:      null,
+    low:      { label: 'BAJO',     cls: 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800' },
+    fatigued: { label: 'SATURADO', cls: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800' },
+    paused:   { label: 'PAUSADO',  cls: 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 border border-gray-200 dark:border-zinc-700' },
+  }[rank]
+  if (!map) return null
+  return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide ${map.cls}`}>{map.label}</span>
+}
+
+// ── Format badge (video vs image) ─────────────────────────────────
+function FormatBadge({ ad }: { ad: Ad }) {
+  const isVideo = (ad.hook_rate != null && ad.hook_rate > 0) || (ad.view_rate != null && ad.view_rate > 0)
   return (
-    <button onClick={() => setConfirm({ action: 'activate', label: 'Activar' })}
-      className="text-xs px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
-      Activar
-    </button>
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${isVideo ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500'}`}>
+      {isVideo ? '▶ VID' : '🖼 IMG'}
+    </span>
   )
 }
 
-// ── Inline budget editor (click to edit) ─────────────────────────
-function InlineBudgetEdit({ adset, onDone }: { adset: Adset; onDone: () => void }) {
-  const [editing, setEditing] = useState(false)
-  const [value, setValue]     = useState(String(adset.daily_budget || ''))
-  const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
-
-  const submit = useCallback(async () => {
-    const newBudget = Math.round(parseInt(value) / 500) * 500
-    if (!newBudget || newBudget === adset.daily_budget) { setEditing(false); return }
-    setState('loading')
-    try {
-      const res = await fetch('/api/meta/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity: 'adset', id: adset.id, action: 'set_budget', value: newBudget }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Error')
-      setState('done'); setEditing(false)
-      setTimeout(() => { setState('idle'); onDone() }, 1500)
-    } catch { setState('error'); setTimeout(() => setState('idle'), 2000); setEditing(false) }
-  }, [value, adset.daily_budget, adset.id, onDone])
-
-  const budget = adset.daily_budget || 0
-
-  if (state === 'loading') return <span className="text-xs text-zinc-400 animate-pulse">...</span>
-  if (state === 'done')    return <span className="text-xs text-emerald-500">✓</span>
-  if (state === 'error')   return <span className="text-xs text-red-500">Error</span>
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-gray-400">$</span>
-        <input
-          ref={inputRef}
-          type="number"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setEditing(false) }}
-          onBlur={submit}
-          className="w-20 text-xs bg-gray-50 dark:bg-zinc-800 border border-indigo-400 rounded px-1.5 py-0.5 text-gray-900 dark:text-zinc-100 outline-none"
-          step={500}
-        />
-      </div>
-    )
-  }
-
-  if (!budget || adset.status === 'PAUSED') {
-    return <span className="text-xs text-gray-300 dark:text-zinc-700">—</span>
-  }
-
-  return (
-    <button
-      onClick={() => { setValue(String(budget)); setEditing(true) }}
-      title="Click para editar budget"
-      className="text-xs text-gray-500 dark:text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors flex items-center gap-1 group"
-    >
-      <span className="tabular-nums">${budget.toLocaleString('es-AR')}</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
-      </svg>
-    </button>
-  )
-}
-
-// ── +/- budget adjustment buttons ────────────────────────────────
-function AdsetBudgetButtons({ adset, onDone }: { adset: Adset; onDone: () => void }) {
-  const [state, setState]     = useState<'idle'|'loading'|'done'|'error'>('idle')
-  const [confirm, setConfirm] = useState<{ action: string; label: string; value: number } | null>(null)
-  const [msg, setMsg]         = useState('')
-
-  const doAction = useCallback(async (action: string, label: string, value: number) => {
-    setState('loading')
-    try {
-      const res = await fetch('/api/meta/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity: 'adset', id: adset.id, action, value }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Error')
-      setMsg(label + ' ✓'); setState('done')
-      setTimeout(() => { setState('idle'); onDone() }, 2000)
-    } catch { setState('error'); setTimeout(() => setState('idle'), 2500) }
-    setConfirm(null)
-  }, [adset.id, onDone])
-
-  const budget = adset.daily_budget || 0
-  if (!budget || adset.status === 'PAUSED') return null
-
-  if (state === 'loading') return <span className="text-xs text-gray-400 dark:text-zinc-500 animate-pulse">...</span>
-  if (state === 'done')    return <span className="text-xs text-emerald-600 dark:text-emerald-400">{msg}</span>
-  if (state === 'error')   return <span className="text-xs text-red-500">Error</span>
-
-  if (confirm) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-gray-500 dark:text-zinc-400">{confirm.label}?</span>
-        <button onClick={() => doAction(confirm.action, confirm.label, confirm.value)}
-          className="text-xs px-1.5 py-0.5 rounded bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium">Si</button>
-        <button onClick={() => setConfirm(null)}
-          className="text-xs px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400">No</button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <button onClick={() => setConfirm({ action: 'set_budget', label: '+20%', value: Math.round(budget * 1.2 / 500) * 500 })}
-        className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
-        +20%
-      </button>
-      <button onClick={() => setConfirm({ action: 'set_budget', label: '-20%', value: Math.round(budget * 0.8 / 500) * 500 })}
-        className="text-xs px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors font-medium">
-        -20%
-      </button>
-    </div>
-  )
-}
-
-// ── Sub-tabla de creativos ────────────────────────────────────────
-function AdsSubTable({ ads, type, breakeven, onAction, colCount }: {
-  ads: Ad[]; type: 'conversion' | 'traffic'; breakeven: number; onAction: () => void; colCount: number
+// ── Creative sub-table ────────────────────────────────────────────
+function AdsSubTable({ ads, type, colCount }: {
+  ads: Ad[]; type: 'conversion' | 'traffic'; colCount: number
 }) {
   if (ads.length === 0) return (
     <tr><td colSpan={colCount} className="px-8 py-3 text-xs text-gray-400 dark:text-zinc-600 italic">Sin creativos con datos en este periodo.</td></tr>
   )
   const isConv = type === 'conversion'
+  const sortedAds = [...ads].sort((a, b) => (b.spend || 0) - (a.spend || 0))
+
   return (
-    <>
-      <tr className="bg-gray-50/80 dark:bg-zinc-800/60">
-        <td colSpan={colCount} className="px-0 py-0">
+    <tr>
+      <td colSpan={colCount} className="px-0 py-0">
+        <div className="bg-gray-50/80 dark:bg-zinc-800/60">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-t border-gray-100 dark:border-zinc-700">
-                <th className="pl-12 pr-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Creativo</th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Gasto</th>
+                <th className="pl-12 pr-2 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Creativo</th>
+                <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Gasto</th>
                 {isConv ? (
                   <>
-                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Compras</th>
-                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPA</th>
-                    <th className="px-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">ROAS</th>
+                    <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Compras</th>
+                    <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPA</th>
+                    <th className="px-2 py-2 text-left  text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">ROAS</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Impr.</th>
-                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Clicks</th>
-                    <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPC</th>
+                    <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Clicks</th>
+                    <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CPC</th>
                   </>
                 )}
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CTR</th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">CTR</th>
+                <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
                   <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio. >3x puede indicar saturación." /></span>
                 </th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
-                  <span className="inline-flex items-center gap-1">Hook%<InfoTooltip text="Hook Rate: % que inició reproducción. Bueno >20%." /></span>
+                <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">Hook%<InfoTooltip text="% que inició reproducción. Bueno >20%." /></span>
                 </th>
-                <th className="px-3 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
-                  <span className="inline-flex items-center gap-1">View%<InfoTooltip text="View Rate: % que vio ≥50% del video. Bueno >25%." /></span>
+                <th className="px-2 py-2 text-right text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">View%<InfoTooltip text="% que vio ≥50% del video. Bueno >25%." /></span>
                 </th>
-                <th className="px-3 py-2 text-left text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Accion</th>
               </tr>
             </thead>
             <tbody>
-              {ads.map(ad => {
-                const adPaused = ad.status === 'PAUSED'
-                const adRoas   = ad.roas
-                const adCpa    = ad.cost_per_result
-                const adSpend  = ad.spend || 0
-                const adTint   =
-                  adPaused                                         ? 'opacity-55'
-                  : (adRoas && adRoas >= 5)                        ? 'bg-emerald-50/40 dark:bg-emerald-950/15'
-                  : (adCpa && adCpa > breakeven && adSpend > 2000) ? 'bg-red-50/40 dark:bg-red-950/10'
-                  : ''
+              {sortedAds.map(ad => {
+                const rank   = getCreativeRank(ad, sortedAds, type)
+                const adTint = rank === 'top'      ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
+                             : rank === 'low'      ? 'bg-red-50/30 dark:bg-red-950/10'
+                             : rank === 'fatigued' ? 'bg-amber-50/30 dark:bg-amber-950/10'
+                             : rank === 'paused'   ? 'opacity-50'
+                             : ''
                 return (
-                  <tr key={ad.id} className={`border-t border-gray-100 dark:border-zinc-700/50 hover:bg-white/50 dark:hover:bg-zinc-800/30 ${adTint}`}>
-                    <td className="pl-12 pr-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        {ad.status === 'PAUSED' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
-                        {ad.status === 'ACTIVE' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
-                        <span className="text-gray-700 dark:text-zinc-200 leading-tight">{ad.name}</span>
+                  <tr key={ad.id} className={`border-t border-gray-100 dark:border-zinc-700/50 hover:bg-white/50 dark:hover:bg-zinc-800/30 transition-colors ${adTint}`}>
+                    <td className="pl-12 pr-2 py-2.5 max-w-[200px]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <FormatBadge ad={ad} />
+                        <CreativeBadge rank={rank} />
+                        <span className="text-gray-700 dark:text-zinc-200 leading-tight truncate max-w-[140px]" title={ad.name}>{ad.name}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">
+                    <td className="px-2 py-2.5 text-right text-gray-600 dark:text-zinc-300 tabular-nums">
                       {ad.spend ? '$' + Math.round(ad.spend).toLocaleString('es-AR') : '—'}
                     </td>
                     {isConv ? (
                       <>
-                        <td className="px-3 py-2 text-right font-medium text-gray-700 dark:text-zinc-200">{ad.results ?? '—'}</td>
-                        <td className="px-3 py-2 text-right"><CpaChip cpa={ad.cost_per_result} breakeven={breakeven} /></td>
-                        <td className="px-3 py-2"><RoasBar roas={ad.roas} /></td>
+                        <td className="px-2 py-2.5 text-right font-medium text-gray-700 dark:text-zinc-200">{ad.results ?? '—'}</td>
+                        <td className="px-2 py-2.5 text-right"><CpaChip cpa={ad.cost_per_result} /></td>
+                        <td className="px-2 py-2.5"><RoasBar roas={ad.roas} /></td>
                       </>
                     ) : (
                       <>
-                        <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.impressions ? ad.impressions.toLocaleString('es-AR') : '—'}</td>
-                        <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.clicks ? ad.clicks.toLocaleString('es-AR') : '—'}</td>
-                        <td className="px-3 py-2 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">
+                        <td className="px-2 py-2.5 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{ad.clicks ? ad.clicks.toLocaleString('es-AR') : '—'}</td>
+                        <td className="px-2 py-2.5 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">
                           {ad.spend && ad.clicks ? '$' + Math.round(ad.spend / ad.clicks).toLocaleString('es-AR') : '—'}
                         </td>
                       </>
                     )}
-                    <td className="px-3 py-2 text-right"><CtrBadge ctr={ad.ctr} /></td>
-                    <td className="px-3 py-2 text-right"><FreqBadge freq={ad.frequency} /></td>
-                    <td className="px-3 py-2 text-right"><VideoMetric value={ad.hook_rate} label="Hook" greenThreshold={20} amberThreshold={10} /></td>
-                    <td className="px-3 py-2 text-right"><VideoMetric value={ad.view_rate} label="View" greenThreshold={25} amberThreshold={12} /></td>
-                    <td className="px-3 py-2"><AdActionButtons ad={ad} onDone={onAction} /></td>
+                    <td className="px-2 py-2.5 text-right"><CtrBadge ctr={ad.ctr} /></td>
+                    <td className="px-2 py-2.5 text-right"><FreqBadge freq={ad.frequency} /></td>
+                    <td className="px-2 py-2.5 text-right"><VideoMetric value={ad.hook_rate} greenThreshold={20} amberThreshold={10} /></td>
+                    <td className="px-2 py-2.5 text-right"><VideoMetric value={ad.view_rate} greenThreshold={25} amberThreshold={12} /></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-        </td>
-      </tr>
-    </>
+        </div>
+      </td>
+    </tr>
   )
 }
 
-// ── Bulk action bar ───────────────────────────────────────────────
-// IMPORTANT: all hooks must come BEFORE any conditional returns
-function BulkBar({ selected, onDone, onClear }: {
-  selected: Set<string>
-  onDone: () => void
-  onClear: () => void
-}) {
-  // All hooks declared first — no conditional returns before this point
-  const [state, setState]       = useState<'idle'|'loading'|'done'|'error'>('idle')
-  const [confirm, setConfirm]   = useState<string | null>(null)
-
-  const doBulk = useCallback(async (action: string) => {
-    setState('loading')
-    try {
-      const ids = Array.from(selected)
-      await Promise.all(ids.map(id =>
-        fetch('/api/meta/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entity: 'adset', id, action }),
-        })
-      ))
-      setState('done')
-      setTimeout(() => { setState('idle'); onClear(); onDone() }, 2000)
-    } catch {
-      setState('error')
-      setTimeout(() => setState('idle'), 2500)
-    }
-    setConfirm(null)
-  }, [selected, onClear, onDone])
-
-  // Conditional logic comes AFTER all hooks
-  const count = selected.size
-  if (count === 0) return null
-
-  if (state === 'loading') return (
-    <div className="flex items-center gap-3 px-5 py-3 bg-indigo-600 text-white text-sm rounded-xl shadow-lg mb-2">
-      <span className="animate-pulse">Ejecutando en {count} ad set{count !== 1 ? 's' : ''}...</span>
-    </div>
-  )
-  if (state === 'done') return (
-    <div className="flex items-center gap-3 px-5 py-3 bg-emerald-600 text-white text-sm rounded-xl shadow-lg mb-2">
-      <span>✓ Acción completada en {count} ad set{count !== 1 ? 's' : ''}</span>
-    </div>
-  )
-
-  if (confirm) {
-    const labels: Record<string, string> = { pause: 'Pausar', activate: 'Activar' }
-    return (
-      <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 text-white text-sm rounded-xl shadow-lg mb-2">
-        <span className="text-zinc-300">¿{labels[confirm]} {count} ad set{count !== 1 ? 's' : ''}?</span>
-        <button onClick={() => doBulk(confirm)} className="px-3 py-1 bg-white text-zinc-900 rounded-lg font-semibold text-xs hover:bg-zinc-100">Sí</button>
-        <button onClick={() => setConfirm(null)} className="px-3 py-1 border border-zinc-600 text-zinc-300 rounded-lg text-xs hover:bg-zinc-800">No</button>
-        <button onClick={onClear} className="ml-auto text-zinc-500 hover:text-zinc-300 text-xs">Cancelar</button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 border border-zinc-700 rounded-xl shadow-lg mb-2">
-      <span className="text-xs font-semibold text-indigo-400">{count} seleccionado{count !== 1 ? 's' : ''}</span>
-      <div className="flex items-center gap-2 ml-2">
-        <button onClick={() => setConfirm('pause')}
-          className="text-xs px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors">
-          ⏸ Pausar todos
-        </button>
-        <button onClick={() => setConfirm('activate')}
-          className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors">
-          ▶ Activar todos
-        </button>
-      </div>
-      <button onClick={onClear} className="ml-auto text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-        ✕ Deseleccionar
-      </button>
-    </div>
-  )
-}
-
-// ── Adset section with checkboxes ─────────────────────────────────
+// ── Ad Set section ────────────────────────────────────────────────
 interface SectionProps {
-  title: string
-  type: 'conversion' | 'traffic'
-  adsets: Adset[]
-  ads: Ad[]
+  title:       string
+  type:        'conversion' | 'traffic'
+  adsets:      Adset[]
+  ads:         Ad[]
   campaignMap: Record<string, string>
-  breakeven: number
-  period?: string
-  selectedIds: Set<string>
-  onToggleSelect: (id: string) => void
-  onSelectAll: (ids: string[]) => void
-  onAction?: () => void
+  period?:     string
 }
 
-function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period, selectedIds, onToggleSelect, onSelectAll, onAction }: SectionProps) {
-  const [open, setOpen]                     = useState(true)
-  const [expandedIds, setExpanded]          = useState<Set<string>>(new Set())
-  const [collapsedCamps, setCollapsedCamps] = useState<Set<string>>(new Set())
-  const handleAction = onAction ?? (() => {})
+function AdsetSection({ title, type, adsets, ads, campaignMap, period }: SectionProps) {
+  const [open, setOpen]           = useState(true)
+  const [expandedIds, setExpanded]= useState<Set<string>>(new Set())
+  const [collapsedCamps, setColl] = useState<Set<string>>(new Set())
 
-  const toggleCamp = (id: string) => {
-    setCollapsedCamps(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
+  const toggleCamp   = (id: string) => setColl(prev  => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
-  const toggleExpand = (id: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  const sectionIds   = adsets.map(a => a.id)
-  const allSelected  = sectionIds.length > 0 && sectionIds.every(id => selectedIds.has(id))
-  const someSelected = sectionIds.some(id => selectedIds.has(id))
-
-  const totalSpend  = adsets.reduce((s, a) => s + (a.spend  || 0), 0)
+  const totalSpend  = adsets.reduce((s, a) => s + (a.spend       || 0), 0)
   const totalBudget = adsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
   const isConv      = type === 'conversion'
   const gradient    = isConv ? 'from-blue-600 to-blue-700' : 'from-violet-600 to-violet-700'
 
-  const spendLabel = period
-    ? 'Gasto ' + (period === 'hoy' ? 'Hoy' : period === 'ayer' ? 'Ayer' : period === '30d' ? '30d' : '7d')
-    : 'Gasto 7d'
+  const spendLabel  = period === 'hoy' ? 'Gasto Hoy' : period === 'ayer' ? 'Gasto Ayer' : period === '30d' ? 'Gasto 30d' : 'Gasto 7d'
 
-  // Total columns: checkbox(1) + name(1) + budget-inline(1) + gasto(1) + 4 metrics(4) + freq(1) + ajuste(1) = 11
-  const TOTAL_COLS = 11
+  // cols: name | budget | spend | metrics (3-4) | freq | salud  = 8-9
+  const TOTAL_COLS = isConv ? 9 : 8
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm">
@@ -486,16 +278,11 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
           <span className="text-xs text-white/60 bg-white/10 px-2 py-0.5 rounded-full">
             {adsets.length} ad set{adsets.length !== 1 ? 's' : ''}
           </span>
-          {someSelected && (
-            <span className="text-xs text-white/80 bg-white/15 px-2 py-0.5 rounded-full">
-              {sectionIds.filter(id => selectedIds.has(id)).length} sel.
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-5">
           <div className="hidden sm:flex items-center gap-5 text-xs text-white/80">
             <span>{spendLabel}: <strong className="text-white">${Math.round(totalSpend).toLocaleString('es-AR')}</strong></span>
-            <span>Budget/dia: <strong className="text-white">${Math.round(totalBudget).toLocaleString('es-AR')}</strong></span>
+            {totalBudget > 0 && <span>Budget/día: <strong className="text-white">${Math.round(totalBudget).toLocaleString('es-AR')}</strong></span>}
           </div>
           <span className="text-white/70"><Chevron open={open} /></span>
         </div>
@@ -506,22 +293,8 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-800/40">
-                <th className="px-3 py-2.5 w-8">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={() => {
-                      if (allSelected) {
-                        sectionIds.forEach(id => { if (selectedIds.has(id)) onToggleSelect(id) })
-                      } else {
-                        onSelectAll(sectionIds.filter(id => !selectedIds.has(id)))
-                      }
-                    }}
-                    className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                </th>
-                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ad Set</th>
-                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/dia</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ad Set</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Budget/día</th>
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">{spendLabel}</th>
                 {isConv ? (
                   <>
@@ -539,45 +312,38 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                   </>
                 )}
                 <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
-                  <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio. >3x puede causar fatiga." /></span>
+                  <span className="inline-flex items-center gap-1">Frec.<InfoTooltip text="Frecuencia promedio. >3x puede causar fatiga de audiencia." /></span>
                 </th>
-                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">Ajuste</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">Salud<InfoTooltip text={`Estado basado en CPA (BE: $${Math.round(BREAKEVEN_CPA/1000)}K), ROAS mínimo ${ROAS_BE}x y frecuencia.`} /></span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {Array.from(new Set(adsets.map(a => a.campaign_id))).map(campId => {
-                const campAdsets  = adsets.filter(a => a.campaign_id === campId)
-                const campName    = campaignMap[campId] || 'Campaña sin nombre'
-                const campSpend   = campAdsets.reduce((s, a) => s + (a.spend || 0), 0)
-                const campBudget  = campAdsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
-                const campOpen    = !collapsedCamps.has(campId)
-                const campAllSel  = campAdsets.every(a => selectedIds.has(a.id))
+                const campAdsets = adsets.filter(a => a.campaign_id === campId)
+                const campName   = campaignMap[campId] || 'Campaña sin nombre'
+                const campSpend  = campAdsets.reduce((s, a) => s + (a.spend || 0), 0)
+                const campBudget = campAdsets.reduce((s, a) => s + (a.daily_budget || 0), 0)
+                const campOpen   = !collapsedCamps.has(campId)
+
+                // Campaign-level health summary
+                const campBad  = campAdsets.some(a => healthStatus(a.cost_per_result, a.roas, a.frequency, a.spend || 0) === 'bad')
+                const campWarn = campAdsets.some(a => healthStatus(a.cost_per_result, a.roas, a.frequency, a.spend || 0) === 'warn')
+                const campDotColor = campBad ? 'bg-red-400' : campWarn ? 'bg-amber-400' : 'bg-emerald-400'
 
                 return (
                   <React.Fragment key={campId}>
                     {/* Campaign header row */}
                     <tr className="border-t-2 border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/60 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-zinc-800 transition-colors"
                         onClick={() => toggleCamp(campId)}>
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={campAllSel}
-                          onChange={() => {
-                            if (campAllSel) {
-                              campAdsets.forEach(a => { if (selectedIds.has(a.id)) onToggleSelect(a.id) })
-                            } else {
-                              onSelectAll(campAdsets.filter(a => !selectedIds.has(a.id)).map(a => a.id))
-                            }
-                          }}
-                          className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        />
-                      </td>
-                      <td colSpan={TOTAL_COLS - 1} className="px-3 py-2.5">
+                      <td colSpan={TOTAL_COLS} className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-500 dark:text-zinc-400"><Chevron open={campOpen} /></span>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500">
                             <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                           </svg>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${campDotColor}`} />
                           <span className="text-xs font-bold text-gray-700 dark:text-zinc-200">{campName}</span>
                           <span className="text-[10px] text-gray-400 dark:text-zinc-600 bg-gray-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded-full">
                             {campAdsets.length} ad set{campAdsets.length !== 1 ? 's' : ''}
@@ -593,51 +359,38 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                     {campOpen && campAdsets.map(adset => {
                       const adsetAds   = ads.filter(a => a.adset_id === adset.id).sort((a, b) => (b.spend || 0) - (a.spend || 0))
                       const isExpanded = expandedIds.has(adset.id)
-                      const isSelected = selectedIds.has(adset.id)
+                      const isPaused   = adset.status === 'PAUSED'
+                      const cpa        = adset.cost_per_result
+                      const roas       = adset.roas
+                      const spend      = adset.spend || 0
 
-                      const isPaused = adset.status === 'PAUSED'
-                      const cpa      = adset.cost_per_result
-                      const roas     = adset.roas
-                      const spend    = adset.spend || 0
-                      const rowTint  =
-                        isSelected                                           ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
-                        : isPaused                                           ? 'opacity-60'
-                        : (roas && roas >= 5)                               ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
-                        : (cpa && cpa > breakeven && spend > 3000)          ? 'bg-red-50/50 dark:bg-red-950/15'
-                        : (cpa && cpa > breakeven * 1.3 && spend > 1500)   ? 'bg-amber-50/40 dark:bg-amber-950/10'
+                      const hs = healthStatus(cpa, roas, adset.frequency, spend)
+                      const rowTint =
+                        isPaused            ? 'opacity-60'
+                        : hs === 'ok'       ? ''
+                        : hs === 'warn'     ? 'bg-amber-50/30 dark:bg-amber-950/10'
+                        : hs === 'bad'      ? 'bg-red-50/40 dark:bg-red-950/15'
                         : ''
 
                       return (
                         <React.Fragment key={adset.id}>
                           <tr className={`border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors ${rowTint}`}>
-                            {/* Checkbox */}
-                            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => onToggleSelect(adset.id)}
-                                className="rounded border-gray-300 dark:border-zinc-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                              />
-                            </td>
-                            {/* Name — click to expand */}
-                            <td className="px-3 py-3 pl-6 cursor-pointer" onClick={() => toggleExpand(adset.id)}>
+                            {/* Name — click to expand creativos */}
+                            <td className="px-4 py-3 pl-8 cursor-pointer" onClick={() => toggleExpand(adset.id)}>
                               <div className="flex items-center gap-2">
-                                <span className="text-gray-400 dark:text-zinc-500"><Chevron open={isExpanded} /></span>
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  isPaused ? 'bg-zinc-400' :
-                                  (roas && roas >= 5) ? 'bg-emerald-400' :
-                                  (cpa && cpa > breakeven) ? 'bg-red-400' :
-                                  'bg-blue-400'
-                                }`} />
-                                <p className="font-semibold text-gray-900 dark:text-white leading-tight text-sm">{adset.name}</p>
+                                <span className="text-gray-400 dark:text-zinc-500 shrink-0"><Chevron open={isExpanded} /></span>
+                                <p className="font-semibold text-gray-900 dark:text-white leading-tight text-sm truncate max-w-[180px]">{adset.name}</p>
+                                {isPaused && <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 px-1.5 py-0.5 rounded-full font-medium shrink-0">PAUSADO</span>}
                               </div>
                             </td>
-                            {/* Inline budget edit */}
-                            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                              <InlineBudgetEdit adset={adset} onDone={handleAction} />
+                            {/* Budget (read-only) */}
+                            <td className="px-3 py-3">
+                              {adset.daily_budget && !isPaused
+                                ? <span className="text-xs text-gray-500 dark:text-zinc-400 tabular-nums">${adset.daily_budget.toLocaleString('es-AR')}</span>
+                                : <span className="text-xs text-gray-300 dark:text-zinc-700">—</span>}
                             </td>
                             <td className="px-3 py-3 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
-                              {adset.spend ? '$' + Math.round(adset.spend).toLocaleString('es-AR') : '—'}
+                              {spend ? '$' + Math.round(spend).toLocaleString('es-AR') : '—'}
                             </td>
                             {isConv ? (
                               <>
@@ -646,16 +399,14 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                                     {adset.results ?? '—'}
                                   </span>
                                 </td>
-                                <td className="px-3 py-3 text-right"><CpaChip cpa={adset.cost_per_result} breakeven={breakeven} /></td>
-                                <td className="px-3 py-3"><RoasBar roas={adset.roas} /></td>
-                                <td className="px-3 py-3 text-right text-gray-500 dark:text-zinc-400 text-xs tabular-nums">
-                                  {adset.ctr ? adset.ctr.toFixed(2) + '%' : '—'}
-                                </td>
+                                <td className="px-3 py-3 text-right"><CpaChip cpa={cpa} /></td>
+                                <td className="px-3 py-3"><RoasBar roas={roas} /></td>
+                                <td className="px-3 py-3 text-right"><CtrBadge ctr={adset.ctr} /></td>
                               </>
                             ) : (
                               <>
-                                <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.impressions ? adset.impressions.toLocaleString('es-AR') : '—'}</td>
-                                <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{adset.clicks ? adset.clicks.toLocaleString('es-AR') : '—'}</td>
+                                <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">{adset.impressions ? adset.impressions.toLocaleString('es-AR') : '—'}</td>
+                                <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">{adset.clicks ? adset.clicks.toLocaleString('es-AR') : '—'}</td>
                                 <td className="px-3 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums text-xs">
                                   {adset.spend && adset.clicks > 0 ? '$' + Math.round(adset.spend / adset.clicks).toLocaleString('es-AR') : '—'}
                                 </td>
@@ -663,12 +414,12 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
                               </>
                             )}
                             <td className="px-3 py-3 text-right"><FreqBadge freq={adset.frequency} /></td>
-                            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                              <AdsetBudgetButtons adset={adset} onDone={handleAction} />
+                            <td className="px-3 py-3">
+                              <HealthDot cpa={cpa} roas={roas} freq={adset.frequency} spend={spend} />
                             </td>
                           </tr>
                           {isExpanded && (
-                            <AdsSubTable ads={adsetAds} type={type} breakeven={breakeven} onAction={handleAction} colCount={TOTAL_COLS} />
+                            <AdsSubTable ads={adsetAds} type={type} colCount={TOTAL_COLS} />
                           )}
                         </React.Fragment>
                       )
@@ -686,64 +437,30 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, breakeven, period
 
 // ── Export principal ──────────────────────────────────────────────
 interface Props {
-  adsets: Adset[]
-  ads: Ad[]
+  adsets:      Adset[]
+  ads:         Ad[]
   campaignMap: Record<string, string>
-  breakeven: number
-  period?: string
-  onAction?: () => void
+  breakeven?:  number
+  period?:     string
+  onAction?:   () => void
 }
 
-export default function AdsetTable({ adsets, ads, campaignMap, breakeven, period, onAction }: Props) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-
+export default function AdsetTable({ adsets, ads, campaignMap, period }: Props) {
   const convAdsets    = adsets.filter(a => !isTrafficAdset(a, campaignMap))
   const trafficAdsets = adsets.filter(a =>  isTrafficAdset(a, campaignMap))
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }, [])
-
-  const selectAll = useCallback((ids: string[]) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      ids.forEach(id => next.add(id))
-      return next
-    })
-  }, [])
-
-  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
-
-  const handleDone = useCallback(() => {
-    clearSelection()
-    onAction?.()
-  }, [clearSelection, onAction])
-
   return (
-    <div className="space-y-6">
-      <BulkBar selected={selectedIds} onDone={handleDone} onClear={clearSelection} />
-
+    <div className="space-y-5">
       {convAdsets.length > 0 && (
-        <AdsetSection
-          title="Conversion" type="conversion"
-          adsets={convAdsets} ads={ads} campaignMap={campaignMap}
-          breakeven={breakeven} period={period}
-          selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll}
-          onAction={onAction}
-        />
+        <AdsetSection title="Conversión" type="conversion" adsets={convAdsets} ads={ads} campaignMap={campaignMap} period={period} />
       )}
       {trafficAdsets.length > 0 && (
-        <AdsetSection
-          title="Trafico web" type="traffic"
-          adsets={trafficAdsets} ads={ads} campaignMap={campaignMap}
-          breakeven={breakeven} period={period}
-          selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll}
-          onAction={onAction}
-        />
+        <AdsetSection title="Tráfico web" type="traffic" adsets={trafficAdsets} ads={ads} campaignMap={campaignMap} period={period} />
+      )}
+      {convAdsets.length === 0 && trafficAdsets.length === 0 && (
+        <div className="text-center py-16 text-gray-400 dark:text-zinc-500">
+          <p className="text-sm">Sin ad sets activos con datos en este período.</p>
+        </div>
       )}
     </div>
   )

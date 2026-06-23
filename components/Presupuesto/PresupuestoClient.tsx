@@ -5,9 +5,11 @@ import type { Snapshot } from '@/lib/supabase'
 
 const STORAGE_KEY = 'forever-presupuesto-applied'
 
-const BREAKEVEN_CPA = 17500
-const ROAS_MIN = 2.86
-const ROAS_TARGET = 10
+// BREAKEVEN real Forever Basics: merch $19.5K + envío $5.75K + TN 2.5% $1.44K + packaging $350 ≈ $27K/orden
+// AOV $57.5K → margen 53% → BE_CPA = $57.5K − $27K = $30.5K
+const BREAKEVEN_CPA = 30462
+const ROAS_MIN = 1.77   // 1 / 0.53 margen
+const ROAS_TARGET = 5   // ROAS excepcional que justifica escala agresiva
 
 interface Props {
   snapshot: Snapshot | null
@@ -70,7 +72,7 @@ function buildRecommendations(snapshot: Snapshot): Recommendation[] {
           type: 'pause',
           current_budget: budget,
           suggested_budget: 0,
-          reason: `CPA $${Math.round(cpa / 1000)}K supera 1.5x el breakeven ($${BREAKEVEN_CPA / 1000}K). No es rentable.`,
+          reason: `CPA $${Math.round(cpa / 1000)}K supera 1.5x el breakeven ($${Math.round(BREAKEVEN_CPA / 1000)}K). No es rentable.`,
           delta_ars: -budget,
         })
       } else if (cpa && cpa > BREAKEVEN_CPA) {
@@ -81,7 +83,7 @@ function buildRecommendations(snapshot: Snapshot): Recommendation[] {
           type: 'reduce',
           current_budget: budget,
           suggested_budget: suggested,
-          reason: `CPA $${Math.round(cpa / 1000)}K sobre el breakeven. Reducir inversión hasta mejorar.`,
+          reason: `CPA $${Math.round(cpa / 1000)}K sobre el breakeven ($${Math.round(BREAKEVEN_CPA / 1000)}K). Reducir inversión hasta mejorar.`,
           delta_ars: suggested - budget,
         })
       } else if (roas && roas >= ROAS_TARGET * 0.8) {
@@ -392,13 +394,22 @@ export default function PresupuestoClient({ snapshot }: Props) {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => markApplied(r.adset_id)}
-                  disabled={isApplied}
-                  className="shrink-0 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
-                >
-                  {isApplied ? '✓ Aplicado' : 'Marcar como aplicado'}
-                </button>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <a
+                    href="https://adsmanager.facebook.com/adsmanager/manage/adsets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap"
+                  >
+                    Ver en Meta →
+                  </a>
+                  <button
+                    onClick={() => markApplied(r.adset_id)}
+                    className="text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
+                  >
+                    ✓ Marcar listo
+                  </button>
+                </div>
               </div>
             </div>
           )
@@ -406,10 +417,16 @@ export default function PresupuestoClient({ snapshot }: Props) {
       </div>
 
       {/* Disclaimer */}
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4">
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          <strong>Importante:</strong> Estas recomendaciones son orientativas y se basan en los datos de los últimos 7 días. Los cambios de presupuesto deben aplicarse manualmente en Meta Ads Manager. Considerá el contexto estacional y cualquier cambio reciente en creativos antes de actuar.
-        </p>
+      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-4 flex items-start gap-3">
+        <span className="text-blue-400 dark:text-blue-500 shrink-0 mt-0.5 text-base">ℹ</span>
+        <div>
+          <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">Solo lectura — los cambios se aplican en Meta Ads Manager</p>
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            Breakeven: ${Math.round(BREAKEVEN_CPA / 1000)}K CPA · ROAS mínimo: {ROAS_MIN}x · Margen: 53% ·
+            Basado en datos de los últimos 7 días. Considerá el contexto estacional y cambios recientes en creativos antes de actuar.{' '}
+            <a href="https://adsmanager.facebook.com/adsmanager/manage/adsets" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-800 dark:hover:text-blue-200">Abrir Ads Manager →</a>
+          </p>
+        </div>
       </div>
     </div>
   )
