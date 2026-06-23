@@ -99,32 +99,63 @@ function Chevron({ open }: { open: boolean }) {
 // ── Creative performance badge ────────────────────────────────────
 type CreativeRank = 'top' | 'mid' | 'low' | 'fatigued' | 'paused'
 
-function getCreativeRank(ad: Ad, allAds: Ad[], type: 'conversion' | 'traffic'): CreativeRank {
-  if (ad.status === 'PAUSED') return 'paused'
-  if (ad.frequency && ad.frequency >= 4) return 'fatigued'
+interface RankResult {
+  rank: CreativeRank
+  tooltip: string
+}
+
+function getCreativeRank(ad: Ad, allAds: Ad[], type: 'conversion' | 'traffic'): RankResult {
+  // Saturación — umbral absoluto, prioridad máxima
+  if (ad.status === 'PAUSED') return { rank: 'paused', tooltip: 'Ad pausado en Meta.' }
+  if (ad.frequency && ad.frequency >= 4) {
+    return { rank: 'fatigued', tooltip: `Frecuencia ${ad.frequency.toFixed(1)}x — la misma persona ve este ad demasiadas veces. Renovar creativo.` }
+  }
 
   const activeAds = allAds.filter(a => a.status === 'ACTIVE' && (a.spend || 0) > 500)
-  if (activeAds.length < 2) return 'mid'
+  if (activeAds.length < 2) return { rank: 'mid', tooltip: '' }
 
   if (type === 'conversion') {
     const cpas = activeAds.map(a => a.cost_per_result).filter(Boolean) as number[]
-    if (!cpas.length || !ad.cost_per_result) return 'mid'
+    if (!cpas.length || !ad.cost_per_result) return { rank: 'mid', tooltip: '' }
     const sorted = [...cpas].sort((a, b) => a - b)
     const rank   = sorted.indexOf(ad.cost_per_result)
-    if (rank === 0) return 'top'
-    if (rank >= sorted.length - 1) return 'low'
+    const cpaK   = (v: number) => '$' + Math.round(v / 1000) + 'K'
+    const beK    = cpaK(BREAKEVEN_CPA)
+
+    // TOP: mejor CPA del ad set Y rentable (por debajo del BE)
+    if (rank === 0 && ad.cost_per_result < BREAKEVEN_CPA) {
+      const diff = Math.round((sorted[1] - sorted[0]) / 1000)
+      return {
+        rank: 'top',
+        tooltip: `Mejor CPA del ad set (${cpaK(ad.cost_per_result)} vs BE ${beK}). ${sorted.length > 1 ? `${diff}K más eficiente que el siguiente.` : ''}`,
+      }
+    }
+    // BAJO: peor CPA del ad set Y sobre el breakeven (pierde plata)
+    if (rank >= sorted.length - 1 && ad.cost_per_result > BREAKEVEN_CPA) {
+      const overBE = Math.round((ad.cost_per_result - BREAKEVEN_CPA) / 1000)
+      return {
+        rank: 'low',
+        tooltip: `CPA ${cpaK(ad.cost_per_result)} supera el breakeven (${beK}) en $${overBE}K — cada venta pierde dinero. Evaluar pausar o renovar.`,
+      }
+    }
   } else {
+    // Tráfico: ranking por CTR
     const ctrs = activeAds.map(a => a.ctr).filter(Boolean) as number[]
-    if (!ctrs.length || !ad.ctr) return 'mid'
+    if (!ctrs.length || !ad.ctr) return { rank: 'mid', tooltip: '' }
     const sorted = [...ctrs].sort((a, b) => b - a)
     const rank   = sorted.indexOf(ad.ctr)
-    if (rank === 0) return 'top'
-    if (rank >= sorted.length - 1) return 'low'
+
+    if (rank === 0 && ad.ctr >= 1.2) {
+      return { rank: 'top', tooltip: `Mejor CTR del ad set (${ad.ctr.toFixed(2)}%). La audiencia responde bien a este creativo.` }
+    }
+    if (rank >= sorted.length - 1 && ad.ctr < 0.5 && (ad.spend || 0) > 2000) {
+      return { rank: 'low', tooltip: `CTR ${ad.ctr.toFixed(2)}% muy bajo con $${Math.round((ad.spend || 0) / 1000)}K gastados. Revisar el hook o cambiar creativo.` }
+    }
   }
-  return 'mid'
+  return { rank: 'mid', tooltip: '' }
 }
 
-function CreativeBadge({ rank }: { rank: CreativeRank }) {
+function CreativeBadge({ rank, tooltip }: { rank: CreativeRank; tooltip: string }) {
   const map = {
     top:      { label: 'TOP',      cls: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
     mid:      null,
@@ -133,7 +164,18 @@ function CreativeBadge({ rank }: { rank: CreativeRank }) {
     paused:   { label: 'PAUSADO',  cls: 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 border border-gray-200 dark:border-zinc-700' },
   }[rank]
   if (!map) return null
-  return <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide ${map.cls}`}>{map.label}</span>
+  return (
+    <span className="relative group/badge inline-flex">
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide cursor-help ${map.cls}`}>
+        {map.label}
+      </span>
+      {tooltip && (
+        <span className="absolute bottom-full left-0 mb-2 w-60 text-[11px] leading-snug bg-gray-900 dark:bg-zinc-700 text-white rounded-lg px-3 py-2 opacity-0 group-hover/badge:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
+          {tooltip}
+        </span>
+      )}
+    </span>
+  )
 }
 
 // ── Format badge (video vs image) ─────────────────────────────────
@@ -191,7 +233,7 @@ function AdsSubTable({ ads, type, colCount }: {
             </thead>
             <tbody>
               {sortedAds.map(ad => {
-                const rank   = getCreativeRank(ad, sortedAds, type)
+                const { rank, tooltip } = getCreativeRank(ad, sortedAds, type)
                 const adTint = rank === 'top'      ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
                              : rank === 'low'      ? 'bg-red-50/30 dark:bg-red-950/10'
                              : rank === 'fatigued' ? 'bg-amber-50/30 dark:bg-amber-950/10'
@@ -202,7 +244,7 @@ function AdsSubTable({ ads, type, colCount }: {
                     <td className="pl-12 pr-2 py-2.5 max-w-[200px]">
                       <div className="flex items-center gap-2 flex-wrap">
                         <FormatBadge ad={ad} />
-                        <CreativeBadge rank={rank} />
+                        <CreativeBadge rank={rank} tooltip={tooltip} />
                         <span className="text-gray-700 dark:text-zinc-200 leading-tight truncate max-w-[140px]" title={ad.name}>{ad.name}</span>
                       </div>
                     </td>
