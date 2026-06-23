@@ -196,6 +196,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [manOrders,  setManOrders]  = useState('')
   const [manUnits,   setManUnits]   = useState('')
   const [savingMan,  setSavingMan]  = useState(false)
+  const [syncingMonth, setSyncingMonth] = useState(false)
 
   // ── Live data from snapshots ───────────────────────────────────────────────
   const liveData: MonthData = useMemo(() => ({
@@ -327,6 +328,30 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       setManRev(''); setManSpend(''); setManOrders(''); setManUnits('')
     } catch (e) { alert('Error al guardar: ' + e) }
     finally { setSavingMan(false) }
+  }
+
+  async function handleSyncMonth(month: string) {
+    setSyncingMonth(true)
+    try {
+      const res = await fetch(`/api/sync-month?month=${month}`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Error al sincronizar')
+      const newSummary: MonthlySummary = {
+        month,
+        meta_spend: json.meta_spend ?? null,
+        tn_revenue: json.tn_revenue ?? null,
+        tn_orders:  json.tn_orders  ?? null,
+        tn_units:   json.tn_units   ?? null,
+        notes:      json.summary?.notes ?? null,
+        updated_at: new Date().toISOString(),
+      }
+      setSummaries(prev => {
+        const idx = prev.findIndex(s => s.month === month)
+        if (idx >= 0) { const n = [...prev]; n[idx] = newSummary; return n }
+        return [newSummary, ...prev]
+      })
+    } catch (e) { alert('Error al sincronizar: ' + e) }
+    finally { setSyncingMonth(false) }
   }
 
   async function handleExport() {
@@ -506,12 +531,25 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Sin datos para {MONTH_FULL[selMonth-1]} {year}</p>
-            <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Ingresá las ventas y gasto de Meta de ese mes para ver el P&L completo.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+              Sincronizá desde Tiendanube y Meta Ads, o cargá los datos manualmente.
+            </p>
           </div>
-          <button onClick={() => setShowManual(true)}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors">
-            Cargar datos
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => handleSyncMonth(selectedMonthKey)} disabled={syncingMonth}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+              {syncingMonth ? (
+                <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              )}
+              {syncingMonth ? 'Sincronizando…' : 'Sincronizar desde API'}
+            </button>
+            <button onClick={() => setShowManual(true)}
+              className="shrink-0 px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/50 rounded-lg transition-colors">
+              Manual
+            </button>
+          </div>
         </div>
       )}
 
@@ -560,14 +598,34 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Estado de resultados</p>
             <p className="text-xs text-gray-400 dark:text-zinc-500">{periodLabel}
               {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · últimos 30d</span>}
-              {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && <span className="ml-2 text-[10px] bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">Datos manuales</span>}
+              {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (() => {
+                const s = summaries.find(x => x.month === selectedMonthKey)
+                const isAutoSync = s?.notes?.startsWith('Auto-sync')
+                return (
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isAutoSync ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'}`}>
+                    {isAutoSync ? 'Sincronizado desde API' : 'Datos manuales'}
+                  </span>
+                )
+              })()}
             </p>
           </div>
           {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (
-            <button onClick={() => setShowManual(true)}
-              className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
-              Editar datos
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleSyncMonth(selectedMonthKey)} disabled={syncingMonth}
+                className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50">
+                {syncingMonth ? (
+                  <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                )}
+                {syncingMonth ? 'Sincronizando…' : 'Re-sincronizar'}
+              </button>
+              <span className="text-gray-200 dark:text-zinc-700">·</span>
+              <button onClick={() => setShowManual(true)}
+                className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
+                Editar datos
+              </button>
+            </div>
           )}
         </div>
         <table className="w-full text-sm">

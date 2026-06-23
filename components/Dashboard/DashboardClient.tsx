@@ -534,8 +534,9 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const contributionPct  = tnRevenue != null && tnRevenue > 0 ? Math.round((grossProfit ?? 0) / tnRevenue * 100) : null
 
   // Break-even tracker (purchases needed to reach breakeven daily spend)
+  // beCurrentPurchases must be consistent with metaPurchases shown in the KPI
   const beTargetPurchases  = dailyBudget > 0 ? Math.ceil(dailyBudget / BREAKEVEN_CPA) : null
-  const beCurrentPurchases = period === 'today' ? (todayMeta?.purchases ?? 0) : null
+  const beCurrentPurchases = period === 'today' ? metaPurchases : null
   const beRemaining        = beTargetPurchases != null && beCurrentPurchases != null
     ? Math.max(0, beTargetPurchases - beCurrentPurchases)
     : null
@@ -543,14 +544,19 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
     ? Math.min(100, Math.round((beCurrentPurchases / beTargetPurchases) * 100))
     : null
 
-  // Month projection (based on 7d average daily spend & ROAS)
+  // Month projection (based on 7d average daily pace — independent of selected period)
+  // Uses 7d TN revenue and 7d Meta spend to estimate "si mantenés este ritmo el mes completo"
   const now               = new Date()
   const daysInMonth       = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const dayOfMonth        = now.getDate()
   const daysRemaining     = daysInMonth - dayOfMonth
-  const dailySpendAvg7d   = summary.total_spend_7d ? summary.total_spend_7d / 7 : 0
-  const projSpendMonth    = dailySpendAvg7d > 0 ? Math.round(metaSpend + dailySpendAvg7d * daysRemaining) : null
-  const projRevenueMonth  = projSpendMonth != null && realRoas != null ? Math.round(projSpendMonth * realRoas) : null
+  const tnRev7d           = tnSnapshot?.summary_7d?.total_revenue ?? 0
+  const metaSpend7d       = snapshot.periods?.last_7d?.summary?.total_spend_7d ?? summary.total_spend_7d ?? 0
+  const dailyRevAvg7d     = tnRev7d > 0 ? tnRev7d / 7 : 0
+  const dailySpendAvg7d   = metaSpend7d > 0 ? metaSpend7d / 7 : 0
+  // Projected full-month at 7d pace
+  const projRevenueMonth  = dailyRevAvg7d > 0 ? Math.round(dailyRevAvg7d * daysInMonth) : null
+  const projSpendMonth    = dailySpendAvg7d > 0 ? Math.round(dailySpendAvg7d * daysInMonth) : null
   const projProfitMonth   = projRevenueMonth != null && projSpendMonth != null
     ? Math.round(projRevenueMonth * MARGIN - projSpendMonth)
     : null
@@ -861,7 +867,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-violet-400 dark:border-l-violet-500 bg-gradient-to-br from-violet-50/60 to-white dark:from-violet-950/20 dark:to-zinc-900 p-4 shadow-sm">
               <div className="flex items-center gap-1 mb-1.5">
                 <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cómo termino el mes?</p>
-                <InfoTooltip text={`Proyección basada en el ritmo actual de los últimos 7 días. Quedan ${daysRemaining} días del mes.`} />
+                <InfoTooltip text={`Si mantenés el ritmo de los últimos 7 días todo el mes (${daysInMonth} días). TN revenue 7d: ${fmtM(tnRev7d)} → ${fmtM(dailyRevAvg7d)}/día promedio.`} />
               </div>
               <p className={`text-3xl font-bold tabular-nums leading-none ${projRevenueMonth == null ? 'text-gray-300 dark:text-zinc-700' : 'text-violet-600 dark:text-violet-400'}`}>
                 {projRevenueMonth != null ? fmtM(projRevenueMonth) : '—'}
@@ -869,9 +875,10 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">ventas proyectadas</p>
               {projProfitMonth != null && (
                 <p className={`text-sm font-semibold mt-2 ${projProfitMonth >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {fmtM(projProfitMonth)} ganancia · {daysRemaining}d restantes
+                  {fmtM(projProfitMonth)} ganancia · ritmo 7d
                 </p>
               )}
+              <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">{daysRemaining}d restantes · {fmtM(dailyRevAvg7d)}/día promedio</p>
             </div>
 
             {/* Card 4: Acción urgente */}

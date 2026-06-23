@@ -12,8 +12,10 @@ const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixe
 const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,frequency,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
 
 // Default thresholds — overridden by app_settings in Supabase
-const DEFAULT_BREAKEVEN_CPA = 17500
-const DEFAULT_ROAS_MIN      = 2.86
+// BREAKEVEN_CPA real Forever Basics: merch $19.5K + envío $5.75K + TN 2.5% $1.44K + packaging $350 = ~$27K/orden
+// AOV $57.5K → margen 53% → BE_CPA = $57.5K − $27K = $30.5K
+const DEFAULT_BREAKEVEN_CPA = 30462
+const DEFAULT_ROAS_MIN      = 1.77  // 1 / 0.53 margen
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getThresholds(supabase: any) {
