@@ -4,40 +4,53 @@ import BalanceClient from '@/components/Balance/BalanceClient'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_SETTINGS = { tn_commission_pct: 3.5, shipping_pct: 8 }
+function sb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
-async function getSettings() {
+async function getExpenses(year: number) {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    const { data } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', ['tn_commission_pct', 'shipping_pct'])
+    const { data } = await sb()
+      .from('variable_expenses')
+      .select('*')
+      .like('month', `${year}-%`)
+      .order('created_at', { ascending: false })
+    return data ?? []
+  } catch { return [] }
+}
 
-    const result = { ...DEFAULT_SETTINGS }
-    ;(data || []).forEach(({ key, value }: { key: string; value: unknown }) => {
-      const k = key as keyof typeof DEFAULT_SETTINGS
-      if (k in result) result[k] = typeof value === 'number' ? value : parseFloat(String(value))
-    })
-    return result
-  } catch {
-    return DEFAULT_SETTINGS
-  }
+async function getMonthlySummaries(year: number) {
+  try {
+    const { data } = await sb()
+      .from('monthly_summaries')
+      .select('*')
+      .like('month', `${year}-%`)
+      .order('month', { ascending: false })
+    return data ?? []
+  } catch { return [] }
 }
 
 export default async function BalancePage() {
-  const [tnSnapshot, metaSnapshot, settings] = await Promise.all([
+  const year = new Date().getFullYear()
+
+  const [tnSnapshot, metaSnapshot, initialExpenses, initialSummaries] = await Promise.all([
     getLatestTNSnapshot().catch(() => null),
     getLatestSnapshot().catch(() => null),
-    getSettings(),
+    getExpenses(year),
+    getMonthlySummaries(year),
   ])
 
   return (
-    <div className="p-6">
-      <BalanceClient tnSnapshot={tnSnapshot} metaSnapshot={metaSnapshot} settings={settings} />
+    <div className="p-4 lg:p-6">
+      <BalanceClient
+        tnSnapshot={tnSnapshot}
+        metaSnapshot={metaSnapshot}
+        initialExpenses={initialExpenses}
+        initialSummaries={initialSummaries}
+      />
     </div>
   )
 }

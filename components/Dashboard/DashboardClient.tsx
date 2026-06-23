@@ -7,8 +7,30 @@ import { createClientBrowser } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ReferenceLine } from 'recharts'
 
-const BREAKEVEN_CPA = 17500
-const MARGIN        = 0.48
+// Estructura de costos Forever Basics (actualizada Jun 2026)
+// Desglose por orden con ticket promedio $57.500 (3 unidades):
+//   Mercadería:  3 un × $6.500            = $19.500
+//   Envío:       10% × $57.500            =  $5.750
+//   Plataforma:  2.5% × $57.500 (TN fee)  =  $1.438
+//   Packaging:   fijo                     =    $350
+//   ─────────────────────────────────────────────────
+//   TOTAL costo/orden                     = $27.038
+//
+// Margen real:     ($57.500 − $27.038) / $57.500 ≈ 53%
+// BREAKEVEN_CPA:   $57.500 − $27.038             ≈ $30.462
+const AOV_DEFAULT    = 57500   // ARS — ticket promedio estimado
+const UNIT_COST      = 6500    // ARS — costo mercadería por unidad
+const UNITS_PER_ORDER= 3       // unidades promedio por orden
+const SHIPPING_PCT   = 0.10    // envío = 10% del ticket
+const PLATFORM_PCT   = 0.025   // comisión TN = 2.5% del ticket
+const PACKAGING      = 350     // ARS — packaging por orden
+const COST_PER_ORDER = Math.round(
+  UNITS_PER_ORDER * UNIT_COST +
+  (SHIPPING_PCT + PLATFORM_PCT) * AOV_DEFAULT +
+  PACKAGING
+) // ≈ 27.038
+const MARGIN         = parseFloat(((AOV_DEFAULT - COST_PER_ORDER) / AOV_DEFAULT).toFixed(4)) // ≈ 0.5299 (53%)
+const BREAKEVEN_CPA  = AOV_DEFAULT - COST_PER_ORDER // ≈ 30.462
 const AUTO_REFRESH_SECS = 180
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
 
@@ -736,103 +758,153 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       )}
 
-      {/* FINANCIAL INSIGHTS ROW */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* BUSINESS INSIGHTS ROW — 4 preguntas de negocio */}
+      {(() => {
+        // Breakeven ROAS mínimo = 1 / margen
+        const beRoas = 1 / MARGIN  // ≈ 1.77x con margen 56.5%
+        const roasVsBe = realRoas != null ? Math.min((realRoas / beRoas) * 100, 100) : null
+        const roasBeStatus = realRoas == null ? 'neutral' : realRoas >= beRoas ? 'ok' : realRoas >= beRoas * 0.8 ? 'warn' : 'bad'
 
-        {/* Ganancia Bruta */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className="w-4 h-0.5 rounded-full bg-emerald-400" />
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ganancia Bruta</p>
-            <InfoTooltip text={`Ventas TN × margen ${Math.round(MARGIN*100)}% − gasto Meta. Margen bruto después de publicidad.`} />
-          </div>
-          <p className={`text-2xl font-bold tabular-nums ${grossProfit == null ? 'text-gray-300 dark:text-zinc-700' : grossProfit >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-            {grossProfit != null ? fmtM(grossProfit) : '—'}
-          </p>
-          <div className="mt-1.5 flex items-center gap-2">
-            {contributionPct != null && (
-              <span className="text-xs text-gray-400">{contributionPct}% de ventas</span>
-            )}
-            <Sparkline data={sparkSpend.map((s, i) => {
-              const r = historicalSnapshots[historicalSnapshots.length - 7 + i]?.summary?.blended_roas ?? null
-              return s && r ? Math.round(s * r * MARGIN - s) : null
-            })} color="#10b981" />
-          </div>
-        </div>
+        // Alerta más urgente
+        const topAlert = summary.alerts?.find(a => a.severity === 'danger') ?? summary.alerts?.[0] ?? null
+        const urgentStatus: 'ok'|'warn'|'bad' = topAlert
+          ? (topAlert.severity === 'danger' ? 'bad' : 'warn')
+          : fatigueStatus === 'bad' ? 'bad'
+          : fatigueStatus === 'warn' ? 'warn'
+          : 'ok'
+        const urgentBorderL = urgentStatus === 'bad' ? 'border-l-red-400 dark:border-l-red-500'
+          : urgentStatus === 'warn' ? 'border-l-amber-400 dark:border-l-amber-500'
+          : 'border-l-emerald-400 dark:border-l-emerald-500'
+        const urgentBg = urgentStatus === 'bad'
+          ? 'bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900'
+          : urgentStatus === 'warn'
+          ? 'bg-gradient-to-br from-amber-50/60 to-white dark:from-amber-950/20 dark:to-zinc-900'
+          : 'bg-white dark:bg-zinc-900'
 
-        {/* Break-even del día */}
-        {period === 'today' && dailyBudget > 0 ? (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="w-4 h-0.5 rounded-full bg-amber-400" />
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Break-even Hoy</p>
-              <InfoTooltip text={`Necesitás ${beTargetPurchases ?? '?'} compras para cubrir el gasto de hoy (budget/da ${fmtM(dailyBudget)} ÷ CPA bk ${fmtM(BREAKEVEN_CPA)}).`} />
-            </div>
-            <p className={`text-2xl font-bold tabular-nums ${bePct == null ? 'text-gray-300 dark:text-zinc-700' : bePct >= 100 ? 'text-emerald-500 dark:text-emerald-400' : bePct >= 60 ? 'text-amber-500 dark:text-amber-400' : 'text-red-500 dark:text-red-400'}`}>
-              {beCurrentPurchases ?? 0}/{beTargetPurchases ?? '?'}
-            </p>
-            <div className="mt-2">
-              <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${(bePct ?? 0) >= 100 ? 'bg-emerald-400' : (bePct ?? 0) >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                     style={{ width: `${Math.min(bePct ?? 0, 100)}%` }} />
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+
+            {/* Card 1: ¿Gané plata? */}
+            <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${grossProfit == null ? 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900' : grossProfit >= 0 ? 'border-l-emerald-400 dark:border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-l-red-400 dark:border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900'} p-4 shadow-sm`}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Gané plata?</p>
+                <InfoTooltip text={`Ventas TN × ${Math.round(MARGIN*100)}% margen − gasto Meta. Costo/orden: merch $19.5K + envío $5.8K + plataforma $1.4K + packaging $350 = $27K.`} />
               </div>
-              <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">
-                {beRemaining === 0 ? '✔ Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} compras`}
+              <p className={`text-3xl font-bold tabular-nums leading-none ${grossProfit == null ? 'text-gray-300 dark:text-zinc-700' : grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {grossProfit != null ? fmtM(grossProfit) : '—'}
               </p>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="w-4 h-0.5 rounded-full bg-amber-400" />
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">CPA vs Breakeven</p>
-            </div>
-            <p className={`text-2xl font-bold tabular-nums ${cpaStatus === 'ok' ? 'text-emerald-500 dark:text-emerald-400' : cpaStatus === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-red-500 dark:text-red-400'}`}>
-              {summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'}
-            </p>
-            <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1.5">bk {fmtM(BREAKEVEN_CPA)} &middot; {summary.blended_cpa && summary.blended_cpa > 0 ? Math.round((summary.blended_cpa / BREAKEVEN_CPA) * 100) + '% del limíte' : ''}</p>
-          </div>
-        )}
-
-        {/* Proyección del mes */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className="w-4 h-0.5 rounded-full bg-violet-400" />
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Proyección Mes</p>
-            <InfoTooltip text={`Basado en el promedio diario de los últimos 7 días y el ROAS real actual. Quedan ${daysRemaining} días del mes.`} />
-          </div>
-          <p className={`text-2xl font-bold tabular-nums ${projRevenueMonth == null ? 'text-gray-300 dark:text-zinc-700' : 'text-violet-500 dark:text-violet-400'}`}>
-            {projRevenueMonth != null ? fmtM(projRevenueMonth) : '—'}
-          </p>
-          <div className="mt-1.5 space-y-0.5">
-            {projSpendMonth != null && <p className="text-[10px] text-gray-400">Gasto proy.: {fmtM(projSpendMonth)}</p>}
-            {projProfitMonth != null && (
-              <p className={`text-[10px] font-semibold ${projProfitMonth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                Ganancia proy.: {fmtM(projProfitMonth)}
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-2 leading-snug">
+                {tnRevenue ? fmtM(tnRevenue) : '—'} × {Math.round(MARGIN*100)}% − {fmtM(metaSpend)}
               </p>
-            )}
-          </div>
-        </div>
-
-        {/* Fatiga de creativos */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className={`w-4 h-0.5 rounded-full ${fatigueStatus === 'bad' ? 'bg-red-400' : fatigueStatus === 'warn' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fatiga Creativos</p>
-            <InfoTooltip text="Frecuencia promedio de conv. Mayor frecuencia = mayor probabilidad de saturation de audiencia y caída del CTR." />
-          </div>
-          <p className={`text-2xl font-bold tabular-nums ${fatigueStatus === 'bad' ? 'text-red-500 dark:text-red-400' : fatigueStatus === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
-            {convFreq > 0 ? convFreq.toFixed(1) + 'x' : '—'}
-          </p>
-          <div className="mt-2">
-            <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${fatigueStatus === 'bad' ? 'bg-red-400' : fatigueStatus === 'warn' ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                   style={{ width: `${fatiguePct}%` }} />
+              {grossProfit != null && (
+                <div className="mt-2.5 flex items-center gap-1.5">
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${grossProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400'}`}>
+                    {grossProfit >= 0 ? 'Rentable' : 'Sin cubrir'}
+                  </span>
+                  {contributionPct != null && (
+                    <span className="text-[11px] text-gray-400 dark:text-zinc-600">{contributionPct}% del total</span>
+                  )}
+                </div>
+              )}
             </div>
-            <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">{fatigueMsg}</p>
+
+            {/* Card 2: ¿Cubrí la inversión? — siempre visible */}
+            <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${
+              period === 'today'
+                ? (bePct == null ? 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900'
+                  : bePct >= 100 ? 'border-l-emerald-400 dark:border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900'
+                  : bePct >= 60  ? 'border-l-amber-400 dark:border-l-amber-500 bg-gradient-to-br from-amber-50/60 to-white dark:from-amber-950/20 dark:to-zinc-900'
+                  : 'border-l-red-400 dark:border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900')
+                : (roasBeStatus === 'ok' ? 'border-l-emerald-400 dark:border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900'
+                  : roasBeStatus === 'warn' ? 'border-l-amber-400 dark:border-l-amber-500 bg-gradient-to-br from-amber-50/60 to-white dark:from-amber-950/20 dark:to-zinc-900'
+                  : roasBeStatus === 'bad' ? 'border-l-red-400 dark:border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900'
+                  : 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900')
+            } p-4 shadow-sm`}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cubrí la inversión?</p>
+                <InfoTooltip text={period === 'today' ? `Compras necesarias para cubrir el gasto de hoy: gasto ÷ CPA bk ${fmtM(BREAKEVEN_CPA)}.` : `ROAS mínimo para no perder plata: 1 ÷ ${Math.round(MARGIN*100)}% margen = ${beRoas.toFixed(2)}x. Tu ROAS real es ${realRoas?.toFixed(2) ?? '—'}x.`} />
+              </div>
+              {period === 'today' && dailyBudget > 0 ? (
+                <>
+                  <p className={`text-3xl font-bold tabular-nums leading-none ${bePct == null ? 'text-gray-300 dark:text-zinc-700' : bePct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : bePct >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {beCurrentPurchases ?? 0}<span className="text-xl text-gray-400 dark:text-zinc-600">/{beTargetPurchases ?? '?'}</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">compras para cubrir el gasto</p>
+                  <div className="mt-2 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${(bePct ?? 0) >= 100 ? 'bg-emerald-400' : (bePct ?? 0) >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                         style={{ width: `${Math.min(bePct ?? 0, 100)}%` }} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1.5">
+                    {beRemaining === 0 ? 'Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} · CPA bk ${fmtM(BREAKEVEN_CPA)}`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className={`text-3xl font-bold tabular-nums leading-none ${roasBeStatus === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : roasBeStatus === 'warn' ? 'text-amber-600 dark:text-amber-400' : roasBeStatus === 'bad' ? 'text-red-600 dark:text-red-400' : 'text-gray-300 dark:text-zinc-700'}`}>
+                    {realRoas ? realRoas.toFixed(2) + 'x' : '—'}
+                  </p>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">mínimo para BEP: {beRoas.toFixed(2)}x</p>
+                  {roasVsBe != null && (
+                    <div className="mt-2 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${roasBeStatus === 'ok' ? 'bg-emerald-400' : roasBeStatus === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`}
+                           style={{ width: `${roasVsBe}%` }} />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1.5">
+                    {roasBeStatus === 'ok' ? `+${((realRoas! / beRoas - 1) * 100).toFixed(0)}% sobre el mínimo` : roasBeStatus === 'warn' ? 'Casi en punto de equilibrio' : 'Por debajo del BEP'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Card 3: ¿Cómo termino el mes? */}
+            <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-violet-400 dark:border-l-violet-500 bg-gradient-to-br from-violet-50/60 to-white dark:from-violet-950/20 dark:to-zinc-900 p-4 shadow-sm">
+              <div className="flex items-center gap-1 mb-1.5">
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cómo termino el mes?</p>
+                <InfoTooltip text={`Proyección basada en el ritmo actual de los últimos 7 días. Quedan ${daysRemaining} días del mes.`} />
+              </div>
+              <p className={`text-3xl font-bold tabular-nums leading-none ${projRevenueMonth == null ? 'text-gray-300 dark:text-zinc-700' : 'text-violet-600 dark:text-violet-400'}`}>
+                {projRevenueMonth != null ? fmtM(projRevenueMonth) : '—'}
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">ventas proyectadas</p>
+              {projProfitMonth != null && (
+                <p className={`text-sm font-semibold mt-2 ${projProfitMonth >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {fmtM(projProfitMonth)} ganancia · {daysRemaining}d restantes
+                </p>
+              )}
+            </div>
+
+            {/* Card 4: Acción urgente */}
+            <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${urgentBorderL} ${urgentBg} p-4 shadow-sm`}>
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Acción urgente</p>
+              {topAlert ? (
+                <>
+                  <div className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 ${topAlert.severity === 'danger' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
+                    {topAlert.severity === 'danger' ? 'Crítico' : 'Atención'}
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200 leading-snug line-clamp-1">{topAlert.entity_name}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">{topAlert.message}</p>
+                </>
+              ) : fatigueStatus !== 'ok' ? (
+                <>
+                  <div className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 ${fatigueStatus === 'bad' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
+                    {fatigueStatus === 'bad' ? 'Creativos saturados' : 'Frecuencia alta'}
+                  </div>
+                  <p className="text-3xl font-bold tabular-nums leading-none text-gray-800 dark:text-zinc-200">{convFreq > 0 ? convFreq.toFixed(1) + 'x' : '—'}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1.5 leading-snug">{fatigueMsg}</p>
+                </>
+              ) : (
+                <>
+                  <div className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                    Todo en orden
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1 leading-snug">Sin alertas activas · Frecuencia saludable {convFreq > 0 ? `(${convFreq.toFixed(1)}x)` : ''}</p>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        )
+      })()}
 
       {/* 1. TIENDANUBE */}
       <div>

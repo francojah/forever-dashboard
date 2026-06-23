@@ -1,347 +1,806 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 
-type Period = 'today' | '7d' | '30d' | 'ytd'
-const PERIOD_LABELS: Record<Period, string> = {
-  today: 'Hoy',
-  '7d':  'Ultimos 7 dias',
-  '30d': 'Ultimos 30 dias',
-  'ytd': 'Este ano',
+// ─── Estructura de costos (mirrors DashboardClient.tsx) ───────────────────────
+const UNIT_COST         = 6500    // ARS por unidad
+const UNITS_PER_ORDER   = 3       // unidades promedio por orden
+const SHIPPING_PCT      = 0.10    // 10% del ticket
+const PLATFORM_PCT      = 0.025   // 2.5% comisión TN
+const PACKAGING_PER_ORD = 350     // ARS por orden
+const AOV_DEFAULT       = 57500   // ticket promedio estimado
+
+// ─── Constantes de UI ─────────────────────────────────────────────────────────
+const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MONTH_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+const EXPENSE_CATS = [
+  { value: 'mercaderia',   label: 'Compra mercadería',        color: 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400' },
+  { value: 'packaging',    label: 'Packaging / insumos',      color: 'bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-400' },
+  { value: 'distribucion', label: 'Distribución ganancias',   color: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' },
+  { value: 'logistica',    label: 'Logística / operativa',    color: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' },
+  { value: 'fijo',         label: 'Gasto fijo',               color: 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-400' },
+  { value: 'otro',         label: 'Otro',                     color: 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-500' },
+]
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface MonthlySummary {
+  month:      string
+  meta_spend: number | null
+  tn_revenue: number | null
+  tn_orders:  number | null
+  tn_units:   number | null
+  notes:      string | null
+  updated_at: string
 }
 
-interface Settings {
-  tn_commission_pct: number
-  shipping_pct:      number
+interface Expense {
+  id:          string
+  month:       string
+  category:    string
+  description: string
+  amount_ars:  number
+  created_at:  string
+}
+
+interface MonthData {
+  meta_spend: number
+  tn_revenue: number
+  tn_orders:  number
+  tn_units:   number
+  source:     'live' | 'saved' | 'empty'
+}
+
+interface PnL {
+  tn_revenue:   number
+  merch:        number
+  shipping:     number
+  platform:     number
+  packaging:    number
+  cogs:         number
+  gross_profit: number
+  meta_spend:   number
+  ad_result:    number
+  var_total:    number
+  net_result:   number
+  margin_gross: number
+  margin_net:   number
+  tn_orders:    number
+  tn_units:     number
+  aov:          number
 }
 
 interface Props {
-  tnSnapshot:   TNSnapshot | null
-  metaSnapshot: Snapshot | null
-  settings:     Settings
+  tnSnapshot:        TNSnapshot | null
+  metaSnapshot:      Snapshot | null
+  initialExpenses:   Expense[]
+  initialSummaries:  MonthlySummary[]
 }
 
-function fmt(n: number | null | undefined): string {
-  if (n == null) return '—'
-  return '$' + Math.round(n).toLocaleString('es-AR')
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmt(n: number | null | undefined, opts?: { sign?: boolean }): string {
+  if (n == null || isNaN(n)) return '—'
+  const abs = Math.abs(Math.round(n))
+  const sign = opts?.sign && n > 0 ? '+' : n < 0 ? '−' : ''
+  return sign + '$' + abs.toLocaleString('es-AR')
+}
+function pct(n: number) { return (n * 100).toFixed(1) + '%' }
+function mkKey(y: number, m: number) { return `${y}-${String(m).padStart(2, '0')}` }
+
+function calcPnL(data: MonthData, varExpenses: Expense[]): PnL {
+  const { tn_revenue, meta_spend, tn_orders, tn_units } = data
+  const aov      = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
+  const units    = tn_units > 0 ? tn_units : tn_orders * UNITS_PER_ORDER
+  const merch    = units * UNIT_COST
+  const shipping = tn_revenue * SHIPPING_PCT
+  const platform = tn_revenue * PLATFORM_PCT
+  const packaging= tn_orders * PACKAGING_PER_ORD
+  const cogs     = merch + shipping + platform + packaging
+  const gross_profit = tn_revenue - cogs
+  const ad_result    = gross_profit - meta_spend
+  const var_total    = varExpenses.reduce((s, e) => s + e.amount_ars, 0)
+  const net_result   = ad_result - var_total
+  return {
+    tn_revenue, merch, shipping, platform, packaging, cogs,
+    gross_profit, meta_spend, ad_result, var_total, net_result,
+    margin_gross: tn_revenue > 0 ? gross_profit / tn_revenue : 0,
+    margin_net:   tn_revenue > 0 ? net_result   / tn_revenue : 0,
+    tn_orders, tn_units: units, aov,
+  }
 }
 
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return '—'
-  return n.toFixed(1) + '%'
+function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[]): PnL {
+  const merged: MonthData = { meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0, source: 'live' }
+  months.forEach(m => {
+    merged.meta_spend += m.meta_spend
+    merged.tn_revenue += m.tn_revenue
+    merged.tn_orders  += m.tn_orders
+    merged.tn_units   += m.tn_units
+  })
+  const expenses = allExpenses.filter(e => keys.includes(e.month))
+  return calcPnL(merged, expenses)
 }
 
-interface PnLRow {
-  label:       string
-  value:       number | null
-  pct?:        number | null
-  isPositive?: boolean
-  isNegative?: boolean
-  isTotal?:    boolean
-  isSeparator?: boolean
-  indent?:     boolean
-  note?:       string
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+  return (
+    <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${color} p-4 shadow-sm`}>
+      <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-2xl font-bold tabular-nums text-gray-900 dark:text-zinc-100 leading-none">{value}</p>
+      {sub && <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">{sub}</p>}
+    </div>
+  )
 }
 
-export default function BalanceClient({ tnSnapshot, metaSnapshot, settings }: Props) {
-  const [period, setPeriod]           = useState<Period>('30d')
-  const [manualShipping, setManual]   = useState<string>('')
-  const [costPerUnit, setCostPerUnit] = useState<string>('')
-  const [gastosVar, setGastosVar]     = useState<string>('')
-  const printRef = useRef<HTMLDivElement>(null)
+function PnLRow({ label, value, pctVal, indent, isTotal, isSubtotal, isSeparator, note, positive }: {
+  label: string; value: number | null; pctVal?: number; indent?: boolean; isTotal?: boolean
+  isSubtotal?: boolean; isSeparator?: boolean; note?: string; positive?: boolean
+}) {
+  if (isSeparator) return (
+    <tr><td colSpan={3} className="border-t border-gray-200 dark:border-zinc-700 py-0" /></tr>
+  )
+  const valStr = value != null ? fmt(value) : '—'
+  const colorCls = value == null ? 'text-gray-300 dark:text-zinc-700'
+    : isTotal || isSubtotal ? (value >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')
+    : positive ? 'text-emerald-600 dark:text-emerald-400'
+    : value < 0 ? 'text-red-500 dark:text-red-400'
+    : 'text-gray-700 dark:text-zinc-300'
 
-  const tnData = period === 'today' ? tnSnapshot?.summary_today
-    : period === '7d'  ? tnSnapshot?.summary_7d
-    : period === '30d' ? tnSnapshot?.summary_30d
-    : tnSnapshot?.summary_ytd
+  return (
+    <tr className={isTotal ? 'bg-gray-50 dark:bg-zinc-800/40' : isSubtotal ? 'bg-gray-50/50 dark:bg-zinc-800/20' : ''}>
+      <td className={`px-5 py-2.5 ${indent ? 'pl-9' : ''}`}>
+        <p className={`text-sm ${isTotal ? 'font-semibold text-gray-900 dark:text-zinc-100' : isSubtotal ? 'font-medium text-gray-800 dark:text-zinc-200' : 'text-gray-600 dark:text-zinc-400'}`}>
+          {label}
+        </p>
+        {note && <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-0.5">{note}</p>}
+      </td>
+      <td className={`px-5 py-2.5 text-right font-medium tabular-nums ${colorCls} ${isTotal ? 'text-base' : 'text-sm'}`}>
+        {valStr}
+      </td>
+      <td className="px-5 py-2.5 text-right text-xs text-gray-400 dark:text-zinc-600 tabular-nums">
+        {pctVal != null && pct(Math.abs(pctVal))}
+        {isTotal && value != null && <span className={`font-semibold ${value >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>{pct(Math.abs(value / (value || 1)))}</span>}
+      </td>
+    </tr>
+  )
+}
 
-  const periodMetaSpend = period === '7d'  ? (metaSnapshot?.summary?.total_spend_7d ?? null)
-    : period === 'today' ? (metaSnapshot?.periods?.today?.summary?.total_spend_7d ?? null)
-    : period === '30d'   ? (metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d ?? null)
-    : null
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpenses, initialSummaries }: Props) {
+  const today    = new Date()
+  const curYear  = today.getFullYear()
+  const curMonth = today.getMonth() + 1  // 1-12
+  const curKey   = mkKey(curYear, curMonth)
+  const curQ     = Math.ceil(curMonth / 3)
 
-  const ventas = tnData?.total_revenue ?? null
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [year,     setYear]     = useState(curYear)
+  const [mode,     setMode]     = useState<'month' | 'quarter' | 'year'>('month')
+  const [selMonth, setSelMonth] = useState(curMonth)
+  const [selQ,     setSelQ]     = useState(curQ)
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
+  const [summaries,setSummaries]= useState<MonthlySummary[]>(initialSummaries)
 
-  const shippingActual    = tnData?.shipping_revenue ?? null
-  const shippingEstimated = ventas != null ? Math.round(ventas * (settings.shipping_pct / 100)) : null
-  const useManual         = manualShipping !== ''
-  const shippingValue     = useManual
-    ? (parseFloat(manualShipping.replace(/\./g, '').replace(',', '.')) || 0)
-    : (shippingActual ?? shippingEstimated)
+  // Add expense form
+  const [showAdd,    setShowAdd]    = useState(false)
+  const [newCat,     setNewCat]     = useState('mercaderia')
+  const [newDesc,    setNewDesc]    = useState('')
+  const [newAmt,     setNewAmt]     = useState('')
+  const [savingExp,  setSavingExp]  = useState(false)
 
-  const comisionTN = ventas != null ? Math.round(ventas * (settings.tn_commission_pct / 100)) : null
+  // Manual month data entry
+  const [showManual, setShowManual] = useState(false)
+  const [manRev,     setManRev]     = useState('')
+  const [manSpend,   setManSpend]   = useState('')
+  const [manOrders,  setManOrders]  = useState('')
+  const [manUnits,   setManUnits]   = useState('')
+  const [savingMan,  setSavingMan]  = useState(false)
 
-  const unitCost  = costPerUnit !== '' ? (parseFloat(costPerUnit.replace(/\./g, '').replace(',', '.')) || 0) : null
-  const unitsSold = tnData?.total_units_sold ?? null
-  const cmv       = unitCost != null && unitsSold != null ? Math.round(unitCost * unitsSold) : null
+  // ── Live data from snapshots ───────────────────────────────────────────────
+  const liveData: MonthData = useMemo(() => ({
+    tn_revenue: tnSnapshot?.summary_30d?.total_revenue   ?? 0,
+    tn_orders:  tnSnapshot?.summary_30d?.total_orders    ?? 0,
+    tn_units:   tnSnapshot?.summary_30d?.total_units_sold ?? 0,
+    meta_spend: metaSnapshot?.periods?.last_30d?.summary?.total_spend
+             ?? metaSnapshot?.summary?.total_spend
+             ?? 0,
+    source: 'live',
+  }), [tnSnapshot, metaSnapshot])
 
-  const gastosVarNum = gastosVar !== '' ? (parseFloat(gastosVar.replace(/\./g, '').replace(',', '.')) || 0) : null
+  // ── Get data for any month key ─────────────────────────────────────────────
+  const getMonthData = useCallback((key: string): MonthData => {
+    if (key === curKey) return liveData
+    const s = summaries.find(s => s.month === key)
+    if (!s) return { meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0, source: 'empty' }
+    return {
+      meta_spend: s.meta_spend ?? 0,
+      tn_revenue: s.tn_revenue ?? 0,
+      tn_orders:  s.tn_orders  ?? 0,
+      tn_units:   s.tn_units   ?? 0,
+      source: 'saved',
+    }
+  }, [curKey, liveData, summaries])
 
-  const neto =
-    ventas != null && periodMetaSpend != null && shippingValue != null && comisionTN != null
-      ? ventas - periodMetaSpend - shippingValue - comisionTN - (cmv ?? 0) - (gastosVarNum ?? 0)
-      : null
+  // ── Selected period keys ───────────────────────────────────────────────────
+  const periodKeys = useMemo(() => {
+    if (mode === 'month') return [mkKey(year, selMonth)]
+    if (mode === 'quarter') {
+      const start = (selQ - 1) * 3 + 1
+      return [1,2,3].map(i => mkKey(year, start + i - 1))
+    }
+    return Array.from({ length: 12 }, (_, i) => mkKey(year, i + 1))
+  }, [mode, year, selMonth, selQ])
 
-  const margen = ventas && ventas > 0 && neto != null
-    ? (neto / ventas) * 100
-    : null
+  const selectedMonthKey = mkKey(year, selMonth)
+  const isPastMonth = selectedMonthKey < curKey
+  const isFuture = selectedMonthKey > curKey
 
-  const rows: PnLRow[] = [
-    {
-      label: 'Ventas brutas (Tiendanube)',
-      value: ventas,
-      isPositive: true,
-      note: tnData ? tnData.total_orders + ' ordenes · AOV ' + fmt(tnData.aov) : undefined,
-    },
-    {
-      label: 'Gasto Meta Ads',
-      value: periodMetaSpend != null ? -periodMetaSpend : null,
-      pct: ventas && periodMetaSpend ? (-periodMetaSpend / ventas) * 100 : null,
-      isNegative: true,
-      indent: true,
-      note: period !== '7d' && period !== '30d' ? 'Solo disponible para 7d/30d' : undefined,
-    },
-    {
-      label: 'Gastos de envio',
-      value: shippingValue != null ? -shippingValue : null,
-      pct: ventas && shippingValue ? (-shippingValue / ventas) * 100 : null,
-      isNegative: true,
-      indent: true,
-      note: shippingActual != null ? 'Dato real de Tiendanube' : 'Estimado (' + settings.shipping_pct + '% ventas)',
-    },
-    {
-      label: 'Comision Tiendanube (' + settings.tn_commission_pct + '%)',
-      value: comisionTN != null ? -comisionTN : null,
-      pct: ventas && comisionTN ? (-comisionTN / ventas) * 100 : null,
-      isNegative: true,
-      indent: true,
-    },
-    {
-      label: 'CMV (costo mercaderia vendida)',
-      value: cmv != null ? -cmv : null,
-      pct: ventas && cmv ? (-cmv / ventas) * 100 : null,
-      isNegative: true,
-      indent: true,
-      note: unitCost != null && unitsSold != null
-        ? '$' + Math.round(unitCost).toLocaleString('es-AR') + ' x ' + unitsSold + ' uds'
-        : 'Ingresa el costo promedio por unidad abajo',
-    },
-    {
-      label: 'Gastos variables',
-      value: gastosVarNum != null ? -gastosVarNum : null,
-      pct: ventas && gastosVarNum ? (-gastosVarNum / ventas) * 100 : null,
-      isNegative: gastosVarNum != null && gastosVarNum > 0,
-      indent: true,
-      note: gastosVarNum == null ? 'Ingresa otros gastos variables abajo (ej: comisiones, empaque, etc.)' : undefined,
-    },
-    {
-      label: 'Resultado Neto',
-      value: neto,
-      pct: null,
-      isPositive: neto != null && neto >= 0,
-      isNegative: neto != null && neto < 0,
-      isTotal: true,
-    },
-  ]
+  // ── P&L for selected period ────────────────────────────────────────────────
+  const pnl = useMemo(() => {
+    const datas   = periodKeys.map(k => getMonthData(k))
+    const expList = expenses.filter(e => periodKeys.includes(e.month))
+    return aggregatePnL(datas, expenses, periodKeys)
+  }, [periodKeys, getMonthData, expenses])
 
-  function handlePrint() {
-    window.print()
+  const periodExpenses = useMemo(
+    () => expenses.filter(e => periodKeys.includes(e.month)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [expenses, periodKeys]
+  )
+
+  // ── Annual summary (all 12 months of selected year) ───────────────────────
+  const annualRows = useMemo(() =>
+    Array.from({ length: 12 }, (_, i) => {
+      const m = i + 1
+      const key = mkKey(year, m)
+      const data = getMonthData(key)
+      const exp  = expenses.filter(e => e.month === key)
+      const p    = calcPnL(data, exp)
+      return { m, key, data, pnl: p }
+    }), [year, getMonthData, expenses])
+
+  // ── Period label ──────────────────────────────────────────────────────────
+  const periodLabel = mode === 'month'
+    ? `${MONTH_FULL[selMonth - 1]} ${year}`
+    : mode === 'quarter'
+    ? `Q${selQ} ${year}`
+    : `Año ${year}`
+
+  const hasData = pnl.tn_revenue > 0 || pnl.meta_spend > 0
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  async function handleAddExpense() {
+    if (!newDesc.trim() || !newAmt) return
+    setSavingExp(true)
+    try {
+      const targetMonth = mode === 'month' ? selectedMonthKey : mkKey(year, selQ * 3)
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: targetMonth,
+          category: newCat,
+          description: newDesc.trim(),
+          amount_ars: parseFloat(newAmt.replace(/\./g, '').replace(',', '.')) || 0,
+        }),
+      })
+      const saved = await res.json()
+      if (!res.ok) throw new Error(saved.error)
+      setExpenses(prev => [saved, ...prev])
+      setNewDesc('')
+      setNewAmt('')
+      setShowAdd(false)
+    } catch (e) { alert('Error al guardar: ' + e) }
+    finally { setSavingExp(false) }
   }
 
-  async function handleExcelDownload() {
-    const lines: string[] = [
-      'Balance Forever Basics — ' + PERIOD_LABELS[period],
-      'Fecha,' + new Date().toLocaleDateString('es-AR'),
+  async function handleDeleteExpense(id: string) {
+    if (!confirm('¿Eliminar este gasto?')) return
+    const res = await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' })
+    if (res.ok) setExpenses(prev => prev.filter(e => e.id !== id))
+  }
+
+  async function handleSaveManual() {
+    if (!manRev && !manSpend) return
+    setSavingMan(true)
+    try {
+      const parse = (s: string) => s ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : null
+      const res = await fetch('/api/monthly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month:      selectedMonthKey,
+          tn_revenue: parse(manRev),
+          meta_spend: parse(manSpend),
+          tn_orders:  parse(manOrders),
+          tn_units:   parse(manUnits),
+        }),
+      })
+      const saved = await res.json()
+      if (!res.ok) throw new Error(saved.error)
+      setSummaries(prev => {
+        const idx = prev.findIndex(s => s.month === selectedMonthKey)
+        if (idx >= 0) { const n = [...prev]; n[idx] = saved; return n }
+        return [saved, ...prev]
+      })
+      setShowManual(false)
+      setManRev(''); setManSpend(''); setManOrders(''); setManUnits('')
+    } catch (e) { alert('Error al guardar: ' + e) }
+    finally { setSavingMan(false) }
+  }
+
+  async function handleExport() {
+    const lines = [
+      `Balance Forever Basics — ${periodLabel}`,
+      `Fecha,${new Date().toLocaleDateString('es-AR')}`,
       '',
       'Concepto,Importe (ARS),% Ventas',
+      `Ventas brutas,${Math.round(pnl.tn_revenue)},100%`,
+      `Merch (${pnl.tn_units} un × $${UNIT_COST.toLocaleString('es-AR')}),-${Math.round(pnl.merch)},${pct(pnl.merch/pnl.tn_revenue)}`,
+      `Envío (10%),-${Math.round(pnl.shipping)},${pct(pnl.shipping/pnl.tn_revenue)}`,
+      `Plataforma TN (2.5%),-${Math.round(pnl.platform)},${pct(pnl.platform/pnl.tn_revenue)}`,
+      `Packaging,-${Math.round(pnl.packaging)},${pct(pnl.packaging/pnl.tn_revenue)}`,
+      `Ganancia bruta,${Math.round(pnl.gross_profit)},${pct(pnl.margin_gross)}`,
+      `Gasto Meta Ads,-${Math.round(pnl.meta_spend)},${pct(pnl.meta_spend/pnl.tn_revenue)}`,
+      `Resultado publicidad,${Math.round(pnl.ad_result)},${pct(pnl.ad_result/pnl.tn_revenue)}`,
+      ...periodExpenses.map(e => `"${e.description}",-${Math.round(e.amount_ars)},`),
+      `Resultado neto,${Math.round(pnl.net_result)},${pct(pnl.margin_net)}`,
     ]
-    rows.forEach(r => {
-      const val = r.value != null ? Math.round(r.value).toString() : ''
-      const pct = r.pct != null ? r.pct.toFixed(1) + '%' : ''
-      lines.push('"' + r.label + '",' + val + ',' + pct)
-    })
-
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = 'balance_forever_' + period + '_' + new Date().toISOString().split('T')[0] + '.csv'
+    a.download = `balance_forever_${periodLabel.replace(/\s/g, '_')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="max-w-4xl mx-auto space-y-5 pb-12">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Balance</h1>
-          <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Resultado neto del negocio por periodo</p>
+          <p className="text-sm text-gray-400 dark:text-zinc-500 mt-0.5">P&L real del negocio</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
-            </svg>
-            PDF
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowAdd(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Gasto variable
           </button>
-          <button onClick={handleExcelDownload}
+          <button onClick={handleExport}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-            </svg>
-            Excel
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            CSV
           </button>
         </div>
       </div>
 
-      {/* Period selector */}
-      <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5 w-fit">
-        {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
-          <button key={p} onClick={() => setPeriod(p)}
-            className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
-              period === p
-                ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
-                : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
-            )}>
-            {PERIOD_LABELS[p]}
-          </button>
-        ))}
+      {/* ── Period selector ────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm space-y-3">
+
+        {/* Year + mode */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1">
+            <button onClick={() => setYear(y => y - 1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="text-sm font-semibold text-gray-800 dark:text-zinc-200 min-w-[48px] text-center">{year}</span>
+            <button onClick={() => setYear(y => Math.min(y + 1, curYear))}
+              disabled={year >= curYear}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+            {(['month','quarter','year'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className={'px-3 py-1 text-xs font-medium rounded-md transition-all ' + (
+                  mode === m
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
+                )}>
+                {m === 'month' ? 'Mensual' : m === 'quarter' ? 'Trimestral' : 'Anual'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Month buttons */}
+        {mode === 'month' && (
+          <div className="flex gap-1 flex-wrap">
+            {MONTH_SHORT.map((name, i) => {
+              const m   = i + 1
+              const key = mkKey(year, m)
+              const fut = key > curKey
+              const hasSavedData = summaries.some(s => s.month === key)
+              const isLive = key === curKey
+              return (
+                <button key={m} onClick={() => { if (!fut) setSelMonth(m) }}
+                  disabled={fut}
+                  className={'relative px-3 py-1.5 text-xs font-medium rounded-lg transition-all ' + (
+                    selMonth === m && !fut
+                      ? 'bg-violet-600 text-white shadow-sm'
+                      : fut
+                      ? 'text-gray-300 dark:text-zinc-700 cursor-not-allowed'
+                      : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 border border-gray-100 dark:border-zinc-800'
+                  )}>
+                  {name}
+                  {(isLive || hasSavedData) && selMonth !== m && (
+                    <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-violet-400'}`} />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Quarter buttons */}
+        {mode === 'quarter' && (
+          <div className="flex gap-2">
+            {[1,2,3,4].map(q => {
+              const lastMonth = q * 3
+              const fut = mkKey(year, lastMonth) > curKey && q > Math.ceil(curMonth/3)
+              return (
+                <button key={q} onClick={() => { if (!fut) setSelQ(q) }}
+                  disabled={fut}
+                  className={'px-5 py-2 text-sm font-medium rounded-lg transition-all ' + (
+                    selQ === q && !fut
+                      ? 'bg-violet-600 text-white shadow-sm'
+                      : fut
+                      ? 'text-gray-300 dark:text-zinc-700 cursor-not-allowed border border-gray-100 dark:border-zinc-800'
+                      : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 border border-gray-100 dark:border-zinc-800'
+                  )}>
+                  Q{q}
+                  <span className="text-[10px] block font-normal opacity-70">
+                    {MONTH_SHORT[(q-1)*3]}–{MONTH_SHORT[q*3-1]}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {mode === 'year' && (
+          <p className="text-xs text-gray-400 dark:text-zinc-500">
+            Mostrando agregado de todos los meses de {year}
+          </p>
+        )}
       </div>
 
-      {/* P&L table */}
-      <div ref={printRef} className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm print:shadow-none print:border-0">
+      {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Ventas"
+          value={hasData ? fmt(pnl.tn_revenue) : '—'}
+          sub={hasData ? `${pnl.tn_orders} órdenes · AOV ${fmt(pnl.aov)}` : 'Sin datos'}
+          color={hasData ? 'border-l-blue-400' : 'border-l-gray-200 dark:border-l-zinc-700'}
+        />
+        <KpiCard
+          label="Ganancia bruta"
+          value={hasData ? fmt(pnl.gross_profit) : '—'}
+          sub={hasData ? `${pct(pnl.margin_gross)} de ventas` : 'antes de Meta'}
+          color={hasData ? (pnl.gross_profit >= 0 ? 'border-l-emerald-400' : 'border-l-red-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
+        />
+        <KpiCard
+          label="Resultado pub."
+          value={hasData ? fmt(pnl.ad_result) : '—'}
+          sub={hasData ? `Meta: ${fmt(pnl.meta_spend)}` : 'después de Meta'}
+          color={hasData ? (pnl.ad_result >= 0 ? 'border-l-emerald-400' : 'border-l-amber-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
+        />
+        <KpiCard
+          label="Resultado neto"
+          value={hasData ? fmt(pnl.net_result) : '—'}
+          sub={hasData ? `${pct(Math.abs(pnl.margin_net))} de ventas` : 'después de todo'}
+          color={hasData ? (pnl.net_result >= 0 ? 'border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900') : 'border-l-gray-200 dark:border-l-zinc-700'}
+        />
+      </div>
+
+      {/* ── Alert: past month without data ─────────────────────────────────── */}
+      {mode === 'month' && isPastMonth && !hasData && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Sin datos para {MONTH_FULL[selMonth-1]} {year}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Ingresá las ventas y gasto de Meta de ese mes para ver el P&L completo.</p>
+          </div>
+          <button onClick={() => setShowManual(true)}
+            className="shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors">
+            Cargar datos
+          </button>
+        </div>
+      )}
+
+      {/* ── Manual data entry modal ─────────────────────────────────────────── */}
+      {showManual && (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 p-5 shadow-lg space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">
+              Datos de {MONTH_FULL[selMonth-1]} {year}
+            </p>
+            <button onClick={() => setShowManual(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Ventas TN (ARS)', val: manRev,    set: setManRev,    placeholder: 'ej: 2500000' },
+              { label: 'Gasto Meta (ARS)', val: manSpend, set: setManSpend,  placeholder: 'ej: 450000' },
+              { label: 'Órdenes',          val: manOrders,set: setManOrders, placeholder: 'ej: 48' },
+              { label: 'Unidades vendidas',val: manUnits, set: setManUnits,  placeholder: 'ej: 144' },
+            ].map(f => (
+              <div key={f.label}>
+                <label className="text-xs font-medium text-gray-500 dark:text-zinc-500 mb-1 block">{f.label}</label>
+                <input type="text" value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.placeholder}
+                  className="w-full text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowManual(false)}
+              className="px-4 py-2 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleSaveManual} disabled={savingMan}
+              className="px-4 py-2 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-50">
+              {savingMan ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── P&L Table ──────────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">
         <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Estado de Resultados</p>
-            <p className="text-xs text-gray-400 dark:text-zinc-500">{PERIOD_LABELS[period]} · {tnSnapshot?.snapshot_date ?? '—'}</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Estado de resultados</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">{periodLabel}
+              {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · últimos 30d</span>}
+              {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && <span className="ml-2 text-[10px] bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">Datos manuales</span>}
+            </p>
           </div>
-          <p className="text-xs text-gray-400 dark:text-zinc-500">Forever Basics</p>
+          {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (
+            <button onClick={() => setShowManual(true)}
+              className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
+              Editar datos
+            </button>
+          )}
         </div>
-
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
+            <tr className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
               <th className="text-left px-5 py-2.5 font-medium">Concepto</th>
               <th className="text-right px-5 py-2.5 font-medium">Importe</th>
               <th className="text-right px-5 py-2.5 font-medium">% Ventas</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className={'border-b border-gray-50 dark:border-zinc-800/60 ' + (
-                row.isTotal ? 'bg-gray-50 dark:bg-zinc-800/30' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/20'
-              )}>
-                <td className={'px-5 py-3 ' + (row.indent ? 'pl-8' : '')}>
-                  <p className={(row.isTotal ? 'font-semibold text-gray-900 dark:text-zinc-100' : 'text-gray-700 dark:text-zinc-300') + ' text-sm'}>
-                    {row.label}
-                  </p>
-                  {row.note && <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-0.5">{row.note}</p>}
-                </td>
-                <td className={'px-5 py-3 text-right font-medium ' + (
-                  row.isTotal
-                    ? row.isPositive ? 'text-emerald-600 dark:text-emerald-400 text-base' : 'text-red-600 dark:text-red-400 text-base'
-                    : row.isPositive ? 'text-emerald-600 dark:text-emerald-400'
-                    : row.isNegative ? 'text-red-600 dark:text-red-400'
-                    : 'text-gray-700 dark:text-zinc-300'
-                )}>
-                  {row.value != null ? fmt(row.value) : <span className="text-gray-400 font-normal">—</span>}
-                </td>
-                <td className="px-5 py-3 text-right text-xs text-gray-400 dark:text-zinc-500">
-                  {!row.isTotal && row.pct != null ? fmtPct(row.pct) : ''}
-                  {row.isTotal && margen != null ? (
-                    <span className={'font-semibold ' + (margen >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
-                      {fmtPct(margen)}
-                    </span>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
+            <PnLRow label="Ventas brutas (Tiendanube)" value={pnl.tn_revenue} positive
+              note={`${pnl.tn_orders} órdenes · ${pnl.tn_units} unidades · AOV ${fmt(pnl.aov)}`} />
+            <PnLRow label={`Mercadería (${pnl.tn_units} un × $${UNIT_COST.toLocaleString('es-AR')})`} value={-pnl.merch}
+              pctVal={pnl.tn_revenue > 0 ? pnl.merch / pnl.tn_revenue : 0} indent />
+            <PnLRow label="Envío (10% del ticket)" value={-pnl.shipping}
+              pctVal={pnl.tn_revenue > 0 ? pnl.shipping / pnl.tn_revenue : 0} indent />
+            <PnLRow label="Comisión Tiendanube (2.5%)" value={-pnl.platform}
+              pctVal={pnl.tn_revenue > 0 ? pnl.platform / pnl.tn_revenue : 0} indent />
+            <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${PACKAGING_PER_ORD.toLocaleString('es-AR')})`} value={-pnl.packaging}
+              pctVal={pnl.tn_revenue > 0 ? pnl.packaging / pnl.tn_revenue : 0} indent />
+            <PnLRow isSeparator label="" value={null} />
+            <PnLRow label="= Ganancia bruta" value={pnl.gross_profit} isSubtotal
+              note={`Margen: ${pct(Math.abs(pnl.margin_gross))}`} />
+            <PnLRow label="Gasto Meta Ads" value={-pnl.meta_spend}
+              pctVal={pnl.tn_revenue > 0 ? pnl.meta_spend / pnl.tn_revenue : 0} indent />
+            <PnLRow isSeparator label="" value={null} />
+            <PnLRow label="= Resultado publicidad" value={pnl.ad_result} isSubtotal
+              note={pnl.tn_revenue > 0 ? `${pct(Math.abs(pnl.ad_result / pnl.tn_revenue))} de ventas` : undefined} />
+            {periodExpenses.length > 0 && periodExpenses.map(e => {
+              const cat = EXPENSE_CATS.find(c => c.value === e.category)
+              return (
+                <PnLRow key={e.id}
+                  label={e.description}
+                  value={-e.amount_ars}
+                  pctVal={pnl.tn_revenue > 0 ? e.amount_ars / pnl.tn_revenue : 0}
+                  note={cat?.label ?? e.category}
+                  indent />
+              )
+            })}
+            <PnLRow isSeparator label="" value={null} />
+            <PnLRow label="RESULTADO NETO" value={pnl.net_result} isTotal />
           </tbody>
         </table>
-
-        <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
-          <p className="text-[11px] text-gray-400 dark:text-zinc-600">
-            Resultado Neto = Ventas − Gasto Meta − Envíos − Comisión TN − CMV − Gastos Variables.
+        <div className="px-5 py-2.5 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
+          <p className="text-[10px] text-gray-400 dark:text-zinc-600">
+            Costo/orden: merch ${UNIT_COST.toLocaleString('es-AR')}/un × {UNITS_PER_ORDER} + envío 10% + TN 2.5% + packaging ${PACKAGING_PER_ORD.toLocaleString('es-AR')} = ~$27.000 ARS promedio
           </p>
         </div>
       </div>
 
-      {/* Inputs: CMV + Gastos Variables */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* CMV */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Costo de mercadería (CMV)</h3>
-          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
-            {unitsSold != null
-              ? unitsSold + ' unidades vendidas · CMV = costo × unidades'
-              : 'Ejecutá un nuevo sync para ver unidades.'}
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">$ costo/ud</span>
-            <input type="text" placeholder="ej: 8000" value={costPerUnit} onChange={e => setCostPerUnit(e.target.value)}
-              className="w-28 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
-            {cmv != null && (
-              <span className="text-xs text-red-600 dark:text-red-400 font-medium">{fmt(-cmv)}</span>
-            )}
-            {costPerUnit && <button onClick={() => setCostPerUnit('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
+      {/* ── Gastos variables ────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Gastos variables</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">{periodLabel} · {periodExpenses.length} {periodExpenses.length === 1 ? 'gasto' : 'gastos'}</p>
           </div>
+          <button onClick={() => setShowAdd(!showAdd)}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Agregar
+          </button>
         </div>
 
-        {/* Gastos variables */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-1">Gastos variables</h3>
-          <p className="text-xs text-gray-400 dark:text-zinc-500 mb-3">
-            Otros gastos del período: empaque, comisiones, logística, etc.
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">$</span>
-            <input type="text" placeholder="ej: 50000" value={gastosVar} onChange={e => setGastosVar(e.target.value)}
-              className="w-32 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
-            {gastosVarNum != null && gastosVarNum > 0 && (
-              <span className="text-xs text-red-600 dark:text-red-400 font-medium">{fmt(-gastosVarNum)}</span>
+        {/* Add form */}
+        {showAdd && (
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/20 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Categoría</label>
+                <select value={newCat} onChange={e => setNewCat(e.target.value)}
+                  className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50">
+                  {EXPENSE_CATS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Descripción</label>
+                <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                  placeholder="ej: Compra stock invierno"
+                  className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Importe (ARS)</label>
+                <input type="text" value={newAmt} onChange={e => setNewAmt(e.target.value)}
+                  placeholder="ej: 250000"
+                  className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
+              </div>
+            </div>
+            {mode !== 'month' && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                En vista {mode === 'quarter' ? 'trimestral' : 'anual'}, el gasto se asigna al mes actual. Cambiá a vista mensual para asignar a un mes específico.
+              </p>
             )}
-            {gastosVar && <button onClick={() => setGastosVar('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
-          </div>
-        </div>
-      </div>
-
-      {/* Manual shipping override */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-3">Ajustar costo de envíos</h3>
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-xs text-gray-400 dark:text-zinc-500 mb-1">
-              {shippingActual != null
-                ? 'TN reporta ' + fmt(shippingActual) + ' cobrado. Ajustá si el costo real difiere.'
-                : 'Sin datos de TN. Estimado en ' + settings.shipping_pct + '% de ventas = ' + fmt(shippingEstimated)
-              }
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">$</span>
-              <input type="text"
-                placeholder={shippingActual != null ? String(shippingActual) : String(shippingEstimated ?? '')}
-                value={manualShipping} onChange={e => setManual(e.target.value)}
-                className="w-36 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400" />
-              {manualShipping && <button onClick={() => setManual('')} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowAdd(false); setNewDesc(''); setNewAmt('') }}
+                className="px-4 py-1.5 text-xs border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleAddExpense} disabled={savingExp || !newDesc || !newAmt}
+                className="px-4 py-1.5 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-40">
+                {savingExp ? 'Guardando…' : 'Guardar gasto'}
+              </button>
             </div>
           </div>
-          <a href="/settings" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline shrink-0">
-            Ajustar % en configuracion
-          </a>
-        </div>
+        )}
+
+        {/* Expense list */}
+        {periodExpenses.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-gray-400 dark:text-zinc-500">Sin gastos variables registrados para {periodLabel}</p>
+            <p className="text-xs text-gray-300 dark:text-zinc-600 mt-1">Ej: compra de mercadería, nuevo packaging, distribución de ganancias</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50 dark:divide-zinc-800/60">
+            {periodExpenses.map(e => {
+              const cat = EXPENSE_CATS.find(c => c.value === e.category)
+              return (
+                <div key={e.id} className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50/50 dark:hover:bg-zinc-800/20 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${cat?.color ?? 'bg-gray-100 dark:bg-zinc-800 text-gray-500'}`}>
+                      {cat?.label ?? e.category}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 dark:text-zinc-200 truncate">{e.description}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-zinc-500">{e.month}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-medium tabular-nums text-red-600 dark:text-red-400">{fmt(-e.amount_ars)}</span>
+                    <button onClick={() => handleDeleteExpense(e.id)}
+                      className="text-gray-300 dark:text-zinc-700 hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            {pnl.var_total > 0 && (
+              <div className="px-5 py-2 bg-gray-50 dark:bg-zinc-800/30 flex justify-between">
+                <span className="text-xs font-medium text-gray-500 dark:text-zinc-500">Total gastos variables</span>
+                <span className="text-xs font-semibold tabular-nums text-red-600 dark:text-red-400">{fmt(-pnl.var_total)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
-          nav, header, footer, button { display: none !important; }
-        }
-      `}</style>
+      {/* ── Annual summary table ─────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800">
+          <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Resumen {year}</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-500">Todos los meses del año · Hacé click para ver el detalle</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
+                <th className="text-left px-4 py-2.5 font-medium">Mes</th>
+                <th className="text-right px-4 py-2.5 font-medium">Ventas</th>
+                <th className="text-right px-4 py-2.5 font-medium">G. Bruta</th>
+                <th className="text-right px-4 py-2.5 font-medium">Meta</th>
+                <th className="text-right px-4 py-2.5 font-medium">Gastos Var.</th>
+                <th className="text-right px-4 py-2.5 font-medium">Resultado</th>
+                <th className="text-right px-4 py-2.5 font-medium">Margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {annualRows.map(({ m, key, data, pnl: mp }) => {
+                const isCur = key === curKey
+                const isSel = mode === 'month' && selMonth === m && year === curYear || mode === 'month' && selMonth === m
+                const isEmpty = data.source === 'empty'
+                const isFut = key > curKey
+                const varTotal = expenses.filter(e => e.month === key).reduce((s, e) => s + e.amount_ars, 0)
+
+                return (
+                  <tr key={m}
+                    onClick={() => { if (!isFut) { setMode('month'); setSelMonth(m) } }}
+                    className={`border-b border-gray-50 dark:border-zinc-800/60 cursor-pointer transition-colors ${
+                      isSel && mode === 'month' ? 'bg-violet-50 dark:bg-violet-950/20'
+                      : isFut ? 'opacity-30 cursor-not-allowed'
+                      : 'hover:bg-gray-50 dark:hover:bg-zinc-800/30'
+                    }`}>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${isCur ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-zinc-300'}`}>
+                          {MONTH_SHORT[m-1]}
+                        </span>
+                        {isCur && <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">vivo</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-600 dark:text-zinc-400">{isEmpty ? '—' : fmt(mp.gross_profit)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{varTotal > 0 ? fmt(-varTotal) : '—'}</td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${isEmpty ? 'text-gray-300 dark:text-zinc-700' : mp.net_result >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {isEmpty ? '—' : fmt(mp.net_result)}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums ${isEmpty ? 'text-gray-300 dark:text-zinc-700' : mp.margin_net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                      {isEmpty ? '—' : pct(Math.abs(mp.margin_net))}
+                    </td>
+                  </tr>
+                )
+              })}
+              {/* Year total row */}
+              {(() => {
+                const allData = annualRows.filter(r => r.data.source !== 'empty').map(r => r.pnl)
+                if (allData.length === 0) return null
+                const totRev = allData.reduce((s, p) => s + p.tn_revenue, 0)
+                const totGross = allData.reduce((s, p) => s + p.gross_profit, 0)
+                const totMeta  = allData.reduce((s, p) => s + p.meta_spend, 0)
+                const totVar   = annualRows.reduce((s, r) => s + expenses.filter(e => e.month === r.key).reduce((x, e) => x + e.amount_ars, 0), 0)
+                const totNet   = allData.reduce((s, p) => s + p.net_result, 0) - (totVar - allData.reduce((s, p) => s + p.var_total, 0))
+                return (
+                  <tr className="bg-gray-50 dark:bg-zinc-800/40 border-t-2 border-gray-200 dark:border-zinc-700">
+                    <td className="px-4 py-3 font-semibold text-gray-700 dark:text-zinc-300">Total {year}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-700 dark:text-zinc-300">{fmt(totRev)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-600 dark:text-zinc-400">{fmt(totGross)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{fmt(totMeta)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totVar > 0 ? fmt(-totVar) : '—'}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums font-bold ${totNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {fmt(totNet)}
+                    </td>
+                    <td className={`px-4 py-3 text-right tabular-nums font-semibold ${totNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                      {totRev > 0 ? pct(Math.abs(totNet / totRev)) : '—'}
+                    </td>
+                  </tr>
+                )
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
