@@ -68,12 +68,14 @@ async function fetchOrders(preset: string, token: string, userId: string) {
   })
   const data = await res.json()
   if (data.error || data.code) {
-    const description = data.description || data.error || 'Error desconocido'
+    const description = (data.description || data.error || '').toString()
+    // TN returns { code, description: "Last page is 0" } when there are no results — treat as empty
+    if (description.toLowerCase().includes('last page')) return []
     // Provide actionable hint for auth errors
     const hint = (data.code === 401 || description.toLowerCase().includes('token') || description.toLowerCase().includes('access'))
       ? ' — Reconectá Tiendanube en Configuración.'
       : ''
-    throw new Error(`TN orders [${preset}]: ${description}${hint}`)
+    throw new Error(`TN orders [${preset}]: ${description || 'Error desconocido'}${hint}`)
   }
   return Array.isArray(data) ? data : []
 }
