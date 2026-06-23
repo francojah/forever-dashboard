@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import type { Adset, Ad } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { Tooltip } from '@/components/ui/Tooltip'
 
 const BREAKEVEN_CPA = 30462
 const ROAS_BE       = 1.77   // 1 / 0.53 margen
@@ -34,13 +35,12 @@ function HealthDot({ cpa, roas, freq, spend }: { cpa?: number | null; roas?: num
     neutral: { dot: 'bg-gray-300 dark:bg-zinc-600', label: 'Sin datos', tip: 'Gasto insuficiente para evaluar' },
   }[s]
   return (
-    <span className="inline-flex items-center gap-1.5 group relative">
-      <span className={`w-2 h-2 rounded-full shrink-0 ${map.dot}`} />
-      <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 hidden sm:inline">{map.label}</span>
-      <span className="absolute bottom-full left-0 mb-1.5 w-52 text-[11px] bg-gray-900 text-white rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
-        {map.tip}
+    <Tooltip content={map.tip} maxWidth={220}>
+      <span className="inline-flex items-center gap-1.5 cursor-help">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${map.dot}`} />
+        <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 hidden sm:inline">{map.label}</span>
       </span>
-    </span>
+    </Tooltip>
   )
 }
 
@@ -165,16 +165,11 @@ function CreativeBadge({ rank, tooltip }: { rank: CreativeRank; tooltip: string 
   }[rank]
   if (!map) return null
   return (
-    <span className="relative group/badge inline-flex">
+    <Tooltip content={tooltip} maxWidth={256}>
       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide cursor-help ${map.cls}`}>
         {map.label}
       </span>
-      {tooltip && (
-        <span className="absolute bottom-full left-0 mb-2 w-60 text-[11px] leading-snug bg-gray-900 dark:bg-zinc-700 text-white rounded-lg px-3 py-2 opacity-0 group-hover/badge:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
-          {tooltip}
-        </span>
-      )}
-    </span>
+    </Tooltip>
   )
 }
 
