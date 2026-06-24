@@ -216,10 +216,13 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [syncingMonth, setSyncingMonth] = useState(false)
 
   // ── Live data from snapshots ───────────────────────────────────────────────
+  // Usamos summary_mtd (mes calendario del 1 al hoy) en lugar de summary_30d
+  // para evitar doble conteo: summary_30d incluye días del mes anterior
+  // que ya están en el resumen guardado de ese mes.
   const liveData: MonthData = useMemo(() => ({
-    tn_revenue: tnSnapshot?.summary_30d?.total_revenue   ?? 0,
-    tn_orders:  tnSnapshot?.summary_30d?.total_orders    ?? 0,
-    tn_units:   tnSnapshot?.summary_30d?.total_units_sold ?? 0,
+    tn_revenue: tnSnapshot?.summary_mtd?.total_revenue    ?? tnSnapshot?.summary_30d?.total_revenue   ?? 0,
+    tn_orders:  tnSnapshot?.summary_mtd?.total_orders     ?? tnSnapshot?.summary_30d?.total_orders    ?? 0,
+    tn_units:   tnSnapshot?.summary_mtd?.total_units_sold ?? tnSnapshot?.summary_30d?.total_units_sold ?? 0,
     meta_spend: metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d
              ?? metaSnapshot?.summary?.total_spend_7d
              ?? 0,
@@ -614,7 +617,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <div>
             <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Estado de resultados</p>
             <p className="text-xs text-gray-400 dark:text-zinc-500">{periodLabel}
-              {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · últimos 30d</span>}
+              {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · mes actual</span>}
               {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (() => {
                 const s = summaries.find(x => x.month === selectedMonthKey)
                 const isAutoSync = s?.notes?.startsWith('Auto-sync')

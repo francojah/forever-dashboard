@@ -219,6 +219,7 @@ export type TNSnapshot = {
   summary_yesterday: TNSummary | null
   summary_7d:        TNSummary | null
   summary_30d:       TNSummary | null
+  summary_mtd:       TNSummary | null   // mes calendario actual: del día 1 al hoy
   summary_ytd:       TNSummary | null
   orders_count: number
   created_at: string

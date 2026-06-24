@@ -40,6 +40,9 @@ function getRange(preset: string) {
   const start7d          = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 6))
   const start30d         = new Date(new Date(startOfToday).setDate(startOfToday.getDate() - 29))
   const startYTD         = new Date(`${yearAR}-01-01T00:00:00.000-03:00`)
+  // MTD: del 1° del mes calendario actual hasta ahora (sin solapamiento con meses anteriores)
+  const monthAR  = todayAR.slice(0, 7)   // 'YYYY-MM'
+  const startMTD = new Date(`${monthAR}-01T00:00:00.000-03:00`)
 
   const fmt = (d: Date) => d.toISOString()
   switch (preset) {
@@ -47,6 +50,7 @@ function getRange(preset: string) {
     case 'yesterday': return { created_at_min: fmt(startOfYesterday), created_at_max: fmt(endOfYesterday) }
     case '7d':        return { created_at_min: fmt(start7d),          created_at_max: fmt(now) }
     case '30d':       return { created_at_min: fmt(start30d),         created_at_max: fmt(now) }
+    case 'mtd':       return { created_at_min: fmt(startMTD),         created_at_max: fmt(now) }
     case 'ytd':       return { created_at_min: fmt(startYTD),         created_at_max: fmt(now) }
     default:          return { created_at_min: fmt(start7d),          created_at_max: fmt(now) }
   }
@@ -191,11 +195,12 @@ export async function POST() {
   try {
     const today = argentinaDateStr(new Date())
 
-    const [ordersToday, ordersYesterday, orders7d, orders30d, ordersYTD] = await Promise.all([
+    const [ordersToday, ordersYesterday, orders7d, orders30d, ordersMTD, ordersYTD] = await Promise.all([
       fetchOrders('today',     token, userId),
       fetchOrders('yesterday', token, userId),
       fetchOrders('7d',        token, userId),
       fetchOrders('30d',       token, userId),
+      fetchOrders('mtd',       token, userId),
       fetchOrders('ytd',       token, userId),
     ])
 
@@ -205,6 +210,7 @@ export async function POST() {
       summary_yesterday: buildSummary(ordersYesterday),
       summary_7d:        buildSummary(orders7d),
       summary_30d:       buildSummary(orders30d),
+      summary_mtd:       buildSummary(ordersMTD),
       summary_ytd:       buildSummary(ordersYTD),
       orders_count:      orders7d.length,
     }
