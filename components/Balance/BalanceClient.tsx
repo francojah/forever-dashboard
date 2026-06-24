@@ -187,6 +187,23 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [newCat,     setNewCat]     = useState('mercaderia')
   const [newDesc,    setNewDesc]    = useState('')
   const [newAmt,     setNewAmt]     = useState('')
+
+  // Capital en inventario
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [stockData,    setStockData]    = useState<any>(null)
+  const [loadingStock, setLoadingStock] = useState(false)
+  const [stockError,   setStockError]   = useState<string | null>(null)
+
+  async function handleFetchStock() {
+    setLoadingStock(true); setStockError(null)
+    try {
+      const r = await fetch('/api/tn-stock')
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? 'Error al consultar stock')
+      setStockData(j)
+    } catch (e) { setStockError(e instanceof Error ? e.message : 'Error desconocido') }
+    finally { setLoadingStock(false) }
+  }
   const [savingExp,  setSavingExp]  = useState(false)
 
   // Manual month data entry
@@ -858,6 +875,122 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Capital en inventario ──────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-zinc-800">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Capital en inventario</h2>
+            <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+              Stock actual en Tiendanube · costo real del producto cuando está disponible, fallback $6.500/unidad
+            </p>
+          </div>
+          <button
+            onClick={handleFetchStock}
+            disabled={loadingStock}
+            className="shrink-0 flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg px-3.5 py-2 transition-colors"
+          >
+            {loadingStock ? (
+              <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20"/></svg>Consultando…</>
+            ) : stockData ? 'Actualizar' : 'Consultar stock'}
+          </button>
+        </div>
+
+        {stockError && (
+          <div className="px-5 py-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20">{stockError}</div>
+        )}
+
+        {!stockData && !stockError && (
+          <div className="px-5 py-10 text-center text-gray-400 dark:text-zinc-500 text-sm">
+            Hacé click en "Consultar stock" para calcular el capital inmovilizado en mercadería.
+          </div>
+        )}
+
+        {stockData && (() => {
+          const s = stockData.summary
+          const ratio = s.capital_at_cost > 0 ? s.capital_at_retail / s.capital_at_cost : null
+          return (
+            <>
+              {/* KPI row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-zinc-800">
+                {[
+                  { label: 'Unidades en stock', value: s.total_units.toLocaleString('es-AR'), sub: `${s.units_without_cost > 0 ? s.units_without_cost + ' sin costo → fallback $6.5K' : 'Todos con costo real'}` },
+                  { label: 'Capital a costo', value: '$' + Math.round(s.capital_at_cost / 1000) + 'K', sub: 'ARS inmovilizados en merch' },
+                  { label: 'Valor a precio venta', value: '$' + Math.round(s.capital_at_retail / 1000) + 'K', sub: 'Si vendés todo el stock' },
+                  { label: 'Markup promedio', value: ratio ? ratio.toFixed(2) + 'x', sub: `${ratio ? Math.round((ratio - 1) * 100) + '% de ganancia bruta sobre costo' : ''}` },
+                ].map(k => (
+                  <div key={k.label} className="px-4 py-4">
+                    <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">{k.label}</p>
+                    <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">{k.value}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">{k.sub}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Top products by capital */}
+              {stockData.products?.length > 0 && (
+                <div className="border-t border-gray-100 dark:border-zinc-800">
+                  <div className="px-5 py-2.5 bg-gray-50/60 dark:bg-zinc-800/40">
+                    <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
+                      Productos — mayor capital inmovilizado
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-zinc-800">
+                          <th className="text-left px-5 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Producto</th>
+                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Unidades</th>
+                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Cap. costo</th>
+                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Val. retail</th>
+                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">% total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {stockData.products.slice(0, 15).map((p: any) => {
+                          const pct = s.capital_at_cost > 0 ? (p.capital_at_cost / s.capital_at_cost * 100).toFixed(1) : '—'
+                          const barW = s.capital_at_cost > 0 ? Math.round(p.capital_at_cost / s.capital_at_cost * 100) : 0
+                          return (
+                            <tr key={p.id} className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors">
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-2">
+                                  {!p.has_real_cost && (
+                                    <span className="text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">est.</span>
+                                  )}
+                                  <span className="text-gray-800 dark:text-zinc-200 font-medium text-sm truncate max-w-[220px]">{p.name}</span>
+                                </div>
+                                <div className="mt-1 h-1 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden w-full max-w-[200px]">
+                                  <div className="h-full bg-sky-400 rounded-full" style={{ width: barW + '%' }} />
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{p.units}</td>
+                              <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-zinc-200 tabular-nums">
+                                ${Math.round(p.capital_at_cost / 1000)}K
+                              </td>
+                              <td className="px-4 py-3 text-right text-emerald-600 dark:text-emerald-400 tabular-nums text-xs">
+                                {p.capital_at_retail > 0 ? '$' + Math.round(p.capital_at_retail / 1000) + 'K' : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-400 dark:text-zinc-500 tabular-nums text-xs">{pct}%</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {stockData.products.length > 15 && (
+                    <p className="px-5 py-3 text-xs text-gray-400 dark:text-zinc-500 border-t border-gray-100 dark:border-zinc-800">
+                      Mostrando 15 de {stockData.products.length} productos con stock.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="px-5 py-3 border-t border-gray-100 dark:border-zinc-800 text-[11px] text-gray-400 dark:text-zinc-500">
+                Consultado: {new Date(stockData.fetched_at).toLocaleString('es-AR')} · Productos con costo estimado: {s.units_without_cost} unidades usan $6.500 de fallback
+              </div>
+            </>
+          )
+        })()}
       </div>
     </div>
   )

@@ -30,7 +30,7 @@ const NAV_SECTIONS = [
     items: [
       { href: '/',           label: 'Dashboard',  icon: 'dashboard',  accent: 'text-blue-600 dark:text-blue-400',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
       { href: '/tiendanube', label: 'Tiendanube', icon: 'tiendanube', accent: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/30' },
-      { href: '/historico',  label: 'Historial',  icon: 'historico',  accent: 'text-sky-600 dark:text-sky-400',      bg: 'bg-sky-50 dark:bg-sky-950/30' },
+      { href: '/historico',  label: 'Tendencias', icon: 'historico',  accent: 'text-sky-600 dark:text-sky-400',      bg: 'bg-sky-50 dark:bg-sky-950/30' },
       { href: '/balance',    label: 'Balance',    icon: 'balance',    accent: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
     ],
   },
