@@ -918,7 +918,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                   { label: 'Unidades en stock', value: s.total_units.toLocaleString('es-AR'), sub: `${s.units_without_cost > 0 ? s.units_without_cost + ' sin costo → fallback $6.5K' : 'Todos con costo real'}` },
                   { label: 'Capital a costo', value: '$' + Math.round(s.capital_at_cost / 1000) + 'K', sub: 'ARS inmovilizados en merch' },
                   { label: 'Valor a precio venta', value: '$' + Math.round(s.capital_at_retail / 1000) + 'K', sub: 'Si vendés todo el stock' },
-                  { label: 'Markup promedio', value: ratio ? ratio.toFixed(2) + 'x', sub: `${ratio ? Math.round((ratio - 1) * 100) + '% de ganancia bruta sobre costo' : ''}` },
+                  { label: 'Markup promedio', value: ratio ? ratio.toFixed(2) + 'x' : '—', sub: `${ratio ? Math.round((ratio - 1) * 100) + '% de ganancia bruta sobre costo' : ''}` },
                 ].map(k => (
                   <div key={k.label} className="px-4 py-4">
                     <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">{k.label}</p>
