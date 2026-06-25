@@ -95,26 +95,29 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 // ── Stat card ─────────────────────────────────────────────────────
-function StatCard({ metric, points }: { metric: MetricDef; points: DataPoint[] }) {
-  const curr = last7Avg(points, metric.key)
-  const prev = prev7Avg(points, metric.key)
+function StatCard({ metric, points, window }: { metric: MetricDef; points: DataPoint[]; window: number }) {
+  const half = Math.max(Math.floor(window / 2), 1)
+  const curr = avg(points.slice(-half).map(p => p.summary[metric.key] as number | null))
+  const prev = avg(points.slice(-window, -half).map(p => p.summary[metric.key] as number | null))
   const pct  = delta(curr, prev)
 
   const isGoodDelta = metric.key === 'blended_roas' || metric.key === 'total_purchases_7d'
     ? (pct ?? 0) >= 0
     : (pct ?? 0) <= 0
 
+  const windowLabel = window <= 7 ? `últimos ${window}d` : `últimos ${Math.ceil(window / 2)}d`
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
       <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide font-medium mb-1">
-        {metric.label} — últimos 7d
+        {metric.label} — {windowLabel}
       </p>
       <p className="text-2xl font-semibold tabular-nums" style={{ color: metric.color }}>
         {curr != null ? metric.format(curr) : '—'}
       </p>
       {pct != null && (
         <p className={`text-xs mt-1 font-medium ${isGoodDelta ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-          {pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs sem. anterior
+          {pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs período anterior
         </p>
       )}
       {/* Reference context */}
@@ -130,6 +133,36 @@ function StatCard({ metric, points }: { metric: MetricDef; points: DataPoint[] }
           }
         </p>
       )}
+    </div>
+  )
+}
+
+// ── Insight headline ──────────────────────────────────────────────
+function InsightBanner({ points }: { points: DataPoint[] }) {
+  if (points.length < 4) return null
+  const half   = Math.max(Math.floor(points.length / 2), 1)
+  const rCurr  = avg(points.slice(-half).map(p => p.summary.blended_roas as number | null))
+  const rPrev  = avg(points.slice(-points.length, -half).map(p => p.summary.blended_roas as number | null))
+  const cCurr  = avg(points.slice(-half).map(p => p.summary.blended_cpa as number | null))
+  const rPct   = delta(rCurr, rPrev)
+  const roasOk = rCurr != null && rCurr >= ROAS_MIN
+  const cpaOk  = cCurr != null && cCurr <= BREAKEVEN_CPA
+  const trend  = rPct != null ? (rPct >= 5 ? '↑ mejorando' : rPct <= -5 ? '↓ deteriorando' : '→ estable') : null
+
+  const color = roasOk && cpaOk
+    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300'
+    : !roasOk || !cpaOk
+    ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-300'
+    : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'
+
+  const msg = [
+    rCurr != null && `ROAS promedio ${rCurr.toFixed(2)}x${trend ? ` (${trend}${rPct != null ? ` ${rPct > 0 ? '+' : ''}${rPct.toFixed(0)}%` : ''})` : ''}`,
+    cCurr != null && `CPA $${Math.round(cCurr / 1000)}K ${cpaOk ? '· bajo breakeven' : '· sobre breakeven'}`,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-xs font-medium ${color}`}>
+      {msg || 'Sin suficientes datos para insight'}
     </div>
   )
 }
@@ -197,9 +230,12 @@ export default function HistoricoClient({ data }: Props) {
         </div>
       </div>
 
+      {/* Insight headline */}
+      <InsightBanner points={filtered} />
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {METRIC_DEFS.map(m => <StatCard key={m.key} metric={m} points={filtered} />)}
+        {METRIC_DEFS.map(m => <StatCard key={m.key} metric={m} points={filtered} window={window} />)}
       </div>
 
       {/* Metric toggles */}
@@ -312,16 +348,16 @@ export default function HistoricoClient({ data }: Props) {
             </thead>
             <tbody>
               {[...filtered].reverse().map((p, i) => {
-                const s     = p.summary
+                const s      = p.summary
                 const roasOk = s.blended_roas != null && s.blended_roas >= ROAS_MIN
                 const cpaOk  = s.blended_cpa  != null && s.blended_cpa  <= BREAKEVEN_CPA
                 return (
                   <tr key={i} className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors">
                     <td className="px-4 py-2.5 text-gray-500 dark:text-zinc-400 text-xs">{p.snapshot_date}</td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${roasOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${roasOk ? 'text-emerald-600 dark:text-emerald-400' : s.blended_roas != null ? 'text-red-500' : 'text-gray-400 dark:text-zinc-600'}`}>
                       {s.blended_roas != null ? s.blended_roas.toFixed(2) + 'x' : '—'}
                     </td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${cpaOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${cpaOk ? 'text-emerald-600 dark:text-emerald-400' : s.blended_cpa != null ? 'text-red-500' : 'text-gray-400 dark:text-zinc-600'}`}>
                       {s.blended_cpa != null ? '$' + Math.round(s.blended_cpa / 1000) + 'K' : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-gray-600 dark:text-zinc-300">
@@ -333,6 +369,30 @@ export default function HistoricoClient({ data }: Props) {
                   </tr>
                 )
               })}
+              {/* Promedio período */}
+              {filtered.length > 1 && (() => {
+                const avgRoas  = avg(filtered.map(p => p.summary.blended_roas as number | null))
+                const avgCpa   = avg(filtered.map(p => p.summary.blended_cpa as number | null))
+                const avgSpend = avg(filtered.map(p => p.summary.total_spend_7d as number | null))
+                const avgPurch = avg(filtered.map(p => p.summary.total_purchases_7d as number | null))
+                return (
+                  <tr className="border-t-2 border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/50 font-semibold">
+                    <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-zinc-400 uppercase tracking-wide">Promedio período</td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums text-xs ${avgRoas != null && avgRoas >= ROAS_MIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                      {avgRoas != null ? avgRoas.toFixed(2) + 'x' : '—'}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums text-xs ${avgCpa != null && avgCpa <= BREAKEVEN_CPA ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                      {avgCpa != null ? '$' + Math.round(avgCpa / 1000) + 'K' : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-xs text-gray-600 dark:text-zinc-300">
+                      {avgSpend != null ? '$' + Math.round(avgSpend / 1000) + 'K' : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-xs text-gray-600 dark:text-zinc-300">
+                      {avgPurch != null ? avgPurch.toFixed(1) : '—'}
+                    </td>
+                  </tr>
+                )
+              })()}
             </tbody>
           </table>
         </div>

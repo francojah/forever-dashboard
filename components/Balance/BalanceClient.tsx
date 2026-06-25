@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 
 // ─── Estructura de costos (mirrors DashboardClient.tsx) ───────────────────────
@@ -44,6 +44,14 @@ interface Expense {
   created_at:  string
 }
 
+interface RecurringExpense {
+  id:         string
+  name:       string
+  amount_ars: number
+  category:   string
+  active:     boolean
+}
+
 interface MonthData {
   meta_spend: number
   tn_revenue: number
@@ -53,22 +61,23 @@ interface MonthData {
 }
 
 interface PnL {
-  tn_revenue:   number
-  merch:        number
-  shipping:     number
-  platform:     number
-  packaging:    number
-  cogs:         number
-  gross_profit: number
-  meta_spend:   number
-  ad_result:    number
-  var_total:    number
-  net_result:   number
-  margin_gross: number
-  margin_net:   number
-  tn_orders:    number
-  tn_units:     number
-  aov:          number
+  tn_revenue:      number
+  merch:           number
+  shipping:        number
+  platform:        number
+  packaging:       number
+  cogs:            number
+  gross_profit:    number
+  meta_spend:      number
+  ad_result:       number
+  recurring_total: number
+  var_total:       number
+  net_result:      number
+  margin_gross:    number
+  margin_net:      number
+  tn_orders:       number
+  tn_units:        number
+  aov:             number
 }
 
 interface Props {
@@ -88,7 +97,7 @@ function fmt(n: number | null | undefined, opts?: { sign?: boolean }): string {
 function pct(n: number) { return (n * 100).toFixed(1) + '%' }
 function mkKey(y: number, m: number) { return `${y}-${String(m).padStart(2, '0')}` }
 
-function calcPnL(data: MonthData, varExpenses: Expense[]): PnL {
+function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0): PnL {
   const { tn_revenue, meta_spend, tn_orders, tn_units } = data
   const aov      = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
   const units    = tn_units > 0 ? tn_units : tn_orders * UNITS_PER_ORDER
@@ -100,17 +109,17 @@ function calcPnL(data: MonthData, varExpenses: Expense[]): PnL {
   const gross_profit = tn_revenue - cogs
   const ad_result    = gross_profit - meta_spend
   const var_total    = varExpenses.reduce((s, e) => s + e.amount_ars, 0)
-  const net_result   = ad_result - var_total
+  const net_result   = ad_result - recurringTotal - var_total
   return {
     tn_revenue, merch, shipping, platform, packaging, cogs,
-    gross_profit, meta_spend, ad_result, var_total, net_result,
+    gross_profit, meta_spend, ad_result, recurring_total: recurringTotal, var_total, net_result,
     margin_gross: tn_revenue > 0 ? gross_profit / tn_revenue : 0,
     margin_net:   tn_revenue > 0 ? net_result   / tn_revenue : 0,
     tn_orders, tn_units: units, aov,
   }
 }
 
-function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[]): PnL {
+function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[], recurringTotal = 0): PnL {
   const merged: MonthData = { meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0, source: 'live' }
   months.forEach(m => {
     merged.meta_spend += m.meta_spend
@@ -119,7 +128,7 @@ function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[
     merged.tn_units   += m.tn_units
   })
   const expenses = allExpenses.filter(e => keys.includes(e.month))
-  return calcPnL(merged, expenses)
+  return calcPnL(merged, expenses, recurringTotal)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -188,11 +197,37 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [newDesc,    setNewDesc]    = useState('')
   const [newAmt,     setNewAmt]     = useState('')
 
-  // Capital en inventario
+  // Gastos fijos recurrentes
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
+
+  useEffect(() => {
+    fetch('/api/recurring-expenses')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setRecurringExpenses(d) })
+      .catch(() => { /* silent */ })
+  }, [])
+
+  // Capital en inventario — stock de TN + costos manuales
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [stockData,    setStockData]    = useState<any>(null)
-  const [loadingStock, setLoadingStock] = useState(false)
-  const [stockError,   setStockError]   = useState<string | null>(null)
+  const [stockProducts,  setStockProducts]  = useState<{ id: string|number; name: string; total_units: number }[] | null>(null)
+  const [loadingStock,   setLoadingStock]   = useState(false)
+  const [stockError,     setStockError]     = useState<string | null>(null)
+  const [productCosts,   setProductCosts]   = useState<Record<string, number>>({})   // product_id → unit_cost
+  const [costsEdited,    setCostsEdited]    = useState<Record<string, number>>({})   // unsaved edits
+  const [savingCosts,    setSavingCosts]    = useState(false)
+
+  // Load saved costs on mount
+  useEffect(() => {
+    fetch('/api/product-costs')
+      .then(r => r.json())
+      .then((rows: { product_id: string; unit_cost: number }[]) => {
+        if (!Array.isArray(rows)) return
+        const map: Record<string, number> = {}
+        rows.forEach(r => { map[String(r.product_id)] = r.unit_cost })
+        setProductCosts(map)
+      })
+      .catch(() => { /* silent */ })
+  }, [])
 
   async function handleFetchStock() {
     setLoadingStock(true); setStockError(null)
@@ -200,9 +235,34 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       const r = await fetch('/api/tn-stock')
       const j = await r.json()
       if (!r.ok) throw new Error(j.error ?? 'Error al consultar stock')
-      setStockData(j)
+      setStockProducts(j.products ?? [])
     } catch (e) { setStockError(e instanceof Error ? e.message : 'Error desconocido') }
     finally { setLoadingStock(false) }
+  }
+
+  async function handleSaveCosts() {
+    setSavingCosts(true)
+    try {
+      const prods = stockProducts ?? []
+      await Promise.all(
+        Object.entries(costsEdited).map(([pid, cost]) => {
+          const prod = prods.find(p => String(p.id) === pid)
+          return fetch('/api/product-costs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: pid, product_name: prod?.name ?? '', unit_cost: cost }),
+          })
+        })
+      )
+      setProductCosts(prev => ({ ...prev, ...costsEdited }))
+      setCostsEdited({})
+    } catch { /* silent */ }
+    setSavingCosts(false)
+  }
+
+  function getCost(pid: string|number): number {
+    const key = String(pid)
+    return costsEdited[key] ?? productCosts[key] ?? 0
   }
   const [savingExp,  setSavingExp]  = useState(false)
 
@@ -257,12 +317,21 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const isPastMonth = selectedMonthKey < curKey
   const isFuture = selectedMonthKey > curKey
 
+  // ── Recurring expenses monthly total ──────────────────────────────────────
+  const recurringMonthTotal = useMemo(
+    () => recurringExpenses.filter(x => x.active).reduce((s, x) => s + x.amount_ars, 0),
+    [recurringExpenses]
+  )
+  const activeRecurring = useMemo(
+    () => recurringExpenses.filter(x => x.active),
+    [recurringExpenses]
+  )
+
   // ── P&L for selected period ────────────────────────────────────────────────
   const pnl = useMemo(() => {
-    const datas   = periodKeys.map(k => getMonthData(k))
-    const expList = expenses.filter(e => periodKeys.includes(e.month))
-    return aggregatePnL(datas, expenses, periodKeys)
-  }, [periodKeys, getMonthData, expenses])
+    const datas = periodKeys.map(k => getMonthData(k))
+    return aggregatePnL(datas, expenses, periodKeys, recurringMonthTotal * periodKeys.length)
+  }, [periodKeys, getMonthData, expenses, recurringMonthTotal])
 
   const periodExpenses = useMemo(
     () => expenses.filter(e => periodKeys.includes(e.month)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -276,9 +345,9 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       const key = mkKey(year, m)
       const data = getMonthData(key)
       const exp  = expenses.filter(e => e.month === key)
-      const p    = calcPnL(data, exp)
+      const p    = calcPnL(data, exp, recurringMonthTotal)
       return { m, key, data, pnl: p }
-    }), [year, getMonthData, expenses])
+    }), [year, getMonthData, expenses, recurringMonthTotal])
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = mode === 'month'
@@ -675,6 +744,20 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             <PnLRow isSeparator label="" value={null} />
             <PnLRow label="= Resultado publicidad" value={pnl.ad_result} isSubtotal
               note={pnl.tn_revenue > 0 ? `${pct(Math.abs(pnl.ad_result / pnl.tn_revenue))} de ventas` : undefined} />
+            {/* Gastos fijos recurrentes */}
+            {activeRecurring.length > 0 && activeRecurring.map(re => {
+              const monthsCount = periodKeys.length
+              const totalAmt = re.amount_ars * monthsCount
+              return (
+                <PnLRow key={re.id}
+                  label={re.name + (monthsCount > 1 ? ` ×${monthsCount}m` : '')}
+                  value={-totalAmt}
+                  pctVal={pnl.tn_revenue > 0 ? totalAmt / pnl.tn_revenue : 0}
+                  note={`Fijo · $${(re.amount_ars / 1000).toFixed(0)}K/mes`}
+                  indent />
+              )
+            })}
+            {/* Gastos variables */}
             {periodExpenses.length > 0 && periodExpenses.map(e => {
               const cat = EXPENSE_CATS.find(c => c.value === e.category)
               return (
@@ -886,111 +969,144 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <div>
             <h2 className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Capital en inventario</h2>
             <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
-              Stock actual en Tiendanube · costo real del producto cuando está disponible, fallback $6.500/unidad
+              Stock desde Tiendanube · ingresá el costo por unidad manualmente
             </p>
           </div>
-          <button
-            onClick={handleFetchStock}
-            disabled={loadingStock}
-            className="shrink-0 flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg px-3.5 py-2 transition-colors"
-          >
-            {loadingStock ? (
-              <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20"/></svg>Consultando…</>
-            ) : stockData ? 'Actualizar' : 'Consultar stock'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {Object.keys(costsEdited).length > 0 && (
+              <button
+                onClick={handleSaveCosts}
+                disabled={savingCosts}
+                className="flex items-center gap-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg px-3 py-2 transition-colors"
+              >
+                {savingCosts ? 'Guardando…' : `Guardar costos (${Object.keys(costsEdited).length})`}
+              </button>
+            )}
+            <button
+              onClick={handleFetchStock}
+              disabled={loadingStock}
+              className="flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg px-3.5 py-2 transition-colors"
+            >
+              {loadingStock ? (
+                <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20"/></svg>Consultando…</>
+              ) : stockProducts ? 'Actualizar stock' : 'Consultar stock'}
+            </button>
+          </div>
         </div>
 
         {stockError && (
           <div className="px-5 py-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20">{stockError}</div>
         )}
 
-        {!stockData && !stockError && (
+        {!stockProducts && !stockError && (
           <div className="px-5 py-10 text-center text-gray-400 dark:text-zinc-500 text-sm">
-            Hacé click en "Consultar stock" para calcular el capital inmovilizado en mercadería.
+            Hacé click en &quot;Consultar stock&quot; para cargar las unidades desde Tiendanube.
           </div>
         )}
 
-        {stockData && (() => {
-          const s = stockData.summary
-          const ratio = s.capital_at_cost > 0 ? s.capital_at_retail / s.capital_at_cost : null
+        {stockProducts && (() => {
+          const totalCapital = stockProducts.reduce((s, p) => s + p.total_units * getCost(p.id), 0)
+          const pendingCost  = stockProducts.filter(p => getCost(p.id) === 0).length
           return (
             <>
-              {/* KPI row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-zinc-800">
-                {[
-                  { label: 'Unidades en stock', value: s.total_units.toLocaleString('es-AR'), sub: `${s.units_without_cost > 0 ? s.units_without_cost + ' sin costo → fallback $6.5K' : 'Todos con costo real'}` },
-                  { label: 'Capital a costo', value: '$' + Math.round(s.capital_at_cost / 1000) + 'K', sub: 'ARS inmovilizados en merch' },
-                  { label: 'Valor a precio venta', value: '$' + Math.round(s.capital_at_retail / 1000) + 'K', sub: 'Si vendés todo el stock' },
-                  { label: 'Markup promedio', value: ratio ? ratio.toFixed(2) + 'x' : '—', sub: `${ratio ? Math.round((ratio - 1) * 100) + '% de ganancia bruta sobre costo' : ''}` },
-                ].map(k => (
-                  <div key={k.label} className="px-4 py-4">
-                    <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">{k.label}</p>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">{k.value}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">{k.sub}</p>
-                  </div>
-                ))}
-              </div>
-              {/* Top products by capital */}
-              {stockData.products?.length > 0 && (
-                <div className="border-t border-gray-100 dark:border-zinc-800">
-                  <div className="px-5 py-2.5 bg-gray-50/60 dark:bg-zinc-800/40">
-                    <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide">
-                      Productos — mayor capital inmovilizado
-                    </p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-zinc-800">
-                          <th className="text-left px-5 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Producto</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Unidades</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Cap. costo</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Val. retail</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">% total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {stockData.products.slice(0, 15).map((p: any) => {
-                          const pct = s.capital_at_cost > 0 ? (p.capital_at_cost / s.capital_at_cost * 100).toFixed(1) : '—'
-                          const barW = s.capital_at_cost > 0 ? Math.round(p.capital_at_cost / s.capital_at_cost * 100) : 0
-                          return (
-                            <tr key={p.id} className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors">
-                              <td className="px-5 py-3">
-                                <div className="flex items-center gap-2">
-                                  {!p.has_real_cost && (
-                                    <span className="text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">est.</span>
-                                  )}
-                                  <span className="text-gray-800 dark:text-zinc-200 font-medium text-sm truncate max-w-[220px]">{p.name}</span>
-                                </div>
-                                <div className="mt-1 h-1 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden w-full max-w-[200px]">
-                                  <div className="h-full bg-sky-400 rounded-full" style={{ width: barW + '%' }} />
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{p.units}</td>
-                              <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-zinc-200 tabular-nums">
-                                ${Math.round(p.capital_at_cost / 1000)}K
-                              </td>
-                              <td className="px-4 py-3 text-right text-emerald-600 dark:text-emerald-400 tabular-nums text-xs">
-                                {p.capital_at_retail > 0 ? '$' + Math.round(p.capital_at_retail / 1000) + 'K' : '—'}
-                              </td>
-                              <td className="px-4 py-3 text-right text-gray-400 dark:text-zinc-500 tabular-nums text-xs">{pct}%</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {stockData.products.length > 15 && (
-                    <p className="px-5 py-3 text-xs text-gray-400 dark:text-zinc-500 border-t border-gray-100 dark:border-zinc-800">
-                      Mostrando 15 de {stockData.products.length} productos con stock.
-                    </p>
-                  )}
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-zinc-800">
+                <div className="px-5 py-4">
+                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Unidades en stock</p>
+                  <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">
+                    {stockProducts.reduce((s, p) => s + p.total_units, 0).toLocaleString('es-AR')}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">{stockProducts.length} productos</p>
                 </div>
-              )}
-              <div className="px-5 py-3 border-t border-gray-100 dark:border-zinc-800 text-[11px] text-gray-400 dark:text-zinc-500">
-                Consultado: {new Date(stockData.fetched_at).toLocaleString('es-AR')} · Productos con costo estimado: {s.units_without_cost} unidades usan $6.500 de fallback
+                <div className="px-5 py-4">
+                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Capital a costo</p>
+                  <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">
+                    {totalCapital > 0 ? '$' + Math.round(totalCapital / 1000) + 'K' : '—'}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">ARS inmovilizados</p>
+                </div>
+                <div className="px-5 py-4">
+                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Sin costo</p>
+                  <p className={`text-xl font-semibold tabular-nums ${pendingCost > 0 ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {pendingCost}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                    {pendingCost > 0 ? 'productos sin costo ingresado' : 'Todos con costo cargado'}
+                  </p>
+                </div>
               </div>
+
+              {/* Products table with editable cost */}
+              <div className="border-t border-gray-100 dark:border-zinc-800 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/60 dark:bg-zinc-800/40 border-b border-gray-100 dark:border-zinc-800">
+                      <th className="text-left px-5 py-2.5 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Producto</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Stock</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Costo/un (ARS)</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 font-semibold uppercase tracking-wide">Capital</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockProducts.map(p => {
+                      const key      = String(p.id)
+                      const cost     = getCost(p.id)
+                      const capital  = p.total_units * cost
+                      const isEdited = key in costsEdited
+                      const barW     = totalCapital > 0 ? Math.round(capital / totalCapital * 100) : 0
+                      return (
+                        <tr key={key} className="border-t border-gray-50 dark:border-zinc-800 hover:bg-gray-50/40 dark:hover:bg-zinc-800/30 transition-colors">
+                          <td className="px-5 py-3">
+                            <span className="text-gray-800 dark:text-zinc-200 font-medium text-sm truncate max-w-[200px] block">{p.name}</span>
+                            {capital > 0 && (
+                              <div className="mt-1 h-1 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden w-full max-w-[200px]">
+                                <div className="h-full bg-sky-400 rounded-full" style={{ width: barW + '%' }} />
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-600 dark:text-zinc-300 tabular-nums">{p.total_units}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {isEdited && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                              <input
+                                type="number"
+                                min="0"
+                                step="500"
+                                placeholder="0"
+                                value={costsEdited[key] ?? (productCosts[key] || '')}
+                                onChange={e => {
+                                  const v = parseFloat(e.target.value) || 0
+                                  setCostsEdited(prev => ({ ...prev, [key]: v }))
+                                }}
+                                className="w-28 text-right text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-400 tabular-nums"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                            {capital > 0
+                              ? <span className="text-gray-800 dark:text-zinc-200">${Math.round(capital / 1000)}K</span>
+                              : <span className="text-gray-300 dark:text-zinc-700">—</span>
+                            }
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {totalCapital > 0 && (
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/50">
+                        <td colSpan={3} className="px-5 py-3 text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide">Total capital inmovilizado</td>
+                        <td className="px-4 py-3 text-right font-bold text-lg text-sky-600 dark:text-sky-400 tabular-nums">${Math.round(totalCapital / 1000)}K</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              {pendingCost > 0 && (
+                <p className="px-5 py-3 text-[11px] text-amber-600 dark:text-amber-400 border-t border-gray-100 dark:border-zinc-800">
+                  {pendingCost} producto{pendingCost > 1 ? 's' : ''} sin costo ingresado. Completalos para calcular el capital total.
+                </p>
+              )}
             </>
           )
         })()}

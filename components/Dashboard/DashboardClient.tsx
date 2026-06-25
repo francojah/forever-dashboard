@@ -191,90 +191,50 @@ function Sparkline({ data, color = '#10b981' }: { data: (number | null)[]; color
 }
 
 // Animated SVG trapezoid funnel
-function ConversionFunnel({ steps }: {
-  steps: { label: string; value: number; note?: string; color: string }[]
+function FunnelSteps({ steps }: {
+  steps: { label: string; value: number; color: string }[]
 }) {
-  const [show, setShow] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setShow(true), 120)
-    return () => clearTimeout(t)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps.map(s => s.value).join('-')])
-
   if (!steps[0]?.value) return <p className="text-xs text-gray-400 dark:text-zinc-600 text-center py-6">Sin datos para este período</p>
 
   const base = steps[0].value
-  const MX = 140, W = 240, SH = 50, GAP = 5
+  const fmtVal = (v: number) => v >= 1_000_000
+    ? (v / 1_000_000).toFixed(1) + 'M'
+    : v >= 1000 ? (v / 1000).toFixed(0) + 'K'
+    : v.toLocaleString('es-AR')
 
   return (
-    <svg
-      viewBox={`0 0 280 ${steps.length * (SH + GAP) - GAP}`}
-      className="w-full max-w-[300px] mx-auto block"
-      aria-label="Funnel de conversión"
-    >
+    <div className="space-y-1.5">
       {steps.map((step, i) => {
-        const tw = show ? (i === 0 ? W : Math.max((steps[i - 1].value / base) * W, 16)) : 4
-        const bw = show ? Math.max((step.value / base) * W, 16) : 4
-        const y  = i * (SH + GAP)
-        const pts = [
-          `${(MX - tw / 2).toFixed(1)},${y}`,
-          `${(MX + tw / 2).toFixed(1)},${y}`,
-          `${(MX + bw / 2).toFixed(1)},${y + SH}`,
-          `${(MX - bw / 2).toFixed(1)},${y + SH}`,
-        ].join(' ')
+        const pct  = base > 0 ? Math.round(step.value / base * 100) : 0
         const conv = i > 0 && steps[i - 1].value > 0
           ? ((step.value / steps[i - 1].value) * 100).toFixed(1) + '%'
           : null
-        const fmtVal = (v: number) => v >= 1_000_000
-          ? (v / 1_000_000).toFixed(1) + 'M'
-          : v >= 1000 ? (v / 1000).toFixed(0) + 'K'
-          : v.toLocaleString('es-AR')
-
         return (
-          <g key={step.label}>
-            {/* Trapezoid */}
-            <polygon
-              points={pts}
-              fill={step.color}
-              style={{
-                transition: `all 0.55s cubic-bezier(0.34,1.1,0.64,1) ${i * 90}ms`,
-              }}
-            />
-            {/* Subtle inset shine */}
-            <polygon
-              points={pts}
-              fill="white"
-              fillOpacity={0.06}
-              style={{ transition: `all 0.55s cubic-bezier(0.34,1.1,0.64,1) ${i * 90}ms` }}
-            />
-            {/* Label inside */}
-            <text x={MX} y={y + SH / 2 - 7} textAnchor="middle"
-              fontSize="8" fontWeight="700" fill="white"
-              fillOpacity={bw > 48 && show ? 0.90 : 0}
-              style={{ transition: `fill-opacity 0.25s ${i * 90 + 300}ms` }}>
-              {step.label.toUpperCase()}
-            </text>
-            <text x={MX} y={y + SH / 2 + 9} textAnchor="middle"
-              fontSize="13" fontWeight="700" fill="white"
-              fillOpacity={bw > 48 && show ? 1 : 0}
-              style={{ transition: `fill-opacity 0.25s ${i * 90 + 350}ms` }}>
-              {fmtVal(step.value)}
-            </text>
-            {/* Conversion arrow on right side */}
-            {conv && show && (
-              <text x={MX + Math.max(tw, bw) / 2 + 8} y={y + SH / 2 + 4}
-                fontSize="8.5" fill="#71717a" dominantBaseline="middle">
-                ↘ {conv}
-              </text>
+          <div key={step.label}>
+            {conv && (
+              <div className="flex items-center gap-1.5 py-0.5 px-1">
+                <div className="flex-1 h-px bg-gray-100 dark:bg-zinc-800" />
+                <span className="text-[9px] font-medium text-gray-400 dark:text-zinc-500 tabular-nums shrink-0">↓ {conv}</span>
+                <div className="flex-1 h-px bg-gray-100 dark:bg-zinc-800" />
+              </div>
             )}
-            {/* Note below step */}
-            {step.note && show && (
-              <text x={MX} y={y + SH - 2} textAnchor="middle"
-                fontSize="7" fill="white" fillOpacity={bw > 60 ? 0.65 : 0}>
-                {step.note}
-              </text>
-            )}
-          </g>
+            <div className="flex items-center gap-2.5">
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: step.color }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-zinc-400 truncate">{step.label}</span>
+                  <span className="text-[11px] font-bold text-gray-800 dark:text-zinc-200 tabular-nums ml-2 shrink-0">{fmtVal(step.value)}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: pct + '%', background: step.color, opacity: 0.7 }}
+                  />
+                </div>
+              </div>
+              <span className="text-[10px] text-gray-400 dark:text-zinc-600 tabular-nums w-7 text-right shrink-0">{pct}%</span>
+            </div>
+          </div>
         )
       })}
     </svg>
@@ -1274,27 +1234,29 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             const attr  = tnOrders > 0 && metaPurchases > 0 ? Math.round(metaPurchases / tnOrders * 100) : null
             return (
               <div>
-                <ConversionFunnel steps={funnelSteps} />
-                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800 grid grid-cols-3 gap-2 text-center">
-                  {ctr && (
-                    <div>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">CTR</p>
-                      <p className="text-xs font-bold text-blue-500">{ctr}%</p>
-                    </div>
-                  )}
-                  {cvr && (
-                    <div>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">CVR (click→compra)</p>
-                      <p className="text-xs font-bold text-indigo-500">{cvr}%</p>
-                    </div>
-                  )}
-                  {attr != null && (
-                    <div>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">Atribución pixel</p>
-                      <p className={`text-xs font-bold ${attr >= 60 ? 'text-emerald-500' : attr >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{attr}%</p>
-                    </div>
-                  )}
-                </div>
+                <FunnelSteps steps={funnelSteps} />
+                {(ctr || cvr || attr != null) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800 grid grid-cols-3 gap-2 text-center">
+                    {ctr && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">CTR</p>
+                        <p className="text-xs font-bold text-blue-500">{ctr}%</p>
+                      </div>
+                    )}
+                    {cvr && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">CVR</p>
+                        <p className="text-xs font-bold text-indigo-500">{cvr}%</p>
+                      </div>
+                    )}
+                    {attr != null && (
+                      <div>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">Pixel</p>
+                        <p className={`text-xs font-bold ${attr >= 60 ? 'text-emerald-500' : attr >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{attr}%</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -1346,6 +1308,15 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 </div>
               </div>
             )}
+            {/* Explanatory note */}
+            <div className="mt-1 px-1">
+              <p className="text-[10px] text-gray-400 dark:text-zinc-600 leading-relaxed">
+                El ROAS de Meta usa ventana de atribución 7d click + 1d view. El ROAS de TN es ventas reales ÷ gasto.
+                {summary.blended_roas != null && realRoas != null && summary.blended_roas > realRoas * 3 && (
+                  <span className="text-amber-500 dark:text-amber-400 font-medium"> · Brecha alta: verificá que el pixel envíe valores en ARS.</span>
+                )}
+              </p>
+            </div>
           </div>
         </div>
       </div>

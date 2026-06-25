@@ -11,6 +11,15 @@ interface Settings {
   shipping_pct:      number
 }
 
+interface RecurringExpense {
+  id:         string
+  name:       string
+  amount_ars: number
+  category:   string
+  active:     boolean
+  created_at: string
+}
+
 interface TNStatus {
   configured:   boolean
   valid:        boolean
@@ -176,6 +185,191 @@ function TNConnectionCard() {
   )
 }
 
+const REC_CATS = [
+  { value: 'fijo',        label: 'Gasto fijo' },
+  { value: 'logistica',   label: 'Logística' },
+  { value: 'personal',    label: 'Personal / sueldos' },
+  { value: 'servicios',   label: 'Servicios / SaaS' },
+  { value: 'packaging',   label: 'Packaging / insumos' },
+  { value: 'distribucion',label: 'Distribución ganancias' },
+  { value: 'otro',        label: 'Otro' },
+]
+
+function RecurringExpensesSection() {
+  const [items,    setItems]    = useState<RecurringExpense[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [showAdd,  setShowAdd]  = useState(false)
+  const [newName,  setNewName]  = useState('')
+  const [newAmt,   setNewAmt]   = useState('')
+  const [newCat,   setNewCat]   = useState('fijo')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  async function load() {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/recurring-expenses')
+      const d = await r.json()
+      if (Array.isArray(d)) setItems(d)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  async function add() {
+    if (!newName.trim() || !newAmt) return
+    setSaving(true); setError('')
+    try {
+      const r = await fetch('/api/recurring-expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), amount_ars: Number(newAmt), category: newCat }),
+      })
+      const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      setItems(prev => [...prev, d])
+      setNewName(''); setNewAmt(''); setNewCat('fijo'); setShowAdd(false)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error') }
+    setSaving(false)
+  }
+
+  async function toggle(item: RecurringExpense) {
+    const optimistic = items.map(x => x.id === item.id ? { ...x, active: !x.active } : x)
+    setItems(optimistic)
+    await fetch(`/api/recurring-expenses?id=${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !item.active }),
+    })
+  }
+
+  async function remove(id: string) {
+    setItems(prev => prev.filter(x => x.id !== id))
+    await fetch(`/api/recurring-expenses?id=${id}`, { method: 'DELETE' })
+  }
+
+  const monthlyTotal = items.filter(x => x.active).reduce((s, x) => s + x.amount_ars, 0)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
+          Gastos fijos mensuales
+        </p>
+        {monthlyTotal > 0 && (
+          <span className="text-xs text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+            Piso: ${(monthlyTotal / 1000).toFixed(0)}K/mes
+          </span>
+        )}
+      </div>
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="px-5 py-6 text-sm text-gray-400 dark:text-zinc-500 text-center">Cargando…</div>
+        ) : items.length === 0 && !showAdd ? (
+          <div className="px-5 py-6 text-center">
+            <p className="text-sm text-gray-400 dark:text-zinc-500 mb-3">Sin gastos fijos configurados.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-zinc-800">
+            {items.map(item => {
+              const cat = REC_CATS.find(c => c.value === item.category)
+              return (
+                <div key={item.id} className={`flex items-center justify-between px-5 py-3.5 gap-4 transition-opacity ${item.active ? '' : 'opacity-50'}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-zinc-200 truncate">{item.name}</p>
+                    <p className="text-xs text-gray-400 dark:text-zinc-500">{cat?.label ?? item.category}</p>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-zinc-300 tabular-nums shrink-0">
+                    ${(item.amount_ars / 1000).toFixed(0)}K/mes
+                  </span>
+                  {/* Toggle */}
+                  <button
+                    onClick={() => toggle(item)}
+                    className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${item.active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-zinc-700'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${item.active ? 'translate-x-4' : ''}`} />
+                  </button>
+                  <button onClick={() => remove(item.id)} className="text-gray-300 dark:text-zinc-600 hover:text-red-400 transition-colors shrink-0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Add form */}
+        {showAdd ? (
+          <div className="border-t border-gray-100 dark:border-zinc-800 px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-zinc-800/30">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Nombre</label>
+                <input
+                  type="text"
+                  placeholder="ej: Sueldo community"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  className="w-full text-sm bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Monto ARS/mes</label>
+                <input
+                  type="number"
+                  placeholder="ej: 150000"
+                  value={newAmt}
+                  onChange={e => setNewAmt(e.target.value)}
+                  className="w-full text-sm bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Categoría</label>
+              <select
+                value={newCat}
+                onChange={e => setNewCat(e.target.value)}
+                className="w-full text-sm bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
+              >
+                {REC_CATS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            {error && <p className="text-xs text-red-500">{error}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={add}
+                disabled={saving || !newName.trim() || !newAmt}
+                className="px-4 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg text-xs font-medium disabled:opacity-50 transition-all"
+              >
+                {saving ? 'Guardando…' : 'Agregar'}
+              </button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-1.5 text-xs text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className={`px-5 py-3 ${items.length > 0 ? 'border-t border-gray-100 dark:border-zinc-800' : ''}`}>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+              </svg>
+              Agregar gasto fijo
+            </button>
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-2">
+        Los gastos activos se suman automáticamente al P&amp;L mensual en Balance.
+      </p>
+    </div>
+  )
+}
+
 export default function SettingsClient({ initialSettings }: Props) {
   const [settings, setSettings] = useState<Settings>(initialSettings)
   const [saving, setSaving]     = useState(false)
@@ -241,6 +435,9 @@ export default function SettingsClient({ initialSettings }: Props) {
           ))}
         </div>
       </div>
+
+      {/* Recurring expenses */}
+      <RecurringExpensesSection />
 
       {/* Preview */}
       <div className="bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200 dark:border-zinc-700 p-4">

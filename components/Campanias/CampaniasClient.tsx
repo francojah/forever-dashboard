@@ -122,10 +122,12 @@ function CampaignOverview({ adsets, campMap, period }: {
         </div>
         <div>
           <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">ROAS blend</p>
-          <p className={`text-xl font-semibold ${blendedRoas ? (blendedRoas >= ROAS_MIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500') : 'text-gray-400 dark:text-zinc-600'}`}>
-            {blendedRoas ? blendedRoas.toFixed(2) + 'x' : '—'}
+          <p className={`text-xl font-semibold ${period === 'today' ? 'text-gray-400 dark:text-zinc-600' : blendedRoas ? (blendedRoas >= ROAS_MIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500') : 'text-gray-400 dark:text-zinc-600'}`}>
+            {period === 'today' ? '—' : blendedRoas ? blendedRoas.toFixed(2) + 'x' : '—'}
           </p>
-          <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">mín {ROAS_MIN}x</p>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+            {period === 'today' ? 'No disp. intraday (atrib. 7d)' : `mín ${ROAS_MIN}x`}
+          </p>
         </div>
         <div>
           <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">CPA blend</p>
