@@ -239,7 +239,7 @@ function FunnelSteps({ steps }: {
           </div>
         )
       })}
-    </svg>
+    </div>
   )
 }
 
