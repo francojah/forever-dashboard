@@ -197,10 +197,12 @@ function FunnelSteps({ steps }: {
   if (!steps[0]?.value) return <p className="text-xs text-gray-400 dark:text-zinc-600 text-center py-6">Sin datos para este período</p>
 
   const base = steps[0].value
-  const fmtVal = (v: number) => v >= 1_000_000
-    ? (v / 1_000_000).toFixed(1) + 'M'
-    : v >= 1000 ? (v / 1000).toFixed(0) + 'K'
-    : v.toLocaleString('es-AR')
+  const fmtVal = (v: number) => (
+    v >= 1_000_000
+      ? (v / 1_000_000).toFixed(1) + 'M'
+      : v >= 1000 ? (v / 1000).toFixed(0) + 'K'
+      : v.toLocaleString('es-AR')
+  )
 
   return (
     <div className="space-y-1.5">
