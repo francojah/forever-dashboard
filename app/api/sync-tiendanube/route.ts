@@ -131,9 +131,12 @@ function buildSummary(orders: any[]) {
     .map(p => ({ ...p, revenue: Math.round(p.revenue) }))
 
   const payment_methods: Record<string, number> = {}
-  paid.forEach((o: { payment_details?: { method?: string } }) => {
+  const payment_revenue: Record<string, number> = {}  // ARS por método de pago
+  paid.forEach((o: { payment_details?: { method?: string }; total?: string }) => {
     const m = o.payment_details?.method || 'otro'
+    const amount = parseFloat(o.total || '0')
     payment_methods[m] = (payment_methods[m] || 0) + 1
+    payment_revenue[m] = Math.round((payment_revenue[m] || 0) + amount)
   })
 
   const shippingCounts: Record<string, number> = {}
@@ -167,8 +170,8 @@ function buildSummary(orders: any[]) {
 
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
-    unique_customers, top_products, payment_methods, shipping_methods, top_provinces,
-    shipping_revenue, total_units_sold,
+    unique_customers, top_products, payment_methods, payment_revenue, shipping_methods,
+    top_provinces, shipping_revenue, total_units_sold,
   }
 }
 
