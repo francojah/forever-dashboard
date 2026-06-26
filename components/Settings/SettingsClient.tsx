@@ -10,6 +10,7 @@ interface Settings {
   tn_commission_pct: number
   shipping_pct:      number
   cuotas_cost_pct:   number
+  card_sales_pct:    number   // % de ventas pagadas con tarjeta (fallback manual)
   iibb_rate_pct:     number
 }
 
@@ -42,7 +43,8 @@ const FIELDS: { key: keyof Settings; label: string; desc: string; prefix?: strin
   { key: 'roas_scale',        label: 'ROAS para Escalar',           desc: 'ROAS a partir del cual se recomienda duplicar budget.',                                                                          suffix: 'x',   step: 0.5  },
   { key: 'tn_commission_pct', label: 'Comisión Tiendanube',         desc: 'Porcentaje de comisión que cobra Tiendanube sobre ventas.',                                                                     suffix: '%',   step: 0.1  },
   { key: 'shipping_pct',      label: 'Gastos de Envío (% ventas)',  desc: 'Estimación del costo de envío como % del total de ventas (para Balance).',                            suffix: '%',   step: 0.5  },
-  { key: 'cuotas_cost_pct',   label: 'Costo financiero cuotas (%)', desc: 'Descuento que cobra el procesador de pagos por ventas en cuotas. Ej: Mercado Pago ~8-12% en 6 cuotas s/interés.', suffix: '%', step: 0.5, section: 'fiscal' },
+  { key: 'cuotas_cost_pct',   label: 'Costo financiero cuotas (%)', desc: 'Descuento que cobra el procesador por ventas con tarjeta. Ej: Mercado Pago ~8-12% en 6 cuotas s/interés. Se aplica solo sobre la fracción de ventas con tarjeta.', suffix: '%', step: 0.5, section: 'fiscal' },
+  { key: 'card_sales_pct',    label: '% ventas con tarjeta (fallback)', desc: 'Qué porcentaje de tus ventas son con tarjeta de crédito/débito. Si hay datos de TN disponibles se usa el valor automático; este número aplica para meses históricos sin datos de pago.', suffix: '%', step: 1, section: 'fiscal' },
   { key: 'iibb_rate_pct',     label: 'IIBB sobre ventas (%)',       desc: 'Alícuota de Ingresos Brutos. CABA comercio e-commerce ~3%. Completar según tu provincia y régimen.',                suffix: '%', step: 0.1, section: 'fiscal' },
 ]
 
@@ -488,7 +490,7 @@ export default function SettingsClient({ initialSettings }: Props) {
           <p>🔴 <strong>Pausar</strong> si CPA &gt; ${(settings.breakeven_cpa * 1.5 / 1000).toFixed(1)}K o ROAS &lt; {settings.roas_min}x</p>
           <p>📦 <strong>Comisión TN:</strong> {settings.tn_commission_pct}% de ventas</p>
           <p>🚚 <strong>Envíos:</strong> {settings.shipping_pct}% de ventas (estimado)</p>
-          {settings.cuotas_cost_pct > 0 && <p>💳 <strong>Cuotas:</strong> {settings.cuotas_cost_pct}% de descuento financiero</p>}
+          {settings.cuotas_cost_pct > 0 && <p>💳 <strong>Cuotas:</strong> {settings.cuotas_cost_pct}% sobre ventas con tarjeta ({settings.card_sales_pct ?? 50}% del total por defecto — se auto-detecta desde TN cuando hay datos)</p>}
           {settings.iibb_rate_pct   > 0 && <p>🏛️ <strong>IIBB:</strong> {settings.iibb_rate_pct}% sobre ventas</p>}
         </div>
       </div>

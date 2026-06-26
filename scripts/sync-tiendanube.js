@@ -130,11 +130,14 @@ function buildTNSummary(orders) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10)
 
-  // Métodos de pago
+  // Métodos de pago — conteo de órdenes y revenue por método
   const payment_methods = {}
+  const payment_revenue = {}   // ARS por método de pago
   paid.forEach(o => {
     const method = o.payment_details?.method || 'otro'
+    const amount = parseFloat(o.total || '0')
     payment_methods[method] = (payment_methods[method] || 0) + 1
+    payment_revenue[method] = Math.round((payment_revenue[method] || 0) + amount)
   })
 
   // Metodos de envio normalizado en 3 categorias: Correo, Retiro, Moto
@@ -195,6 +198,7 @@ function buildTNSummary(orders) {
     unique_customers,
     top_products:    top_products.map(p => ({ ...p, revenue: Math.round(p.revenue) })),
     payment_methods,
+    payment_revenue,
     shipping_methods,
     top_provinces,
     shipping_revenue,

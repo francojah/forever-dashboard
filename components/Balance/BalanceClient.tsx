@@ -101,7 +101,8 @@ function fmt(n: number | null | undefined, opts?: { sign?: boolean }): string {
 function pct(n: number) { return (n * 100).toFixed(1) + '%' }
 function mkKey(y: number, m: number) { return `${y}-${String(m).padStart(2, '0')}` }
 
-function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0): PnL {
+// cardFraction: fracción [0..1] de revenue que fue pagada con tarjeta
+function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0, cardFraction = 1): PnL {
   const { tn_revenue, meta_spend, tn_orders, tn_units } = data
   const aov         = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
   const units       = tn_units > 0 ? tn_units : tn_orders * UNITS_PER_ORDER
@@ -109,7 +110,8 @@ function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0, cu
   const shipping    = tn_revenue * SHIPPING_PCT
   const platform    = tn_revenue * PLATFORM_PCT
   const packaging   = tn_orders * PACKAGING_PER_ORD
-  const cuotas_cost = tn_revenue * (cuotasCostPct / 100)
+  // cuotas solo sobre la fracción de ventas con tarjeta
+  const cuotas_cost = tn_revenue * cardFraction * (cuotasCostPct / 100)
   const cogs        = merch + shipping + platform + packaging + cuotas_cost
   const gross_profit = tn_revenue - cogs
   const ad_result    = gross_profit - meta_spend
@@ -130,7 +132,7 @@ function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0, cu
   }
 }
 
-function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0): PnL {
+function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0, cardFraction = 1): PnL {
   const merged: MonthData = { meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0, source: 'live' }
   months.forEach(m => {
     merged.meta_spend += m.meta_spend
@@ -139,7 +141,7 @@ function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[
     merged.tn_units   += m.tn_units
   })
   const expenses = allExpenses.filter(e => keys.includes(e.month))
-  return calcPnL(merged, expenses, recurringTotal, cuotasCostPct, iibbRatePct)
+  return calcPnL(merged, expenses, recurringTotal, cuotasCostPct, iibbRatePct, cardFraction)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -220,6 +222,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
 
   // Costos fiscales (cuotas + IIBB) — cargados desde /api/settings
   const [cuotasCostPct, setCuotasCostPct] = useState(0)
+  const [cardSalesPct,  setCardSalesPct]  = useState(50)  // fallback manual
   const [iibbRatePct,   setIibbRatePct]   = useState(0)
 
   useEffect(() => {
@@ -227,10 +230,31 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       .then(r => r.json())
       .then(d => {
         if (d.cuotas_cost_pct != null) setCuotasCostPct(Number(d.cuotas_cost_pct))
+        if (d.card_sales_pct  != null) setCardSalesPct(Number(d.card_sales_pct))
         if (d.iibb_rate_pct   != null) setIibbRatePct(Number(d.iibb_rate_pct))
       })
       .catch(() => { /* silent */ })
   }, [])
+
+  // ── Auto-detectar fracción de ventas con tarjeta desde TN live snapshot ──────
+  // Métodos que NO tienen costo de cuotas (transferencias / saldo MP)
+  const CARD_FREE_METHODS = new Set(['bank_transfer', 'account_money', 'ticket', 'pix', 'otro'])
+
+  const { cardFraction, cardFractionSource } = useMemo(() => {
+    const payRev = tnSnapshot?.summary_mtd?.payment_revenue
+                ?? tnSnapshot?.summary_7d?.payment_revenue
+    if (payRev && Object.keys(payRev).length > 0) {
+      const total = Object.values(payRev).reduce((s, v) => s + v, 0)
+      const nonCard = Object.entries(payRev)
+        .filter(([m]) => CARD_FREE_METHODS.has(m))
+        .reduce((s, [, v]) => s + v, 0)
+      const cardRev = total - nonCard
+      const fraction = total > 0 ? cardRev / total : cardSalesPct / 100
+      return { cardFraction: fraction, cardFractionSource: 'tn' as const }
+    }
+    return { cardFraction: cardSalesPct / 100, cardFractionSource: 'manual' as const }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tnSnapshot, cardSalesPct])
 
   // Capital en inventario — stock de TN + costos manuales
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,8 +379,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   // ── P&L for selected period ────────────────────────────────────────────────
   const pnl = useMemo(() => {
     const datas = periodKeys.map(k => getMonthData(k))
-    return aggregatePnL(datas, expenses, periodKeys, recurringMonthTotal * periodKeys.length, cuotasCostPct, iibbRatePct)
-  }, [periodKeys, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct])
+    return aggregatePnL(datas, expenses, periodKeys, recurringMonthTotal * periodKeys.length, cuotasCostPct, iibbRatePct, cardFraction)
+  }, [periodKeys, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct, cardFraction])
 
   const periodExpenses = useMemo(
     () => expenses.filter(e => periodKeys.includes(e.month)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -370,9 +394,9 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       const key = mkKey(year, m)
       const data = getMonthData(key)
       const exp  = expenses.filter(e => e.month === key)
-      const p    = calcPnL(data, exp, recurringMonthTotal, cuotasCostPct, iibbRatePct)
+      const p    = calcPnL(data, exp, recurringMonthTotal, cuotasCostPct, iibbRatePct, cardFraction)
       return { m, key, data, pnl: p }
-    }), [year, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct])
+    }), [year, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct, cardFraction])
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = mode === 'month'
@@ -786,9 +810,13 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${PACKAGING_PER_ORD.toLocaleString('es-AR')})`} value={-pnl.packaging}
               pctVal={pnl.tn_revenue > 0 ? pnl.packaging / pnl.tn_revenue : 0} indent />
             {cuotasCostPct > 0 && (
-              <PnLRow label={`Costo financiero cuotas (${cuotasCostPct}%)`} value={-pnl.cuotas_cost}
+              <PnLRow
+                label={`Costo financiero cuotas (${cuotasCostPct}% × ${(cardFraction * 100).toFixed(0)}% tarjeta)`}
+                value={-pnl.cuotas_cost}
                 pctVal={pnl.tn_revenue > 0 ? pnl.cuotas_cost / pnl.tn_revenue : 0}
-                note="Descuento del procesador de pagos por ventas en cuotas"
+                note={cardFractionSource === 'tn'
+                  ? `Fracción tarjeta auto-detectada desde TN (${(cardFraction * 100).toFixed(0)}%)`
+                  : `Fracción tarjeta estimada manualmente (${(cardFraction * 100).toFixed(0)}%) — configurá en Ajustes`}
                 indent />
             )}
             <PnLRow isSeparator label="" value={null} />

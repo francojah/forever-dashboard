@@ -12,19 +12,19 @@ ALTER TABLE tiendanube_snapshots
 
 -- 2. Gastos fijos recurrentes (alquiler, sueldos, servicios, etc.)
 CREATE TABLE IF NOT EXISTS recurring_expenses (
-  id          uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  id          uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   name        text        NOT NULL,
   amount_ars  numeric     NOT NULL,
   category    text        NOT NULL DEFAULT 'fijo',
   active      boolean     NOT NULL DEFAULT true,
-  created_at  timestamptz DEFAULT now(),
-  updated_at  timestamptz DEFAULT now()
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
 -- 3. Costos por producto (ingresados manualmente, usados en Capital en Inventario)
 CREATE TABLE IF NOT EXISTS product_costs (
-  product_id    text    PRIMARY KEY,
-  product_name  text    NOT NULL DEFAULT '',
-  unit_cost     numeric NOT NULL DEFAULT 0,
-  updated_at    timestamptz DEFAULT now()
+  product_id    text        NOT NULL PRIMARY KEY,
+  product_name  text        NOT NULL DEFAULT '',
+  unit_cost     numeric     NOT NULL DEFAULT 0,
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
