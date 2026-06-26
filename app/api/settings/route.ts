@@ -10,6 +10,8 @@ const DEFAULTS: Record<string, number> = {
   roas_scale:        6,
   tn_commission_pct: 3.5,
   shipping_pct:      8,
+  cuotas_cost_pct:   0,    // % del ticket cobrado por el procesador en cuotas
+  iibb_rate_pct:     0,    // alícuota IIBB sobre ventas (configurable por provincia)
 }
 
 export async function GET() {

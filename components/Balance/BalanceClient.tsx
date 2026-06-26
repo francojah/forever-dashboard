@@ -66,15 +66,19 @@ interface PnL {
   shipping:        number
   platform:        number
   packaging:       number
+  cuotas_cost:     number
   cogs:            number
   gross_profit:    number
   meta_spend:      number
   ad_result:       number
   recurring_total: number
   var_total:       number
+  iibb_cost:       number
   net_result:      number
   margin_gross:    number
   margin_net:      number
+  roi_ads:         number  // net_result / meta_spend × 100
+  roi_negocio:     number  // net_result / total_invested × 100
   tn_orders:       number
   tn_units:        number
   aov:             number
@@ -97,29 +101,36 @@ function fmt(n: number | null | undefined, opts?: { sign?: boolean }): string {
 function pct(n: number) { return (n * 100).toFixed(1) + '%' }
 function mkKey(y: number, m: number) { return `${y}-${String(m).padStart(2, '0')}` }
 
-function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0): PnL {
+function calcPnL(data: MonthData, varExpenses: Expense[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0): PnL {
   const { tn_revenue, meta_spend, tn_orders, tn_units } = data
-  const aov      = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
-  const units    = tn_units > 0 ? tn_units : tn_orders * UNITS_PER_ORDER
-  const merch    = units * UNIT_COST
-  const shipping = tn_revenue * SHIPPING_PCT
-  const platform = tn_revenue * PLATFORM_PCT
-  const packaging= tn_orders * PACKAGING_PER_ORD
-  const cogs     = merch + shipping + platform + packaging
+  const aov         = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
+  const units       = tn_units > 0 ? tn_units : tn_orders * UNITS_PER_ORDER
+  const merch       = units * UNIT_COST
+  const shipping    = tn_revenue * SHIPPING_PCT
+  const platform    = tn_revenue * PLATFORM_PCT
+  const packaging   = tn_orders * PACKAGING_PER_ORD
+  const cuotas_cost = tn_revenue * (cuotasCostPct / 100)
+  const cogs        = merch + shipping + platform + packaging + cuotas_cost
   const gross_profit = tn_revenue - cogs
   const ad_result    = gross_profit - meta_spend
   const var_total    = varExpenses.reduce((s, e) => s + e.amount_ars, 0)
-  const net_result   = ad_result - recurringTotal - var_total
+  const iibb_cost    = tn_revenue * (iibbRatePct / 100)
+  const net_result   = ad_result - recurringTotal - var_total - iibb_cost
+  const total_invested = cogs + meta_spend + recurringTotal + var_total + iibb_cost
+  const roi_ads        = meta_spend > 0 ? (net_result / meta_spend) * 100 : 0
+  const roi_negocio    = total_invested > 0 ? (net_result / total_invested) * 100 : 0
   return {
-    tn_revenue, merch, shipping, platform, packaging, cogs,
-    gross_profit, meta_spend, ad_result, recurring_total: recurringTotal, var_total, net_result,
+    tn_revenue, merch, shipping, platform, packaging, cuotas_cost, cogs,
+    gross_profit, meta_spend, ad_result,
+    recurring_total: recurringTotal, var_total, iibb_cost, net_result,
     margin_gross: tn_revenue > 0 ? gross_profit / tn_revenue : 0,
     margin_net:   tn_revenue > 0 ? net_result   / tn_revenue : 0,
+    roi_ads, roi_negocio,
     tn_orders, tn_units: units, aov,
   }
 }
 
-function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[], recurringTotal = 0): PnL {
+function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[], recurringTotal = 0, cuotasCostPct = 0, iibbRatePct = 0): PnL {
   const merged: MonthData = { meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0, source: 'live' }
   months.forEach(m => {
     merged.meta_spend += m.meta_spend
@@ -128,7 +139,7 @@ function aggregatePnL(months: MonthData[], allExpenses: Expense[], keys: string[
     merged.tn_units   += m.tn_units
   })
   const expenses = allExpenses.filter(e => keys.includes(e.month))
-  return calcPnL(merged, expenses, recurringTotal)
+  return calcPnL(merged, expenses, recurringTotal, cuotasCostPct, iibbRatePct)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -204,6 +215,20 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
     fetch('/api/recurring-expenses')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setRecurringExpenses(d) })
+      .catch(() => { /* silent */ })
+  }, [])
+
+  // Costos fiscales (cuotas + IIBB) — cargados desde /api/settings
+  const [cuotasCostPct, setCuotasCostPct] = useState(0)
+  const [iibbRatePct,   setIibbRatePct]   = useState(0)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.cuotas_cost_pct != null) setCuotasCostPct(Number(d.cuotas_cost_pct))
+        if (d.iibb_rate_pct   != null) setIibbRatePct(Number(d.iibb_rate_pct))
+      })
       .catch(() => { /* silent */ })
   }, [])
 
@@ -330,8 +355,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   // ── P&L for selected period ────────────────────────────────────────────────
   const pnl = useMemo(() => {
     const datas = periodKeys.map(k => getMonthData(k))
-    return aggregatePnL(datas, expenses, periodKeys, recurringMonthTotal * periodKeys.length)
-  }, [periodKeys, getMonthData, expenses, recurringMonthTotal])
+    return aggregatePnL(datas, expenses, periodKeys, recurringMonthTotal * periodKeys.length, cuotasCostPct, iibbRatePct)
+  }, [periodKeys, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct])
 
   const periodExpenses = useMemo(
     () => expenses.filter(e => periodKeys.includes(e.month)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -345,9 +370,9 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       const key = mkKey(year, m)
       const data = getMonthData(key)
       const exp  = expenses.filter(e => e.month === key)
-      const p    = calcPnL(data, exp, recurringMonthTotal)
+      const p    = calcPnL(data, exp, recurringMonthTotal, cuotasCostPct, iibbRatePct)
       return { m, key, data, pnl: p }
-    }), [year, getMonthData, expenses, recurringMonthTotal])
+    }), [year, getMonthData, expenses, recurringMonthTotal, cuotasCostPct, iibbRatePct])
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = mode === 'month'
@@ -615,6 +640,30 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         />
       </div>
 
+      {/* ── ROI Cards ──────────────────────────────────────────────────────── */}
+      {hasData && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-violet-400 p-4 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI publicitario</p>
+            <p className={`text-2xl font-bold tabular-nums leading-none ${pnl.roi_ads >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+              {pnl.roi_ads >= 0 ? '+' : ''}{pnl.roi_ads.toFixed(0)}%
+            </p>
+            <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">
+              Resultado neto ÷ gasto Meta · {pnl.meta_spend > 0 ? `por cada $100 invertido en ads, retornás $${(100 + pnl.roi_ads).toFixed(0)}` : 'sin datos de ads'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-sky-400 p-4 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI del negocio</p>
+            <p className={`text-2xl font-bold tabular-nums leading-none ${pnl.roi_negocio >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+              {pnl.roi_negocio >= 0 ? '+' : ''}{pnl.roi_negocio.toFixed(0)}%
+            </p>
+            <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">
+              Resultado neto ÷ total invertido (CMV + ads + gastos)
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Alert: past month without data ─────────────────────────────────── */}
       {mode === 'month' && isPastMonth && !hasData && (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex items-start justify-between gap-4">
@@ -736,6 +785,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               pctVal={pnl.tn_revenue > 0 ? pnl.platform / pnl.tn_revenue : 0} indent />
             <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${PACKAGING_PER_ORD.toLocaleString('es-AR')})`} value={-pnl.packaging}
               pctVal={pnl.tn_revenue > 0 ? pnl.packaging / pnl.tn_revenue : 0} indent />
+            {cuotasCostPct > 0 && (
+              <PnLRow label={`Costo financiero cuotas (${cuotasCostPct}%)`} value={-pnl.cuotas_cost}
+                pctVal={pnl.tn_revenue > 0 ? pnl.cuotas_cost / pnl.tn_revenue : 0}
+                note="Descuento del procesador de pagos por ventas en cuotas"
+                indent />
+            )}
             <PnLRow isSeparator label="" value={null} />
             <PnLRow label="= Ganancia bruta" value={pnl.gross_profit} isSubtotal
               note={`Margen: ${pct(Math.abs(pnl.margin_gross))}`} />
@@ -769,6 +824,13 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                   indent />
               )
             })}
+            {/* Carga impositiva */}
+            {iibbRatePct > 0 && (
+              <PnLRow label={`IIBB sobre ventas (${iibbRatePct}%)`} value={-pnl.iibb_cost}
+                pctVal={pnl.tn_revenue > 0 ? pnl.iibb_cost / pnl.tn_revenue : 0}
+                note="Ingresos Brutos · calculado sobre ventas brutas"
+                indent />
+            )}
             <PnLRow isSeparator label="" value={null} />
             <PnLRow label="RESULTADO NETO" value={pnl.net_result} isTotal />
           </tbody>

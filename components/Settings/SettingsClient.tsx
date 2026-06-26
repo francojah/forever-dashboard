@@ -9,6 +9,8 @@ interface Settings {
   roas_scale:        number
   tn_commission_pct: number
   shipping_pct:      number
+  cuotas_cost_pct:   number
+  iibb_rate_pct:     number
 }
 
 interface RecurringExpense {
@@ -34,12 +36,14 @@ interface TNStatus {
 
 interface Props { initialSettings: Settings }
 
-const FIELDS: { key: keyof Settings; label: string; desc: string; prefix?: string; suffix?: string; step: number }[] = [
-  { key: 'breakeven_cpa',     label: 'CPA de Breakeven',            desc: 'CPA máximo antes de perder dinero por orden.',                              prefix: '$', suffix: 'ARS', step: 500  },
-  { key: 'roas_min',          label: 'ROAS Mínimo',                 desc: 'ROAS por debajo del cual un anuncio se considera no rentable.',                           suffix: 'x',   step: 0.1  },
-  { key: 'roas_scale',        label: 'ROAS para Escalar',           desc: 'ROAS a partir del cual se recomienda duplicar budget.',                                   suffix: 'x',   step: 0.5  },
-  { key: 'tn_commission_pct', label: 'Comisión Tiendanube',         desc: 'Porcentaje de comisión que cobra Tiendanube sobre ventas.',                              suffix: '%',   step: 0.1  },
-  { key: 'shipping_pct',      label: 'Gastos de Envío (% ventas)',  desc: 'Estimación del costo de envío como % del total de ventas (para Balance).',  suffix: '%',   step: 0.5  },
+const FIELDS: { key: keyof Settings; label: string; desc: string; prefix?: string; suffix?: string; step: number; section?: string }[] = [
+  { key: 'breakeven_cpa',     label: 'CPA de Breakeven',            desc: 'CPA máximo antes de perder dinero por orden.',                                                                        prefix: '$', suffix: 'ARS', step: 500  },
+  { key: 'roas_min',          label: 'ROAS Mínimo',                 desc: 'ROAS por debajo del cual un anuncio se considera no rentable.',                                                                   suffix: 'x',   step: 0.1  },
+  { key: 'roas_scale',        label: 'ROAS para Escalar',           desc: 'ROAS a partir del cual se recomienda duplicar budget.',                                                                          suffix: 'x',   step: 0.5  },
+  { key: 'tn_commission_pct', label: 'Comisión Tiendanube',         desc: 'Porcentaje de comisión que cobra Tiendanube sobre ventas.',                                                                     suffix: '%',   step: 0.1  },
+  { key: 'shipping_pct',      label: 'Gastos de Envío (% ventas)',  desc: 'Estimación del costo de envío como % del total de ventas (para Balance).',                            suffix: '%',   step: 0.5  },
+  { key: 'cuotas_cost_pct',   label: 'Costo financiero cuotas (%)', desc: 'Descuento que cobra el procesador de pagos por ventas en cuotas. Ej: Mercado Pago ~8-12% en 6 cuotas s/interés.', suffix: '%', step: 0.5, section: 'fiscal' },
+  { key: 'iibb_rate_pct',     label: 'IIBB sobre ventas (%)',       desc: 'Alícuota de Ingresos Brutos. CABA comercio e-commerce ~3%. Completar según tu provincia y régimen.',                suffix: '%', step: 0.1, section: 'fiscal' },
 ]
 
 function TNConnectionCard() {
@@ -414,7 +418,7 @@ export default function SettingsClient({ initialSettings }: Props) {
       <div>
         <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Parámetros del negocio</p>
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 divide-y divide-gray-100 dark:divide-zinc-800 shadow-sm">
-          {FIELDS.map(({ key, label, desc, prefix, suffix, step }) => (
+          {FIELDS.filter(f => !f.section).map(({ key, label, desc, prefix, suffix, step }) => (
             <div key={key} className="flex items-center justify-between gap-6 px-5 py-4">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-800 dark:text-zinc-200">{label}</p>
@@ -436,6 +440,41 @@ export default function SettingsClient({ initialSettings }: Props) {
         </div>
       </div>
 
+      {/* Fiscal / financial costs */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Costos financieros y fiscales</p>
+          <span className="text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">Monotributista</span>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 divide-y divide-gray-100 dark:divide-zinc-800 shadow-sm">
+          {FIELDS.filter(f => f.section === 'fiscal').map(({ key, label, desc, prefix, suffix, step }) => (
+            <div key={key} className="flex items-center justify-between gap-6 px-5 py-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-800 dark:text-zinc-200">{label}</p>
+                <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{desc}</p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {prefix && <span className="text-sm text-gray-400">{prefix}</span>}
+                <input
+                  type="number"
+                  step={step}
+                  value={settings[key]}
+                  onChange={e => handleChange(key, e.target.value)}
+                  className="w-24 text-right text-sm font-medium bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600"
+                />
+                {suffix && <span className="text-sm text-gray-400">{suffix}</span>}
+              </div>
+            </div>
+          ))}
+          <div className="px-5 py-3 bg-gray-50/60 dark:bg-zinc-800/30">
+            <p className="text-[11px] text-gray-400 dark:text-zinc-500 leading-relaxed">
+              La cuota mensual de monotributo la cargás en <strong className="text-gray-600 dark:text-zinc-400">Gastos Recurrentes</strong> (categoría: fijo).
+              Si pasás a <strong className="text-gray-600 dark:text-zinc-400">Responsable Inscripto</strong>, también configurás aquí la alícuota de Ganancias.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Recurring expenses */}
       <RecurringExpensesSection />
 
@@ -449,6 +488,8 @@ export default function SettingsClient({ initialSettings }: Props) {
           <p>🔴 <strong>Pausar</strong> si CPA &gt; ${(settings.breakeven_cpa * 1.5 / 1000).toFixed(1)}K o ROAS &lt; {settings.roas_min}x</p>
           <p>📦 <strong>Comisión TN:</strong> {settings.tn_commission_pct}% de ventas</p>
           <p>🚚 <strong>Envíos:</strong> {settings.shipping_pct}% de ventas (estimado)</p>
+          {settings.cuotas_cost_pct > 0 && <p>💳 <strong>Cuotas:</strong> {settings.cuotas_cost_pct}% de descuento financiero</p>}
+          {settings.iibb_rate_pct   > 0 && <p>🏛️ <strong>IIBB:</strong> {settings.iibb_rate_pct}% sobre ventas</p>}
         </div>
       </div>
 
