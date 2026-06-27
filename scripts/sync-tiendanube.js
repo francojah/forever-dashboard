@@ -78,18 +78,37 @@ function getRange(preset) {
   }
 }
 
-// ── Fetch orders para un preset ────────────────────────────────
+// ── Fetch orders para un preset (con paginación completa) ──────
 async function fetchOrders(preset = '7d') {
   const { created_at_min, created_at_max } = getRange(preset)
-  const params = new URLSearchParams({
-    created_at_min,
-    created_at_max,
-    status: 'open,closed,paid',
-    per_page: '200',
-  })
-  const res = await fetchTN(`orders?${params}`)
-  if (res.error || res.code) throw new Error(`Tiendanube orders [${preset}]: ${res.description || res.error}`)
-  return Array.isArray(res) ? res : []
+  const allOrders = []
+  let page = 1
+
+  while (true) {
+    const params = new URLSearchParams({
+      created_at_min,
+      created_at_max,
+      status: 'open,closed,paid',
+      per_page: '200',
+      page: String(page),
+    })
+    const res = await fetchTN(`orders?${params}`)
+
+    // TN devuelve { code, description: "Last page is 0" } cuando no hay más resultados
+    if (res.code || res.error) {
+      const desc = (res.description || res.error || '').toString().toLowerCase()
+      if (desc.includes('last page')) break  // sin más páginas → terminamos
+      throw new Error(`TN orders [${preset}] pág ${page}: ${res.description || res.error}`)
+    }
+
+    const batch = Array.isArray(res) ? res : []
+    if (batch.length === 0) break          // página vacía → terminamos
+    allOrders.push(...batch)
+    if (batch.length < 200) break          // última página (incompleta)
+    page++
+  }
+
+  return allOrders
 }
 
 // ── Calcular métricas de Tiendanube ───────────────────────────

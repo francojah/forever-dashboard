@@ -58,30 +58,44 @@ function getRange(preset: string) {
 
 async function fetchOrders(preset: string, token: string, userId: string) {
   const { created_at_min, created_at_max } = getRange(preset)
-  const params = new URLSearchParams({
-    created_at_min, created_at_max,
-    status: 'open,closed,paid',
-    per_page: '200',
-  })
-  const res = await fetch(`${TN_API}/${userId}/orders?${params}`, {
-    headers: {
-      'Authentication': `bearer ${token}`,
-      'User-Agent': 'ForeverDashboard/1.0 (francojah@gmail.com)',
-    },
-    cache: 'no-store',
-  })
-  const data = await res.json()
-  if (data.error || data.code) {
-    const description = (data.description || data.error || '').toString()
-    // TN returns { code, description: "Last page is 0" } when there are no results — treat as empty
-    if (description.toLowerCase().includes('last page')) return []
-    // Provide actionable hint for auth errors
-    const hint = (data.code === 401 || description.toLowerCase().includes('token') || description.toLowerCase().includes('access'))
-      ? ' — Reconectá Tiendanube en Configuración.'
-      : ''
-    throw new Error(`TN orders [${preset}]: ${description || 'Error desconocido'}${hint}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allOrders: any[] = []
+  let page = 1
+
+  while (true) {
+    const params = new URLSearchParams({
+      created_at_min, created_at_max,
+      status: 'open,closed,paid',
+      per_page: '200',
+      page: String(page),
+    })
+    const res = await fetch(`${TN_API}/${userId}/orders?${params}`, {
+      headers: {
+        'Authentication': `bearer ${token}`,
+        'User-Agent': 'ForeverDashboard/1.0 (francojah@gmail.com)',
+      },
+      cache: 'no-store',
+    })
+    const data = await res.json()
+
+    if (data.error || data.code) {
+      const description = (data.description || data.error || '').toString()
+      // TN devuelve { code, description: "Last page is 0" } cuando no hay más resultados
+      if (description.toLowerCase().includes('last page')) break
+      const hint = (data.code === 401 || description.toLowerCase().includes('token') || description.toLowerCase().includes('access'))
+        ? ' — Reconectá Tiendanube en Configuración.'
+        : ''
+      throw new Error(`TN orders [${preset}] pág ${page}: ${description || 'Error desconocido'}${hint}`)
+    }
+
+    const batch = Array.isArray(data) ? data : []
+    if (batch.length === 0) break      // página vacía → fin
+    allOrders.push(...batch)
+    if (batch.length < 200) break      // última página (incompleta) → fin
+    page++
   }
-  return Array.isArray(data) ? data : []
+
+  return allOrders
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
