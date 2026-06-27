@@ -8,6 +8,9 @@ const DEFAULTS = {
   roas_scale:        6,
   tn_commission_pct: 1.2,
   shipping_pct:      10,
+  cuotas_cost_pct:   0,
+  card_sales_pct:    50,
+  iibb_rate_pct:     0,
 }
 
 async function getSettings() {
