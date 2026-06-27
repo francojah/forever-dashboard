@@ -60,6 +60,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const [period, setPeriod] = useState<Period>('7d')
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
   const router = useRouter()
 
   const triggerSync = useCallback(async () => {
@@ -386,39 +387,104 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
           {/* ── Top Productos ── */}
           {tn?.top_products?.length > 0 && (
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-gray-100 dark:border-zinc-800">
+              <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300">Top productos · {PERIOD_LABELS[period]}</h2>
+                <span className="text-[11px] text-gray-400 dark:text-zinc-600">Hacé click para ver variantes</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50">
-                      <th className="text-left px-4 py-2.5 font-medium">#</th>
+                      <th className="text-left px-4 py-2.5 font-medium w-8">#</th>
                       <th className="text-left px-4 py-2.5 font-medium">Producto</th>
                       <th className="text-right px-4 py-2.5 font-medium">Unidades</th>
                       <th className="text-right px-4 py-2.5 font-medium">Ventas</th>
                       <th className="text-right px-4 py-2.5 font-medium">% del total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
-                    {tn.top_products.map((p: { name: string; quantity: number; revenue: number }, i: number) => {
+                  <tbody>
+                    {tn.top_products.map((p: { name: string; quantity: number; revenue: number; variants?: { name: string; quantity: number; revenue: number }[] }, i: number) => {
                       const topTotal = tn.top_products.reduce((s: number, x: { revenue: number }) => s + x.revenue, 0)
                       const pct = topTotal > 0 ? (p.revenue / topTotal) * 100 : 0
+                      const isExpanded = expandedProduct === i
+                      const hasVariants = p.variants && p.variants.length > 0
+
                       return (
-                        <tr key={i} className="hover:bg-gray-50 dark:hover:bg-zinc-800/30 transition-colors">
-                          <td className="px-4 py-2.5 text-gray-400 dark:text-zinc-600 font-medium">{i + 1}</td>
-                          <td className="px-4 py-2.5 text-gray-700 dark:text-zinc-300 max-w-xs truncate">{p.name}</td>
-                          <td className="px-4 py-2.5 text-right text-gray-600 dark:text-zinc-400">{p.quantity}</td>
-                          <td className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-zinc-200">{fmt(p.revenue)}</td>
-                          <td className="px-4 py-2.5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="w-16 bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
-                                <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${Math.min(pct, 100)}%` }} />
+                        <>
+                          {/* Fila del producto */}
+                          <tr
+                            key={`prod-${i}`}
+                            onClick={() => hasVariants && setExpandedProduct(isExpanded ? null : i)}
+                            className={`border-t border-gray-100 dark:border-zinc-800 transition-colors ${
+                              hasVariants ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/30' : ''
+                            } ${isExpanded ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : ''}`}
+                          >
+                            <td className="px-4 py-2.5 text-gray-400 dark:text-zinc-600 font-medium">{i + 1}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                {hasVariants && (
+                                  <svg
+                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                    className={`w-3.5 h-3.5 shrink-0 text-indigo-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                  >
+                                    <polyline points="9 18 15 12 9 6"/>
+                                  </svg>
+                                )}
+                                <span className="text-gray-700 dark:text-zinc-300">{p.name}</span>
+                                {hasVariants && (
+                                  <span className="text-[10px] text-indigo-400 dark:text-indigo-500 font-medium">
+                                    {p.variants!.length} variantes
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs text-gray-500 dark:text-zinc-400 w-8 text-right">{pct.toFixed(0)}%</span>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-gray-600 dark:text-zinc-400 font-medium">{p.quantity}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-zinc-200">{fmt(p.revenue)}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-16 bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
+                                  <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${Math.min(pct, 100)}%` }} />
+                                </div>
+                                <span className="text-xs text-gray-500 dark:text-zinc-400 w-8 text-right">{pct.toFixed(0)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Filas de variantes (expandible) */}
+                          {isExpanded && hasVariants && p.variants!.map((v, vi) => {
+                            const vPct = p.quantity > 0 ? (v.quantity / p.quantity) * 100 : 0
+                            const isTop = vi === 0
+                            return (
+                              <tr
+                                key={`var-${i}-${vi}`}
+                                className="border-t border-indigo-100/60 dark:border-indigo-900/30 bg-indigo-50/30 dark:bg-indigo-950/10"
+                              >
+                                <td className="px-4 py-2" />
+                                <td className="px-4 py-2 pl-10">
+                                  <div className="flex items-center gap-2">
+                                    {isTop && (
+                                      <span className="text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
+                                        #1
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-gray-600 dark:text-zinc-400">{v.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <div className="w-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-full h-1">
+                                      <div className="h-1 rounded-full bg-indigo-400/70" style={{ width: `${Math.min(vPct, 100)}%` }} />
+                                    </div>
+                                    <span className="text-xs font-medium text-gray-700 dark:text-zinc-300">{v.quantity}</span>
+                                    <span className="text-[10px] text-gray-400 dark:text-zinc-600">un</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-right text-xs text-gray-500 dark:text-zinc-500">{fmt(v.revenue)}</td>
+                                <td className="px-4 py-2 text-right text-[11px] text-indigo-400 dark:text-indigo-500">{vPct.toFixed(0)}%</td>
+                              </tr>
+                            )
+                          })}
+                        </>
                       )
                     })}
                   </tbody>

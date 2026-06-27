@@ -122,7 +122,7 @@ function buildSummary(orders: any[]) {
   const total_orders  = paid.length
   const aov           = total_orders > 0 ? total_revenue / total_orders : 0
 
-  const productMap: Record<string, { name: string; quantity: number; revenue: number }> = {}
+  const productMap: Record<string, { name: string; quantity: number; revenue: number; variants: Record<string, { quantity: number; revenue: number }> }> = {}
   paid.forEach((o: { total: string; products: { product_id: number; name: string; price: string; quantity: string }[] }) => {
     const items = o.products || []
     if (!items.length) return
@@ -134,15 +134,30 @@ function buildSummary(orders: any[]) {
       const qty      = parseInt(p.quantity || '1')
       const listVal  = parseFloat(p.price || '0') * qty
       const propRev  = listTotal > 0 ? (listVal / listTotal) * paidSub : listVal
-      if (!productMap[key]) productMap[key] = { name: baseName, quantity: 0, revenue: 0 }
+      // Extraer variante del paréntesis al final: "Remera (Azul - M)" → "Azul - M"
+      const variantMatch = p.name.match(/\(([^)]+)\)$/)
+      const variantName  = variantMatch ? variantMatch[1].trim() : null
+      if (!productMap[key]) productMap[key] = { name: baseName, quantity: 0, revenue: 0, variants: {} }
       productMap[key].quantity += qty
       productMap[key].revenue  += propRev
+      if (variantName) {
+        if (!productMap[key].variants[variantName]) productMap[key].variants[variantName] = { quantity: 0, revenue: 0 }
+        productMap[key].variants[variantName].quantity += qty
+        productMap[key].variants[variantName].revenue  += propRev
+      }
     })
   })
   const top_products = Object.values(productMap)
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10)
-    .map(p => ({ ...p, revenue: Math.round(p.revenue) }))
+    .map(p => ({
+      name: p.name,
+      quantity: p.quantity,
+      revenue: Math.round(p.revenue),
+      variants: Object.entries(p.variants)
+        .map(([name, v]) => ({ name, quantity: v.quantity, revenue: Math.round(v.revenue) }))
+        .sort((a, b) => b.quantity - a.quantity),
+    }))
 
   const payment_methods: Record<string, number> = {}
   const payment_revenue: Record<string, number> = {}  // ARS por método de pago

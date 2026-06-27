@@ -204,7 +204,7 @@ export type TNSummary = {
   total_orders: number
   aov: number
   unique_customers: number
-  top_products: { name: string; quantity: number; revenue: number }[]
+  top_products: { name: string; quantity: number; revenue: number; variants?: { name: string; quantity: number; revenue: number }[] }[]
   payment_methods: Record<string, number>
   payment_revenue?: Record<string, number>            // ARS por método de pago
   total_installments_cost?: number                    // cuotas sin interés absorbidas (campo TN: installments_cost por orden)
