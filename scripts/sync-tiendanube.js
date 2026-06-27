@@ -130,15 +130,25 @@ function buildTNSummary(orders) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10)
 
-  // Métodos de pago — conteo de órdenes y revenue por método
+  // Métodos de pago — conteo, revenue y costo real de cuotas por orden
   const payment_methods = {}
   const payment_revenue = {}   // ARS por método de pago
+  let total_installments_cost = 0  // suma de payment_details.installments_cost (cuotas s/interés absorbidas por el negocio)
+  let total_orders_with_installments = 0
   paid.forEach(o => {
     const method = o.payment_details?.method || 'otro'
     const amount = parseFloat(o.total || '0')
     payment_methods[method] = (payment_methods[method] || 0) + 1
     payment_revenue[method] = Math.round((payment_revenue[method] || 0) + amount)
+
+    // Costo real de cuotas que absorbió el negocio (campo TN: installments_cost)
+    const cuotasCost = parseFloat(o.payment_details?.installments_cost || '0')
+    if (cuotasCost > 0) {
+      total_installments_cost += cuotasCost
+      total_orders_with_installments += 1
+    }
   })
+  total_installments_cost = Math.round(total_installments_cost)
 
   // Metodos de envio normalizado en 3 categorias: Correo, Retiro, Moto
   function normalizeShipping(o) {
@@ -199,6 +209,8 @@ function buildTNSummary(orders) {
     top_products:    top_products.map(p => ({ ...p, revenue: Math.round(p.revenue) })),
     payment_methods,
     payment_revenue,
+    total_installments_cost,
+    total_orders_with_installments,
     shipping_methods,
     top_provinces,
     shipping_revenue,

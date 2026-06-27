@@ -55,12 +55,13 @@ interface RecurringExpense {
 }
 
 interface MonthData {
-  meta_spend:    number
-  tn_revenue:    number
-  tn_orders:     number
-  tn_units:      number
-  shipping_real: number | null  // costo real shipping_cost_owner desde TN; null = usar fallback %
-  source:        'live' | 'saved' | 'empty'
+  meta_spend:         number
+  tn_revenue:         number
+  tn_orders:          number
+  tn_units:           number
+  shipping_real:      number | null  // costo real shipping_cost_owner desde TN; null = usar fallback %
+  installments_real:  number | null  // costo real cuotas s/interés (payment_details.installments_cost); null = usar % estimado
+  source:             'live' | 'saved' | 'empty'
 }
 
 interface PnL {
@@ -71,6 +72,7 @@ interface PnL {
   platform:          number
   packaging:         number
   cuotas_cost:       number
+  cuotas_is_real:    boolean   // true = installments_cost real de TN; false = % estimado
   cogs:              number
   gross_profit:      number
   meta_spend:        number
@@ -121,7 +123,7 @@ function calcPnL(
   tnCommissionPct      = PLATFORM_PCT_DEFAULT * 100,
   shippingFallbackPct  = SHIPPING_PCT_DEFAULT * 100,
 ): PnL {
-  const { tn_revenue, meta_spend, tn_orders, tn_units, shipping_real } = data
+  const { tn_revenue, meta_spend, tn_orders, tn_units, shipping_real, installments_real } = data
   const aov    = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
   const units  = tn_units  > 0 ? tn_units  : tn_orders * UNITS_PER_ORDER
   const merch  = units * UNIT_COST
@@ -136,8 +138,13 @@ function calcPnL(
   const platform  = tn_revenue * (tnCommissionPct / 100)
   const packaging = tn_orders * PACKAGING_PER_ORD
 
-  // ── Costo cuotas: solo sobre fracción de ventas con tarjeta ─────────────────
-  const cuotas_cost = tn_revenue * cardFraction * (cuotasCostPct / 100)
+  // ── Cuotas s/interés: usar dato real por orden cuando esté disponible ────────
+  // installments_real = suma de payment_details.installments_cost por orden (solo pedidos con cuotas)
+  // Si no hay dato real, cae a: revenue × fracción tarjeta × cuotasCostPct %
+  const cuotas_is_real = installments_real !== null && installments_real >= 0
+  const cuotas_cost    = cuotas_is_real
+    ? installments_real!
+    : (cuotasCostPct > 0 ? tn_revenue * cardFraction * (cuotasCostPct / 100) : 0)
 
   const cogs         = merch + shipping + platform + packaging + cuotas_cost
   const gross_profit = tn_revenue - cogs
@@ -152,7 +159,7 @@ function calcPnL(
 
   return {
     tn_revenue, merch, shipping, shipping_is_real, platform, packaging,
-    cuotas_cost, cogs, gross_profit, meta_spend, ad_result,
+    cuotas_cost, cuotas_is_real, cogs, gross_profit, meta_spend, ad_result,
     recurring_total: recurringTotal, var_total, iibb_cost, net_result,
     margin_gross: tn_revenue > 0 ? gross_profit / tn_revenue : 0,
     margin_net:   tn_revenue > 0 ? net_result   / tn_revenue : 0,
@@ -172,11 +179,13 @@ function aggregatePnL(
   tnCommissionPct      = PLATFORM_PCT_DEFAULT * 100,
   shippingFallbackPct  = SHIPPING_PCT_DEFAULT * 100,
 ): PnL {
-  // Pre-computar envío por mes (real o fallback) antes de mergear
-  let totalShipping = 0
+  // Pre-computar envío y cuotas por mes (real o fallback) antes de mergear
+  let totalShipping     = 0
+  let totalInstallments = 0
   const merged: MonthData = {
     meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0,
-    shipping_real: 0,   // se setea abajo como suma pre-computada
+    shipping_real:     0,   // se setea abajo como suma pre-computada
+    installments_real: 0,   // ídem
     source: 'live',
   }
   months.forEach(m => {
@@ -184,16 +193,21 @@ function aggregatePnL(
     merged.tn_revenue += m.tn_revenue
     merged.tn_orders  += m.tn_orders
     merged.tn_units   += m.tn_units
-    // Mezcla: usa dato real si existe, fallback % si no
+    // Envío: usa dato real si existe, fallback % si no
     totalShipping += m.shipping_real !== null && m.shipping_real >= 0
       ? m.shipping_real
       : m.tn_revenue * (shippingFallbackPct / 100)
+    // Cuotas: usa dato real si existe, fallback % si no
+    totalInstallments += m.installments_real !== null && m.installments_real >= 0
+      ? m.installments_real
+      : (cuotasCostPct > 0 ? m.tn_revenue * cardFraction * (cuotasCostPct / 100) : 0)
   })
-  merged.shipping_real = totalShipping
+  merged.shipping_real     = totalShipping
+  merged.installments_real = totalInstallments
 
   const expenses = allExpenses.filter(e => keys.includes(e.month))
-  // shippingFallbackPct no aplica porque shipping_real ya está pre-computado
-  return calcPnL(merged, expenses, recurringTotal, cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, 0)
+  // shippingFallbackPct = 0 y cuotasCostPct = 0 porque ya están pre-computados
+  return calcPnL(merged, expenses, recurringTotal, 0, iibbRatePct, cardFraction, tnCommissionPct, 0)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -393,8 +407,9 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                   ?? metaSnapshot?.summary?.total_spend_7d
                   ?? 0,
       // Costo real de envío: shipping_cost_owner acumulado por el sync
-      // Si summary_mtd tiene el dato, úsalo; si no, fallback a summary_30d; null = usar % estimado
       shipping_real: mtd?.shipping_revenue ?? s30?.shipping_revenue ?? null,
+      // Costo real de cuotas s/interés: payment_details.installments_cost por orden
+      installments_real: mtd?.total_installments_cost ?? s30?.total_installments_cost ?? null,
       source: 'live' as const,
     }
   }, [tnSnapshot, metaSnapshot])
@@ -405,15 +420,17 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
     const s = summaries.find(s => s.month === key)
     if (!s) return {
       meta_spend: 0, tn_revenue: 0, tn_orders: 0, tn_units: 0,
-      shipping_real: null,   // sin datos → fallback %
+      shipping_real:     null,   // sin datos → fallback %
+      installments_real: null,   // sin datos → fallback cuotasCostPct %
       source: 'empty',
     }
     return {
-      meta_spend:    s.meta_spend ?? 0,
-      tn_revenue:    s.tn_revenue ?? 0,
-      tn_orders:     s.tn_orders  ?? 0,
-      tn_units:      s.tn_units   ?? 0,
-      shipping_real: null,   // monthly_summaries no guarda envío real → fallback %
+      meta_spend:        s.meta_spend ?? 0,
+      tn_revenue:        s.tn_revenue ?? 0,
+      tn_orders:         s.tn_orders  ?? 0,
+      tn_units:          s.tn_units   ?? 0,
+      shipping_real:     null,   // monthly_summaries no guarda envío real → fallback %
+      installments_real: null,   // monthly_summaries no guarda cuotas real → fallback %
       source: 'saved',
     }
   }, [curKey, liveData, summaries])
@@ -893,14 +910,18 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               indent />
             <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${PACKAGING_PER_ORD.toLocaleString('es-AR')})`} value={-pnl.packaging}
               pctVal={pnl.tn_revenue > 0 ? pnl.packaging / pnl.tn_revenue : 0} indent />
-            {cuotasCostPct > 0 && (
+            {(pnl.cuotas_is_real || cuotasCostPct > 0) && pnl.cuotas_cost > 0 && (
               <PnLRow
-                label={`Costo financiero cuotas (${cuotasCostPct}% × ${(cardFraction * 100).toFixed(0)}% tarjeta)`}
+                label={pnl.cuotas_is_real
+                  ? 'Cuotas s/interés (costo real)'
+                  : `Cuotas s/interés (~${cuotasCostPct}% × ${(cardFraction * 100).toFixed(0)}% tarjeta)`}
                 value={-pnl.cuotas_cost}
                 pctVal={pnl.tn_revenue > 0 ? pnl.cuotas_cost / pnl.tn_revenue : 0}
-                note={cardFractionSource === 'tn'
-                  ? `Fracción tarjeta auto-detectada desde TN (${(cardFraction * 100).toFixed(0)}%)`
-                  : `Fracción tarjeta estimada manualmente (${(cardFraction * 100).toFixed(0)}%) — configurá en Ajustes`}
+                note={pnl.cuotas_is_real
+                  ? `Costo real (payment_details.installments_cost por orden) · Fracción tarjeta: ${(cardFraction * 100).toFixed(0)}%`
+                  : cardFractionSource === 'tn'
+                    ? `Estimación — fracción tarjeta auto-detectada desde TN (${(cardFraction * 100).toFixed(0)}%) · mes actual mostrará costo real tras sync`
+                    : `Estimación — fracción tarjeta manual (${(cardFraction * 100).toFixed(0)}%) · configurá en Ajustes`}
                 indent />
             )}
             <PnLRow isSeparator label="" value={null} />
@@ -949,7 +970,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         </table>
         <div className="px-5 py-2.5 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-[10px] text-gray-400 dark:text-zinc-600">
-            Costo/orden: merch ${UNIT_COST.toLocaleString('es-AR')}/un × {UNITS_PER_ORDER} + envío 10% + TN 2.5% + packaging ${PACKAGING_PER_ORD.toLocaleString('es-AR')} = ~$27.000 ARS promedio
+            Merch ${UNIT_COST.toLocaleString('es-AR')}/un × {UNITS_PER_ORDER} + envío {pnl.shipping_is_real ? 'real TN' : `~${shippingFallbackPct.toFixed(0)}%`} + TN {tnCommissionPct.toFixed(1)}% + packaging ${PACKAGING_PER_ORD.toLocaleString('es-AR')}/ord{pnl.cuotas_is_real ? ' + cuotas real TN' : cuotasCostPct > 0 ? ` + cuotas ~${cuotasCostPct}% est.` : ''}
           </p>
         </div>
       </div>

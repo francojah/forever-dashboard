@@ -132,12 +132,20 @@ function buildSummary(orders: any[]) {
 
   const payment_methods: Record<string, number> = {}
   const payment_revenue: Record<string, number> = {}  // ARS por método de pago
-  paid.forEach((o: { payment_details?: { method?: string }; total?: string }) => {
+  let total_installments_cost = 0   // cuotas sin interés absorbidas por el negocio
+  let total_orders_with_installments = 0
+  paid.forEach((o: { payment_details?: { method?: string; installments_cost?: string | number }; total?: string }) => {
     const m = o.payment_details?.method || 'otro'
     const amount = parseFloat(o.total || '0')
     payment_methods[m] = (payment_methods[m] || 0) + 1
     payment_revenue[m] = Math.round((payment_revenue[m] || 0) + amount)
+    const cuotasCost = parseFloat(String(o.payment_details?.installments_cost || '0'))
+    if (cuotasCost > 0) {
+      total_installments_cost += cuotasCost
+      total_orders_with_installments += 1
+    }
   })
+  total_installments_cost = Math.round(total_installments_cost)
 
   const shippingCounts: Record<string, number> = {}
   paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string }) => {
@@ -170,8 +178,9 @@ function buildSummary(orders: any[]) {
 
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
-    unique_customers, top_products, payment_methods, payment_revenue, shipping_methods,
-    top_provinces, shipping_revenue, total_units_sold,
+    unique_customers, top_products, payment_methods, payment_revenue,
+    total_installments_cost, total_orders_with_installments,
+    shipping_methods, top_provinces, shipping_revenue, total_units_sold,
   }
 }
 

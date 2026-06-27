@@ -206,7 +206,9 @@ export type TNSummary = {
   unique_customers: number
   top_products: { name: string; quantity: number; revenue: number }[]
   payment_methods: Record<string, number>
-  payment_revenue?: Record<string, number>   // ARS por método de pago
+  payment_revenue?: Record<string, number>            // ARS por método de pago
+  total_installments_cost?: number                    // cuotas sin interés absorbidas (campo TN: installments_cost por orden)
+  total_orders_with_installments?: number             // cantidad de pedidos que usaron cuotas
   shipping_methods?: Record<string, number>
   top_provinces?: { name: string; count: number }[]
   shipping_revenue?: number
