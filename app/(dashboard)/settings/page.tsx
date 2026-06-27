@@ -6,8 +6,8 @@ const DEFAULTS = {
   breakeven_cpa:     17500,
   roas_min:          2.86,
   roas_scale:        6,
-  tn_commission_pct: 3.5,
-  shipping_pct:      8,
+  tn_commission_pct: 1.2,
+  shipping_pct:      10,
 }
 
 async function getSettings() {

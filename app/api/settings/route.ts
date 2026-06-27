@@ -8,7 +8,7 @@ const DEFAULTS: Record<string, number> = {
   breakeven_cpa:     17500,
   roas_min:          2.86,
   roas_scale:        6,
-  tn_commission_pct: 3.5,
+  tn_commission_pct: 1.2,  // comisión plan TN (no incluye procesadora MP — eso va en cuotas_cost_pct)
   shipping_pct:      8,
   cuotas_cost_pct:   0,    // % sobre ventas con tarjeta cobrado por el procesador
   card_sales_pct:    50,   // % de ventas que son con tarjeta (fallback manual)
