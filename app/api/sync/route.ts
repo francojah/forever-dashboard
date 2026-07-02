@@ -231,6 +231,14 @@ export async function POST() {
       }
     }
 
+    // Registrar corrida exitosa (para el panel de health)
+    try {
+      await supabase.from('sync_runs').insert({
+        source: 'meta', status: 'success', snapshot_date: today,
+        details: { campaigns: campaigns.length, adsets: adsets.length, ads: ads.length, spend_7d: summary.total_spend_7d },
+      })
+    } catch { /* tabla puede no existir; no bloquea */ }
+
     return NextResponse.json({
       ok: true,
       date: today,
@@ -243,6 +251,11 @@ export async function POST() {
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
+    // Registrar corrida fallida
+    try {
+      const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
+      await sb.from('sync_runs').insert({ source: 'meta', status: 'error', error: message })
+    } catch { /* no bloquea */ }
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

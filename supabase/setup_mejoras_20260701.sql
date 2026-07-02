@@ -162,12 +162,9 @@ ALTER TABLE creatives            ADD COLUMN IF NOT EXISTS brand_id uuid REFERENC
 ALTER TABLE creative_ideas       ADD COLUMN IF NOT EXISTS brand_id uuid REFERENCES brands(id) ON DELETE CASCADE;
 ALTER TABLE competitor_analyses  ADD COLUMN IF NOT EXISTS brand_id uuid REFERENCES brands(id) ON DELETE CASCADE;
 
-ALTER TABLE meta_snapshots DROP CONSTRAINT IF EXISTS meta_snapshots_snapshot_date_key;
-CREATE UNIQUE INDEX IF NOT EXISTS meta_snapshots_brand_date
-  ON meta_snapshots (brand_id, snapshot_date) WHERE brand_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS meta_snapshots_legacy_date
-  ON meta_snapshots (snapshot_date) WHERE brand_id IS NULL;
-
+-- IMPORTANTE: NO tocar UNIQUE(snapshot_date). El sync usa ON CONFLICT
+-- (snapshot_date) y Postgres no infiere índices parciales. Solo agregamos un
+-- índice no-único por marca.
 CREATE INDEX IF NOT EXISTS idx_meta_snapshots_brand ON meta_snapshots (brand_id, snapshot_date DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_brand         ON alerts (brand_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_brand          ON leads (brand_id, created_at DESC);
