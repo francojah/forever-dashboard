@@ -6,9 +6,9 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const BRAND_CONTEXT = `
 Sos el asistente de publicidad de FOREVER BASICS, marca argentina de básicos 100% algodón.
 Datos clave del negocio:
-- AOV: ~$50,000 ARS
-- Breakeven CPA: $17,500 ARS
-- ROAS target: 10x (actual: ~4-5x)
+- AOV: ~$57,500 ARS
+- Breakeven CPA: ~$30,500 ARS (margen real 53%)
+- ROAS target: 10x
 - Audiencia: hombres y mujeres 18-35 Argentina
 - Productos: remeras, boxers, básicos oversize, mix & match
 - Estética: minimalista, calidad visible, precio justo

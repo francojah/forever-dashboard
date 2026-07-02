@@ -1,5 +1,6 @@
 import { getLatestSnapshot, getLatestTNSnapshot, getSnapshotByDate, getHistoricalSnapshots } from '@/lib/supabase'
 import DashboardClient from '@/components/Dashboard/DashboardClient'
+import TodayCommandCenter from '@/components/Dashboard/TodayCommandCenter'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-6">
+      <div className="max-w-7xl mx-auto">
+        <TodayCommandCenter snapshot={snapshot} tnSnapshot={tnSnapshot} />
+      </div>
       <DashboardClient
         snapshot={snapshot}
         tnSnapshot={tnSnapshot}

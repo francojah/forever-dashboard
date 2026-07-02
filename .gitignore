@@ -61,3 +61,6 @@ gitstatus*.txt
 .idea/
 .vscode/
 Thumbs.db
+
+.vercel
+.env*
