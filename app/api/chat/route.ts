@@ -34,8 +34,8 @@ Resumen últimos 7 días:
   • Gasto total: $${Math.round((s.total_spend_7d || 0) / 1000)}K ARS
   • Budget diario activo: $${Math.round((s.daily_budget_active || 0) / 1000)}K ARS
   • Compras: ${s.total_purchases_7d || 0}
-  • CPA blended: $${s.blended_cpa ? Math.round(s.blended_cpa / 1000) + 'K' : 'N/A'} ARS (breakeven: $17.5K)
-  • ROAS blended: ${s.blended_roas?.toFixed(2) ?? 'N/A'}x (mínimo rentable: 2.86x, objetivo: 10x)
+  • CPA blended: $${s.blended_cpa ? Math.round(s.blended_cpa / 1000) + 'K' : 'N/A'} ARS (breakeven: $30.5K)
+  • ROAS blended: ${s.blended_roas?.toFixed(2) ?? 'N/A'}x (mínimo rentable: 1.77x, objetivo: 10x)
   • Ad sets activos: ${s.active_adsets || 0}
 
 Ad sets corriendo:

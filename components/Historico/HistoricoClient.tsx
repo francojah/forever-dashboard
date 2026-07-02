@@ -6,6 +6,7 @@ import {
   Tooltip, Legend, ReferenceLine, ResponsiveContainer, Area,
 } from 'recharts'
 import type { Summary } from '@/lib/supabase'
+import TrendChart from '@/components/Dashboard/TrendChart'
 
 const BREAKEVEN_CPA = 30462
 const ROAS_MIN      = 1.77
@@ -397,6 +398,9 @@ export default function HistoricoClient({ data }: Props) {
           </table>
         </div>
       </div>
+
+      {/* Tendencia granular por entidad (desde metrics_daily) */}
+      <TrendChart entityType="account" breakeven={BREAKEVEN_CPA} defaultMetric="spend" />
     </div>
   )
 }

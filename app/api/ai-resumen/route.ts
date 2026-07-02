@@ -59,8 +59,8 @@ ${todayBlock}
 - Gasto total: $${Math.round((s7d.total_spend_7d || 0) / 1000)}K ARS
 - Budget diario activo: $${Math.round((s7d.daily_budget_active || 0) / 1000)}K ARS
 - Compras: ${s7d.total_purchases_7d || 0}
-- CPA blended: $${s7d.blended_cpa ? Math.round(s7d.blended_cpa / 1000) + 'K' : 'N/A'} ARS (breakeven: $17.5K)
-- ROAS blended: ${s7d.blended_roas?.toFixed(2) ?? 'N/A'}x (mínimo: 2.86x · objetivo: 10x)
+- CPA blended: $${s7d.blended_cpa ? Math.round(s7d.blended_cpa / 1000) + 'K' : 'N/A'} ARS (breakeven: $30.5K)
+- ROAS blended: ${s7d.blended_roas?.toFixed(2) ?? 'N/A'}x (mínimo: 1.77x · objetivo: 10x)
 - Ad sets activos: ${s7d.active_adsets || 0}
 
 ${thirtyDayBlock}

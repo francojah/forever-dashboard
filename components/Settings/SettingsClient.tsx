@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import HealthPanel from '@/components/Settings/HealthPanel'
 
 interface Settings {
   breakeven_cpa:     number
@@ -415,6 +416,12 @@ export default function SettingsClient({ initialSettings }: Props) {
 
       {/* Tiendanube connection status */}
       <TNConnectionCard />
+
+      {/* System health */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Estado del sistema</p>
+        <HealthPanel />
+      </div>
 
       {/* Business parameters */}
       <div>

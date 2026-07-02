@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       spend = 0, purchases = 0, roas = null, cpa = null,
       tnRevenue = null, topAdset = null,
       alerts = [], period = '7d',
-      breakeven = 17500, dailyBudget = 0, activeAdsets = 0,
+      breakeven = 30462, dailyBudget = 0, activeAdsets = 0,
     } = body
 
     const roasStr   = roas ? roas.toFixed(2) + 'x' : 'sin datos'

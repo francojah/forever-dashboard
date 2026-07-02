@@ -4,6 +4,8 @@ import { useState } from 'react'
 import type { Snapshot, PeriodMetrics, Adset } from '@/lib/supabase'
 import AdsetTable from '@/components/Dashboard/AdsetTable'
 import PresupuestoClient from '@/components/Presupuesto/PresupuestoClient'
+import { ExportButton } from '@/components/ui/ExportButton'
+import Funnel from '@/components/Dashboard/Funnel'
 
 // BREAKEVEN real Forever Basics: merch $19.5K + envío $5.75K + TN 2.5% $1.44K + packaging $350 ≈ $27K/orden
 // AOV $57.5K → margen 53% → BE_CPA = $57.5K − $27K = $30.5K
@@ -226,19 +228,36 @@ export default function CampaniasClient({ snapshot }: Props) {
           </p>
         </div>
 
-        {/* Period selector — only for Ad Sets tab */}
+        {/* Period selector + export — only for Ad Sets tab */}
         {tab === 'adsets' && (
-          <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
-            {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
-                  period === p
-                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
-                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
-                )}>
-                {PERIOD_LABELS[p]}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+              {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
+                <button key={p} onClick={() => setPeriod(p)}
+                  className={'px-3 py-1.5 text-xs font-medium rounded-md transition-all ' + (
+                    period === p
+                      ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
+                      : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
+                  )}>
+                  {PERIOD_LABELS[p]}
+                </button>
+              ))}
+            </div>
+            <ExportButton
+              rows={adsets as unknown as Record<string, unknown>[]}
+              filename={`campanias_${PERIOD_SHORT[period]}`}
+              columns={[
+                { key: 'name', label: 'Ad set' },
+                { key: 'status', label: 'Estado' },
+                { key: 'spend', label: 'Gasto' },
+                { key: 'results', label: 'Compras' },
+                { key: 'cost_per_result', label: 'CPA' },
+                { key: 'roas', label: 'ROAS' },
+                { key: 'ctr', label: 'CTR' },
+                { key: 'frequency', label: 'Frecuencia' },
+                { key: 'daily_budget', label: 'Budget diario' },
+              ]}
+            />
           </div>
         )}
       </div>
@@ -261,6 +280,14 @@ export default function CampaniasClient({ snapshot }: Props) {
       {tab === 'adsets' && (
         <>
           <CampaignOverview adsets={adsets} campMap={campMap} period={period} />
+          <div className="mb-6">
+            <Funnel
+              impressions={adsets.reduce((s, a) => s + (a.impressions || 0), 0)}
+              clicks={adsets.reduce((s, a) => s + (a.clicks || 0), 0)}
+              purchases={adsets.reduce((s, a) => s + (a.results || 0), 0)}
+              spend={adsets.reduce((s, a) => s + (a.spend || 0), 0)}
+            />
+          </div>
           <AdsetTable
             adsets={activeAdsets}
             ads={activeAds}

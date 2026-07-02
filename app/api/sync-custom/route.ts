@@ -21,11 +21,11 @@ async function getThresholds(supabase: SupabaseClient) {
       map[key] = typeof value === 'number' ? value : parseFloat(String(value))
     })
     return {
-      breakeven_cpa: map.breakeven_cpa ?? 17500,
-      roas_min:      map.roas_min      ?? 2.86,
+      breakeven_cpa: map.breakeven_cpa ?? 30462,
+      roas_min:      map.roas_min      ?? 1.77,
     }
   } catch {
-    return { breakeven_cpa: 17500, roas_min: 2.86 }
+    return { breakeven_cpa: 30462, roas_min: 1.77 }
   }
 }
 

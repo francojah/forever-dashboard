@@ -35,3 +35,29 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# testing / coverage
+/coverage
+.vitest
+
+# credenciales — NUNCA subir al repo
+creds.txt
+recovery_codes.txt
+*.pem
+*.key
+
+# salidas sueltas de git / scripts (no versionar)
+git*.txt
+push_result.txt
+push_output.txt
+commit_result.txt
+opt_result.txt
+fix_result.txt
+gitout.txt
+gitstatus*.txt
+
+# editores / OS
+.DS_Store
+.idea/
+.vscode/
+Thumbs.db
