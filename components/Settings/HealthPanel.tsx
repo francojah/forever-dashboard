@@ -73,7 +73,13 @@ export default function HealthPanel() {
             bad={snap?.stale || !!snap?.error}
           />
           {data?.response_ms != null && <Row label="Respuesta API" value={`${data.response_ms} ms`} />}
-          {data?.checks?.last_error && <Row label="Último error" value={data.checks.last_error} bad />}
+          {data?.checks?.last_error && (
+            <Row
+              label="Último error"
+              value={data.checks.last_error}
+              bad={!String(data.checks.last_error).startsWith('(resuelto)')}
+            />
+          )}
 
           {runs.length > 0 && (
             <div className="pt-2 border-t border-gray-100 dark:border-zinc-800">

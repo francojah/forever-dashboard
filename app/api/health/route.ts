@@ -18,6 +18,7 @@ export async function GET() {
 
   const checks: Record<string, unknown> = {}
   let healthy = true
+  let snapshotCreatedAt = 0
 
   if (!url || !key) {
     return NextResponse.json(
@@ -37,7 +38,8 @@ export async function GET() {
       .limit(1)
       .single()
     if (data) {
-      const ageHours = (Date.now() - new Date(data.created_at).getTime()) / 3_600_000
+      snapshotCreatedAt = new Date(data.created_at).getTime()
+      const ageHours = (Date.now() - snapshotCreatedAt) / 3_600_000
       const stale = ageHours > 30 // el cron corre cada 24h; margen de 6h
       if (stale) healthy = false
       checks.meta_snapshot = {
@@ -62,10 +64,19 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(5)
     if (data && data.length) {
-      const lastError = data.find((r) => r.status === 'error')
-      if (data[0].status === 'error') healthy = false
+      const last = data[0]
+      const lastErrorRun = data.find((r) => r.status === 'error')
+      // Solo se considera degradado si la última corrida falló Y no hubo un
+      // snapshot exitoso posterior (es decir, el sistema NO se recuperó).
+      const errorNewerThanSnapshot =
+        last.status === 'error' && new Date(last.created_at).getTime() > snapshotCreatedAt
+      if (errorNewerThanSnapshot) healthy = false
       checks.last_runs = data
-      if (lastError) checks.last_error = lastError.error
+      // Mostramos el último error como informativo, marcando si ya se resolvió
+      if (lastErrorRun) {
+        const resolved = new Date(lastErrorRun.created_at).getTime() < snapshotCreatedAt
+        checks.last_error = resolved ? `(resuelto) ${lastErrorRun.error}` : lastErrorRun.error
+      }
     }
   } catch {
     // tabla puede no existir aún; no es fatal
