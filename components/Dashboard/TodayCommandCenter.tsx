@@ -45,6 +45,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
   const [todaySpend, setTodaySpend] = useState<number | null>(null)
   const [actions, setActions] = useState<Action[] | null>(null)
   const [loadingActions, setLoadingActions] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   const tnToday = tnSnapshot?.summary_today
   const revenueToday = tnToday?.total_revenue ?? null
@@ -52,6 +53,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
   const realRoasToday = revenueToday != null && todaySpend && todaySpend > 0 ? revenueToday / todaySpend : null
 
   useEffect(() => {
+    setMounted(true)
     fetch('/api/meta-today').then((r) => r.json()).then((d) => setTodaySpend(typeof d.spend === 'number' ? d.spend : null)).catch(() => {})
     fetch('/api/today-actions')
       .then((r) => r.json())
@@ -60,7 +62,8 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
       .finally(() => setLoadingActions(false))
   }, [])
 
-  const fecha = new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })
+  // Solo tras montar (evita mismatch de hidratación por hora/fecha del cliente)
+  const fecha = mounted ? new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }) : ''
 
   return (
     <div
@@ -71,7 +74,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
         {/* Saludo */}
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100">{greeting()} 👋</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100">{mounted ? greeting() : 'Hola'} 👋</h2>
             <p className="text-mini text-gray-500 dark:text-zinc-500 capitalize mt-0.5">{fecha}</p>
           </div>
         </div>

@@ -1,26 +1,12 @@
 {
-  "name": "Forever Intelligence",
-  "short_name": "ForeverAds",
-  "description": "Performance & Ecommerce Intelligence — Meta Ads · Tiendanube · IA",
+  "name": "Faro — Analytics para ecommerce",
+  "short_name": "Faro",
+  "description": "Meta Ads + tu ecommerce en una sola vista inteligente.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#07070c",
+  "theme_color": "#4f46e5",
   "orientation": "portrait-primary",
-  "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Dashboard",
@@ -28,9 +14,9 @@
       "description": "Ver dashboard principal"
     },
     {
-      "name": "Campañas",
-      "url": "/campanias",
-      "description": "Ver ad sets y creativos"
+      "name": "Analítica",
+      "url": "/analytics",
+      "description": "Clientes, producto, margen y stock"
     }
   ],
   "categories": ["business", "productivity"]

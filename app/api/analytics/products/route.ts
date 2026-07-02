@@ -38,7 +38,8 @@ export async function GET(req: Request) {
   ])
 
   if (ordersRes.error) {
-    return NextResponse.json({ error: ordersRes.error.message }, { status: 500 })
+    // Tabla puede no existir todavía (migración pendiente) → vacío, no 500
+    return NextResponse.json({ empty: true, message: 'Sin órdenes todavía. Corré la migración tn_orders y el sync de TN.' })
   }
 
   const orders = (ordersRes.data || []) as unknown as OrderRow[]

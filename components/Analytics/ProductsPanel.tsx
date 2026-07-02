@@ -68,7 +68,7 @@ export default function ProductsPanel() {
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
         </div>
-      ) : !data || data.empty ? (
+      ) : !data || data.empty || !data.products ? (
         <EmptyState
           title="Sin datos de producto todavía"
           description={data?.message || 'Corré el sync de Tiendanube para ver ventas y margen por producto.'}

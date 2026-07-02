@@ -29,7 +29,8 @@ export async function GET() {
     .order('order_date', { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    // Tabla puede no existir todavía (migración pendiente) → vacío, no 500
+    return NextResponse.json({ empty: true, message: 'Sin órdenes todavía. Corré la migración tn_orders y el sync de TN.' })
   }
 
   const orders = ((data || []) as unknown as OrderRow[]).filter(

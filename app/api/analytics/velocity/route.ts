@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     .select('order_date, payment_status, products')
     .gte('order_date', since.toISOString())
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ empty: true, days, products: [] })
 
   const orders = ((data || []) as unknown as OrderRow[]).filter(
     (o) => o.payment_status && PAID.has(o.payment_status)

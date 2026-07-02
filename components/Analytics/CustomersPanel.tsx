@@ -37,7 +37,7 @@ export default function CustomersPanel() {
   }, [])
 
   if (loading) return <Card><PanelSkeleton /></Card>
-  if (!data || data.empty)
+  if (!data || data.empty || !data.distribution)
     return (
       <Card>
         <EmptyState
