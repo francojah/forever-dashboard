@@ -30,12 +30,23 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  // Si no está logueado y trata de acceder a una ruta protegida → login
-  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/api')) {
+  // Rutas públicas: landing estática de Faro + API (dejan pasar sin auth)
+  if (pathname === '/landing.html' || pathname.startsWith('/api')) {
+    return response
+  }
+
+  // Home pública: quien NO inició sesión ve la landing de Faro en "/"
+  // (el usuario logueado ve su dashboard en "/" normalmente).
+  if (!user && pathname === '/') {
+    return NextResponse.rewrite(new URL('/landing.html', request.url))
+  }
+
+  // Resto de rutas protegidas: sin sesión → login
+  if (!user && !pathname.startsWith('/login')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Si ya está logueado y va al login → dashboard
+  // Si ya está logueado y va al login → dashboard (home)
   if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url))
   }

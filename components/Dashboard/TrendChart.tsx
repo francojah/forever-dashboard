@@ -33,7 +33,10 @@ interface Props {
   breakeven?: number
   defaultMetric?: Metric
   defaultDays?: number
+  showEvents?: boolean
 }
+
+type TrendEvent = { date: string; label: string; action: string }
 
 export default function TrendChart({
   entityType = 'account',
@@ -42,10 +45,12 @@ export default function TrendChart({
   breakeven,
   defaultMetric = 'spend',
   defaultDays = 30,
+  showEvents = true,
 }: Props) {
   const [metric, setMetric] = useState<Metric>(defaultMetric)
   const [days, setDays] = useState(defaultDays)
   const [data, setData] = useState<{ date: string; value: number }[]>([])
+  const [events, setEvents] = useState<TrendEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +75,22 @@ export default function TrendChart({
       cancelled = true
     }
   }, [entityType, entityId, metric, days])
+
+  useEffect(() => {
+    if (!showEvents) return
+    let cancelled = false
+    fetch(`/api/events?days=${days}`)
+      .then((r) => r.json())
+      .then((res) => !cancelled && setEvents(res.events || []))
+      .catch(() => !cancelled && setEvents([]))
+    return () => {
+      cancelled = true
+    }
+  }, [showEvents, days])
+
+  // Solo eventos cuya fecha cae dentro del rango de datos visible
+  const dateSet = new Set(data.map((d) => d.date))
+  const visibleEvents = events.filter((e) => dateSet.has(e.date))
 
   const fmtVal = (v: number) =>
     meta.money ? '$' + Math.round(v).toLocaleString(LOCALE) : v.toLocaleString(LOCALE) + (meta.suffix || '')
@@ -168,6 +189,15 @@ export default function TrendChart({
                 label={{ value: 'breakeven', fontSize: 10, fill: '#ef4444', position: 'insideTopRight' }}
               />
             )}
+            {visibleEvents.map((e, i) => (
+              <ReferenceLine
+                key={i}
+                x={e.date}
+                stroke="#a1a1aa"
+                strokeDasharray="2 3"
+                label={{ value: e.label.length > 18 ? e.label.slice(0, 18) + '…' : e.label, fontSize: 9, fill: '#a1a1aa', angle: -90, position: 'insideTopLeft' }}
+              />
+            ))}
             <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} fill="url(#trendFill)" />
           </AreaChart>
         </ResponsiveContainer>

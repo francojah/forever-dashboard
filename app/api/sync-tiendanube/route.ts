@@ -213,6 +213,55 @@ function buildSummary(orders: any[]) {
   }
 }
 
+// ── Persistir órdenes crudas en tn_orders (habilita LTV/producto/neto) ──
+// Idempotente por (brand_id, tn_order_id). No bloquea el sync si falla.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function persistOrders(supabase: SupabaseClient, orders: any[]) {
+  if (!orders?.length) return 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = orders.map((o: any) => ({
+    brand_id: null,
+    tn_order_id: String(o.id),
+    order_number: o.number != null ? String(o.number) : null,
+    order_date: o.created_at || null,
+    customer_id: o.customer?.id != null ? String(o.customer.id) : null,
+    customer_email: o.customer?.email || o.contact_email || null,
+    status: o.status || null,
+    payment_status: o.payment_status || null,
+    total: parseFloat(o.total || '0') || 0,
+    subtotal: parseFloat(o.subtotal || '0') || null,
+    shipping_cost_owner: parseFloat(o.shipping_cost_owner || '0') || null,
+    installments_cost: parseFloat(String(o.payment_details?.installments_cost || '0')) || null,
+    payment_method: o.payment_details?.method || o.gateway || null,
+    shipping_method: normalizeShipping(o),
+    province: o.shipping_address?.province || null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    products: (o.products || []).map((p: any) => ({
+      product_id: p.product_id != null ? String(p.product_id) : null,
+      variant_id: p.variant_id != null ? String(p.variant_id) : null,
+      name: p.name || '',
+      quantity: parseInt(p.quantity || '1', 10),
+      price: parseFloat(p.price || '0') || 0,
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    units: (o.products || []).reduce((s: number, p: any) => s + parseInt(p.quantity || '1', 10), 0),
+    synced_at: new Date().toISOString(),
+  }))
+  try {
+    // Chunks de 500 para no exceder límites de payload
+    for (let i = 0; i < rows.length; i += 500) {
+      const { error } = await supabase
+        .from('tn_orders')
+        .upsert(rows.slice(i, i + 500), { onConflict: 'brand_id,tn_order_id' })
+      if (error) throw error
+    }
+    return rows.length
+  } catch (e) {
+    console.warn('⚠️ No se pudieron persistir órdenes en tn_orders:', (e as Error).message)
+    return 0
+  }
+}
+
 export async function POST() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return NextResponse.json({ error: 'Faltan variables de entorno de Supabase' }, { status: 500 })
@@ -262,11 +311,15 @@ export async function POST() {
 
     if (error) throw error
 
+    // Persistir órdenes crudas (usa 30d + ytd para acumular historial amplio)
+    const persisted = await persistOrders(supabase, [...ordersYTD])
+
     return NextResponse.json({
       ok: true, date: today,
       orders_today: snapshot.summary_today.total_orders,
       orders_7d:    snapshot.summary_7d.total_orders,
       revenue_7d:   snapshot.summary_7d.total_revenue,
+      orders_persisted: persisted,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error desconocido'

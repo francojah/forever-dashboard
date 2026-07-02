@@ -3,10 +3,33 @@
 @tailwind utilities;
 
 :root {
+  /* Semánticos */
   --color-ok: #16a34a;
   --color-warn: #d97706;
   --color-danger: #dc2626;
+
+  /* Marca (white-label) — overrideable por cliente vía inline style en <html> */
+  --brand-50:  #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-500: #6366f1;
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-fg:  #ffffff;
 }
+
+/* Utilidades de marca — usan las variables de arriba */
+.text-brand      { color: var(--brand-600); }
+.dark .text-brand{ color: var(--brand-500); }
+.bg-brand        { background-color: var(--brand-600); color: var(--brand-fg); }
+.bg-brand:hover  { background-color: var(--brand-700); }
+.bg-brand-soft   { background-color: var(--brand-50); color: var(--brand-700); }
+.dark .bg-brand-soft { background-color: color-mix(in srgb, var(--brand-500) 15%, transparent); color: var(--brand-500); }
+.border-brand    { border-color: var(--brand-500); }
+.ring-brand      { --tw-ring-color: var(--brand-500); }
+
+/* Escala tipográfica: sube el mínimo legible (accesibilidad + look premium) */
+.text-micro { font-size: 11px; line-height: 1.4; }   /* reemplazo de text-[10px] */
+.text-mini  { font-size: 12px; line-height: 1.45; }  /* reemplazo de text-[11px] */
 
 /* Scrollbar minimalista */
 ::-webkit-scrollbar { width: 4px; height: 4px; }

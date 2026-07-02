@@ -5,6 +5,8 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClientBrowser } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme-context'
+import { PRODUCT, DEFAULT_CLIENT_BRAND, productMonogram } from '@/lib/brand'
+import { useEffect } from 'react'
 
 const icons = {
   dashboard:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
@@ -17,6 +19,7 @@ const icons = {
   creativos:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
   competencia: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   resumen:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  analitica:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12" y="8" width="3" height="10" rx="0.5"/><rect x="17" y="5" width="3" height="13" rx="0.5"/></svg>,
   sun:         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
   moon:        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
   logout:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
@@ -31,6 +34,7 @@ const NAV_SECTIONS = [
       { href: '/',           label: 'Dashboard',  icon: 'dashboard',  accent: 'text-blue-600 dark:text-blue-400',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
       { href: '/tiendanube', label: 'Tiendanube', icon: 'tiendanube', accent: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/30' },
       { href: '/historico',  label: 'Tendencias', icon: 'historico',  accent: 'text-sky-600 dark:text-sky-400',      bg: 'bg-sky-50 dark:bg-sky-950/30' },
+      { href: '/analytics',  label: 'Analítica',  icon: 'analitica',  accent: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30' },
       { href: '/balance',    label: 'Balance',    icon: 'balance',    accent: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
     ],
   },
@@ -76,7 +80,7 @@ const QUICK_LINKS = [
     color: 'text-violet-500 dark:text-violet-400',
     links: [
       { href: 'https://foreverbasics.mitiendanube.com/admin/', label: 'TN Admin' },
-      { href: 'https://foreverbasics.com.ar/', label: 'Web Forever' },
+      { href: DEFAULT_CLIENT_BRAND.storeUrl || '#', label: 'Web tienda' },
     ],
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
@@ -92,6 +96,16 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
   const { theme, toggle } = useTheme()
   const supabase = createClientBrowser()
 
+  // Inyecta el color de marca (white-label) en las variables CSS.
+  useEffect(() => {
+    const root = document.documentElement
+    if (PRODUCT.accent) {
+      root.style.setProperty('--brand-500', PRODUCT.accent)
+      root.style.setProperty('--brand-600', PRODUCT.accent)
+      root.style.setProperty('--brand-700', PRODUCT.accent)
+    }
+  }, [])
+
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -104,13 +118,31 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
       {/* Logo */}
       <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800/60">
         <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <Image
-              src="https://acdn-us.mitiendanube.com/stores/004/250/257/themes/common/logo-1587041462-1768339200-c3f713972515246e9c2f02029356d7da1768339200-480-0.webp"
-              alt="Forever Basics" width={100} height={33}
-              className="object-contain dark:invert" unoptimized
-            />
-            <p className="text-[9px] tracking-widest text-gray-400 dark:text-zinc-600 uppercase font-medium pl-0.5">Intelligence</p>
+          <div className="flex flex-col gap-2">
+            {/* Marca del PRODUCTO (proveedor) */}
+            <div className="flex items-center gap-2">
+              {PRODUCT.logoUrl ? (
+                <Image src={PRODUCT.logoUrl} alt={PRODUCT.name} width={110} height={28} className="object-contain" unoptimized />
+              ) : (
+                <>
+                  <span className="w-7 h-7 rounded-lg bg-brand flex items-center justify-center text-xs font-bold">
+                    {productMonogram()}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-zinc-100">{PRODUCT.name}</span>
+                </>
+              )}
+            </div>
+            {/* Logo del CLIENTE (ecommerce analizado) */}
+            {DEFAULT_CLIENT_BRAND.logoUrl && (
+              <div className="flex items-center gap-1.5 pl-0.5">
+                <span className="text-micro text-gray-400 dark:text-zinc-600 uppercase tracking-wider">Cliente</span>
+                <Image
+                  src={DEFAULT_CLIENT_BRAND.logoUrl}
+                  alt={DEFAULT_CLIENT_BRAND.name} width={64} height={20}
+                  className="object-contain dark:invert opacity-70" unoptimized
+                />
+              </div>
+            )}
           </div>
           {onClose && (
             <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800">

@@ -6,6 +6,8 @@ import AdsetTable from '@/components/Dashboard/AdsetTable'
 import PresupuestoClient from '@/components/Presupuesto/PresupuestoClient'
 import { ExportButton } from '@/components/ui/ExportButton'
 import Funnel from '@/components/Dashboard/Funnel'
+import QuadrantScatter from '@/components/Dashboard/QuadrantScatter'
+import CreativeComparator from '@/components/Creativos/CreativeComparator'
 
 // BREAKEVEN real Forever Basics: merch $19.5K + envío $5.75K + TN 2.5% $1.44K + packaging $350 ≈ $27K/orden
 // AOV $57.5K → margen 53% → BE_CPA = $57.5K − $27K = $30.5K
@@ -295,6 +297,10 @@ export default function CampaniasClient({ snapshot }: Props) {
             breakeven={BREAKEVEN_CPA}
             period={PERIOD_SHORT[period]}
           />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+            <QuadrantScatter items={adsets} breakeven={BREAKEVEN_CPA} roasMin={ROAS_MIN} />
+            <CreativeComparator ads={activeAds} breakeven={BREAKEVEN_CPA} />
+          </div>
         </>
       )}
 

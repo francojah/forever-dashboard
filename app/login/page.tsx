@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import Link from 'next/link'
 import { createClientBrowser } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { PRODUCT, productMonogram } from '@/lib/brand'
 
 export default function LoginPage() {
   const [email, setEmail]       = useState('')
@@ -27,127 +28,125 @@ export default function LoginPage() {
     }
   }
 
+  const accent = PRODUCT.accent || '#6366f1'
+
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex text-white" style={{ background: '#07070c' }}>
+      {/* Orbes de fondo */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div style={{ position: 'absolute', width: 520, height: 520, top: -160, left: -120, borderRadius: '50%', filter: 'blur(90px)', opacity: 0.5, background: `radial-gradient(circle, ${accent}, transparent 70%)` }} />
+        <div style={{ position: 'absolute', width: 460, height: 460, bottom: -160, right: -120, borderRadius: '50%', filter: 'blur(90px)', opacity: 0.45, background: 'radial-gradient(circle, #a855f7, transparent 70%)' }} />
+      </div>
 
       {/* Panel izquierdo — marca */}
-      <div className="hidden lg:flex lg:w-1/2 bg-black flex-col items-center justify-center p-12 relative overflow-hidden">
-        {/* Fondo sutil */}
-        <div className="absolute inset-0 opacity-5"
-          style={{ backgroundImage: 'radial-gradient(circle at 30% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }}
-        />
+      <div className="hidden lg:flex lg:w-1/2 relative z-10 flex-col justify-between p-14">
+        <Link href="/" className="flex items-center gap-2.5 w-fit">
+          <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold" style={{ background: `linear-gradient(135deg, ${accent}, #a855f7)`, boxShadow: `0 8px 24px ${accent}66` }}>
+            {productMonogram()}
+          </span>
+          <span className="text-lg font-bold tracking-tight">{PRODUCT.name}</span>
+        </Link>
 
-        <div className="relative z-10 flex flex-col items-center text-center gap-8 max-w-xs">
-          <Image
-            src="https://acdn-us.mitiendanube.com/stores/004/250/257/themes/common/logo-1587041462-1768339200-c3f713972515246e9c2f02029356d7da1768339200-480-0.webp"
-            alt="Forever Basics"
-            width={200}
-            height={66}
-            className="object-contain invert"
-            unoptimized
-          />
-          <div>
-            <p className="text-zinc-300 text-sm leading-relaxed">
-              Performance &amp; Ecommerce Intelligence.<br/>
-              Meta Ads · Tiendanube · IA · en tiempo real.
-            </p>
-          </div>
-          <div className="w-8 h-px bg-zinc-600" />
-          <p className="text-zinc-600 text-xs tracking-widest uppercase">
-            Solo para el equipo
+        <div className="max-w-md">
+          <h2 className="text-4xl font-bold leading-tight tracking-tight">
+            Tu negocio,<br />
+            <span style={{ background: 'linear-gradient(120deg,#818cf8,#c084fc 45%,#22d3ee)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>
+              en una sola vista.
+            </span>
+          </h2>
+          <p className="mt-4 text-zinc-400 text-[15px] leading-relaxed">
+            Meta Ads cruzado con tus ventas reales. Margen por producto, LTV, alertas de stock y una IA que te dice qué hacer.
           </p>
+          <div className="mt-8 flex flex-col gap-3">
+            {['ROAS real, no del pixel', 'Margen neto por producto', 'Alertas de quiebre de stock'].map((t) => (
+              <div key={t} className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: `${accent}22` }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </span>
+                {t}
+              </div>
+            ))}
+          </div>
         </div>
+
+        <p className="text-zinc-600 text-xs">© 2026 {PRODUCT.name} · Analytics para ecommerce</p>
       </div>
 
       {/* Panel derecho — form */}
-      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-zinc-950 px-6">
+      <div className="flex-1 flex items-center justify-center relative z-10 px-6">
         <div className="w-full max-w-sm">
-
-          {/* Logo mobile */}
-          <div className="lg:hidden text-center mb-8">
-            <Image
-              src="https://acdn-us.mitiendanube.com/stores/004/250/257/themes/common/logo-1587041462-1768339200-c3f713972515246e9c2f02029356d7da1768339200-480-0.webp"
-              alt="Forever Basics"
-              width={140}
-              height={46}
-              className="object-contain mx-auto dark:invert"
-              unoptimized
-            />
+          {/* Marca mobile */}
+          <div className="lg:hidden flex items-center justify-center gap-2.5 mb-8">
+            <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold" style={{ background: `linear-gradient(135deg, ${accent}, #a855f7)` }}>
+              {productMonogram()}
+            </span>
+            <span className="text-lg font-bold">{PRODUCT.name}</span>
           </div>
 
-          <div className="mb-8">
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Bienvenido</h1>
-            <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1">Ingresá tus credenciales para continuar</p>
+          <div className="mb-7">
+            <h1 className="text-2xl font-bold tracking-tight">Bienvenido de nuevo</h1>
+            <p className="text-sm text-zinc-400 mt-1.5">Ingresá para ver tu dashboard.</p>
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-8 shadow-sm">
+          <div
+            className="rounded-2xl p-8"
+            style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.09)', backdropFilter: 'blur(10px)' }}
+          >
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide mb-2">
-                  Email
-                </label>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Email</label>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="hola@foreverbasics.com.ar"
-                  required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-zinc-700
-                             bg-gray-50 dark:bg-zinc-800 text-sm text-gray-900 dark:text-white
-                             focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white
-                             focus:border-transparent placeholder-gray-400 dark:placeholder-zinc-500
-                             transition-all"
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@ecommerce.com" required
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
+                  style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)' }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = accent)}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,.1)')}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide mb-2">
-                  Contraseña
-                </label>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Contraseña</label>
                 <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-zinc-700
-                             bg-gray-50 dark:bg-zinc-800 text-sm text-gray-900 dark:text-white
-                             focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white
-                             focus:border-transparent placeholder-gray-400 dark:placeholder-zinc-500
-                             transition-all"
+                  type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••" required
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
+                  style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)' }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = accent)}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,.1)')}
                 />
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl border border-red-100 dark:border-red-900/40">
+                <div className="flex items-center gap-2 text-sm text-red-400 px-4 py-3 rounded-xl" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)' }}>
                   <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   {error}
                 </div>
               )}
 
               <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900
-                           py-3 rounded-xl text-sm font-semibold tracking-wide
-                           hover:bg-gray-700 dark:hover:bg-gray-100 transition-colors
-                           disabled:opacity-40 disabled:cursor-not-allowed mt-2"
+                type="submit" disabled={loading}
+                className="w-full py-3 rounded-xl text-sm font-semibold tracking-wide text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: `linear-gradient(135deg, ${accent}, #a855f7)`, boxShadow: `0 8px 24px ${accent}55` }}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                     Ingresando...
                   </span>
-                ) : 'Ingresar'}
+                ) : 'Ingresar →'}
               </button>
             </form>
           </div>
 
+          <p className="text-center text-xs text-zinc-500 mt-6">
+            <Link href="/" className="hover:text-zinc-300 transition-colors">← Volver al inicio</Link>
+          </p>
         </div>
       </div>
     </div>
