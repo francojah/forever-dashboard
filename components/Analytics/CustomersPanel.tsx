@@ -64,14 +64,14 @@ export default function CustomersPanel() {
 
       {/* Distribución por # de compras */}
       <div className="mb-5">
-        <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">Distribución por compras</p>
+        <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">Distribución por compras</p>
         <div className="flex gap-1 h-6 rounded-md overflow-hidden">
           <Seg n={dist.one} total={data.total_customers!} color="bg-indigo-300 dark:bg-indigo-500/40" label="1 compra" />
           <Seg n={dist.two} total={data.total_customers!} color="bg-indigo-400 dark:bg-indigo-500/60" label="2" />
           <Seg n={dist.three} total={data.total_customers!} color="bg-indigo-500 dark:bg-indigo-500/80" label="3" />
           <Seg n={dist.fourPlus} total={data.total_customers!} color="bg-emerald-500" label="4+" />
         </div>
-        <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">
+        <p className="text-micro text-gray-400 dark:text-zinc-500 mt-1">
           {dist.one} compraron 1 vez · {dist.two + dist.three + dist.fourPlus} volvieron
         </p>
       </div>
@@ -79,7 +79,7 @@ export default function CustomersPanel() {
       {/* Nuevos vs recurrentes por mes */}
       {data.monthly && data.monthly.length > 0 && (
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">Nuevos vs recurrentes por mes</p>
+          <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">Nuevos vs recurrentes por mes</p>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.monthly} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-gray-100 dark:text-zinc-800" />
@@ -108,7 +108,7 @@ function Card({ children }: { children: ReactNode }) {
 function Kpi({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
+      <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
       <p className={'text-lg font-semibold mt-0.5 ' + (accent ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-zinc-100')}>
         {value}
       </p>

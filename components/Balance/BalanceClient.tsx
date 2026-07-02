@@ -214,9 +214,9 @@ function aggregatePnL(
 function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
   return (
     <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${color} p-4 shadow-sm`}>
-      <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
       <p className="text-2xl font-bold tabular-nums text-gray-900 dark:text-zinc-100 leading-none">{value}</p>
-      {sub && <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">{sub}</p>}
+      {sub && <p className="text-mini text-gray-400 dark:text-zinc-500 mt-1.5">{sub}</p>}
     </div>
   )
 }
@@ -241,7 +241,7 @@ function PnLRow({ label, value, pctVal, indent, isTotal, isSubtotal, isSeparator
         <p className={`text-sm ${isTotal ? 'font-semibold text-gray-900 dark:text-zinc-100' : isSubtotal ? 'font-medium text-gray-800 dark:text-zinc-200' : 'text-gray-600 dark:text-zinc-400'}`}>
           {label}
         </p>
-        {note && <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-0.5">{note}</p>}
+        {note && <p className="text-mini text-gray-400 dark:text-zinc-600 mt-0.5">{note}</p>}
       </td>
       <td className={`px-5 py-2.5 text-right font-medium tabular-nums ${colorCls} ${isTotal ? 'text-base' : 'text-sm'}`}>
         {valStr}
@@ -709,7 +709,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                       : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 border border-gray-100 dark:border-zinc-800'
                   )}>
                   Q{q}
-                  <span className="text-[10px] block font-normal opacity-70">
+                  <span className="text-micro block font-normal opacity-70">
                     {MONTH_SHORT[(q-1)*3]}–{MONTH_SHORT[q*3-1]}
                   </span>
                 </button>
@@ -757,20 +757,20 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       {hasData && (
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-violet-400 p-4 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI publicitario</p>
+            <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI publicitario</p>
             <p className={`text-2xl font-bold tabular-nums leading-none ${pnl.roi_ads >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
               {pnl.roi_ads >= 0 ? '+' : ''}{pnl.roi_ads.toFixed(0)}%
             </p>
-            <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">
+            <p className="text-mini text-gray-400 dark:text-zinc-500 mt-1.5">
               Resultado neto ÷ gasto Meta · {pnl.meta_spend > 0 ? `por cada $100 invertido en ads, retornás $${(100 + pnl.roi_ads).toFixed(0)}` : 'sin datos de ads'}
             </p>
           </div>
           <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-sky-400 p-4 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI del negocio</p>
+            <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1">ROI del negocio</p>
             <p className={`text-2xl font-bold tabular-nums leading-none ${pnl.roi_negocio >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
               {pnl.roi_negocio >= 0 ? '+' : ''}{pnl.roi_negocio.toFixed(0)}%
             </p>
-            <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1.5">
+            <p className="text-mini text-gray-400 dark:text-zinc-500 mt-1.5">
               Resultado neto ÷ total invertido (CMV + ads + gastos)
             </p>
           </div>
@@ -848,12 +848,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <div>
             <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Estado de resultados</p>
             <p className="text-xs text-gray-400 dark:text-zinc-500">{periodLabel}
-              {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · mes actual</span>}
+              {mode === 'month' && selectedMonthKey === curKey && <span className="ml-2 text-micro bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">Datos en vivo · mes actual</span>}
               {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (() => {
                 const s = summaries.find(x => x.month === selectedMonthKey)
                 const isAutoSync = s?.notes?.startsWith('Auto-sync')
                 return (
-                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isAutoSync ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'}`}>
+                  <span className={`ml-2 text-micro px-1.5 py-0.5 rounded-full font-medium ${isAutoSync ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400'}`}>
                     {isAutoSync ? 'Sincronizado desde API' : 'Datos manuales'}
                   </span>
                 )
@@ -881,7 +881,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
+            <tr className="text-mini text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
               <th className="text-left px-5 py-2.5 font-medium">Concepto</th>
               <th className="text-right px-5 py-2.5 font-medium">Importe</th>
               <th className="text-right px-5 py-2.5 font-medium">% Ventas</th>
@@ -969,7 +969,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           </tbody>
         </table>
         <div className="px-5 py-2.5 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
-          <p className="text-[10px] text-gray-400 dark:text-zinc-600">
+          <p className="text-micro text-gray-400 dark:text-zinc-600">
             Merch ${UNIT_COST.toLocaleString('es-AR')}/un × {UNITS_PER_ORDER} + envío {pnl.shipping_is_real ? 'real TN' : `~${shippingFallbackPct.toFixed(0)}%`} + TN {tnCommissionPct.toFixed(1)}% + packaging ${PACKAGING_PER_ORD.toLocaleString('es-AR')}/ord{pnl.cuotas_is_real ? ' + cuotas real TN' : cuotasCostPct > 0 ? ` + cuotas ~${cuotasCostPct}% est.` : ''}
           </p>
         </div>
@@ -994,27 +994,27 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/20 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Categoría</label>
+                <label className="text-mini font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Categoría</label>
                 <select value={newCat} onChange={e => setNewCat(e.target.value)}
                   className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50">
                   {EXPENSE_CATS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Descripción</label>
+                <label className="text-mini font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Descripción</label>
                 <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)}
                   placeholder="ej: Compra stock invierno"
                   className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Importe (ARS)</label>
+                <label className="text-mini font-medium text-gray-400 dark:text-zinc-500 mb-1 block">Importe (ARS)</label>
                 <input type="text" value={newAmt} onChange={e => setNewAmt(e.target.value)}
                   placeholder="ej: 250000"
                   className="w-full text-sm bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50" />
               </div>
             </div>
             {mode !== 'month' && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              <p className="text-mini text-amber-600 dark:text-amber-400">
                 En vista {mode === 'quarter' ? 'trimestral' : 'anual'}, el gasto se asigna al mes actual. Cambiá a vista mensual para asignar a un mes específico.
               </p>
             )}
@@ -1044,12 +1044,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               return (
                 <div key={e.id} className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50/50 dark:hover:bg-zinc-800/20 transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${cat?.color ?? 'bg-gray-100 dark:bg-zinc-800 text-gray-500'}`}>
+                    <span className={`text-mini font-medium px-2 py-0.5 rounded-full shrink-0 ${cat?.color ?? 'bg-gray-100 dark:bg-zinc-800 text-gray-500'}`}>
                       {cat?.label ?? e.category}
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm text-gray-800 dark:text-zinc-200 truncate">{e.description}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-zinc-500">{e.month}</p>
+                      <p className="text-mini text-gray-400 dark:text-zinc-500">{e.month}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -1081,7 +1081,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
+              <tr className="text-mini text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
                 <th className="text-left px-4 py-2.5 font-medium">Mes</th>
                 <th className="text-right px-4 py-2.5 font-medium">Ventas</th>
                 <th className="text-right px-4 py-2.5 font-medium">G. Bruta</th>
@@ -1112,7 +1112,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                         <span className={`font-medium ${isCur ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-zinc-300'}`}>
                           {MONTH_SHORT[m-1]}
                         </span>
-                        {isCur && <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">vivo</span>}
+                        {isCur && <span className="text-micro bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">vivo</span>}
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
@@ -1207,25 +1207,25 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               {/* Summary KPIs */}
               <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-zinc-800">
                 <div className="px-5 py-4">
-                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Unidades en stock</p>
+                  <p className="text-mini font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Unidades en stock</p>
                   <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">
                     {stockProducts.reduce((s, p) => s + p.total_units, 0).toLocaleString('es-AR')}
                   </p>
-                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">{stockProducts.length} productos</p>
+                  <p className="text-mini text-gray-400 dark:text-zinc-500 mt-0.5">{stockProducts.length} productos</p>
                 </div>
                 <div className="px-5 py-4">
-                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Capital a costo</p>
+                  <p className="text-mini font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Capital a costo</p>
                   <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100 tabular-nums">
                     {totalCapital > 0 ? '$' + Math.round(totalCapital / 1000) + 'K' : '—'}
                   </p>
-                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">ARS inmovilizados</p>
+                  <p className="text-mini text-gray-400 dark:text-zinc-500 mt-0.5">ARS inmovilizados</p>
                 </div>
                 <div className="px-5 py-4">
-                  <p className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Sin costo</p>
+                  <p className="text-mini font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Sin costo</p>
                   <p className={`text-xl font-semibold tabular-nums ${pendingCost > 0 ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
                     {pendingCost}
                   </p>
-                  <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                  <p className="text-mini text-gray-400 dark:text-zinc-500 mt-0.5">
                     {pendingCost > 0 ? 'productos sin costo ingresado' : 'Todos con costo cargado'}
                   </p>
                 </div>
@@ -1298,7 +1298,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                 </table>
               </div>
               {pendingCost > 0 && (
-                <p className="px-5 py-3 text-[11px] text-amber-600 dark:text-amber-400 border-t border-gray-100 dark:border-zinc-800">
+                <p className="px-5 py-3 text-mini text-amber-600 dark:text-amber-400 border-t border-gray-100 dark:border-zinc-800">
                   {pendingCost} producto{pendingCost > 1 ? 's' : ''} sin costo ingresado. Completalos para calcular el capital total.
                 </p>
               )}

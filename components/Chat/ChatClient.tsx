@@ -188,7 +188,7 @@ export default function ChatClient() {
             </svg>
           </button>
         </div>
-        <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-2 text-center">
+        <p className="text-mini text-gray-400 dark:text-zinc-600 mt-2 text-center">
           Shift+Enter para nueva línea · Los datos de Meta se actualizan con cada sync
         </p>
       </div>

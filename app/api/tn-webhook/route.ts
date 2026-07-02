@@ -60,19 +60,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `TN API ${orderRes.status}` }, { status: 502 })
     }
 
-    const order = await orderRes.json() as {
-      id: number
-      status: string
-      payment_status: string
-      subtotal: string
-      total: string
-      created_at: string
-      products?: { name: string; quantity: number; price: string }[]
-      customer?: { email?: string; name?: string }
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const order = await orderRes.json() as any
 
     const revenue     = parseFloat(order.total || '0')
     const today       = new Date().toISOString().split('T')[0]
+
+    // Persistir la orden en tn_orders (near real-time, sin esperar el sync diario)
+    try {
+      await supabase.from('tn_orders').upsert({
+        brand_id: null,
+        tn_order_id: String(order.id),
+        order_number: order.number != null ? String(order.number) : null,
+        order_date: order.created_at || null,
+        customer_id: order.customer?.id != null ? String(order.customer.id) : null,
+        customer_email: order.customer?.email || order.contact_email || null,
+        status: order.status || null,
+        payment_status: order.payment_status || null,
+        total: revenue || 0,
+        subtotal: parseFloat(order.subtotal || '0') || null,
+        shipping_cost_owner: parseFloat(order.shipping_cost_owner || '0') || null,
+        installments_cost: parseFloat(String(order.payment_details?.installments_cost || '0')) || null,
+        payment_method: order.payment_details?.method || order.gateway || null,
+        province: order.shipping_address?.province || null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        products: (order.products || []).map((p: any) => ({
+          product_id: p.product_id != null ? String(p.product_id) : null,
+          variant_id: p.variant_id != null ? String(p.variant_id) : null,
+          name: p.name || '', quantity: parseInt(p.quantity || '1', 10), price: parseFloat(p.price || '0') || 0,
+        })),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        units: (order.products || []).reduce((s: number, p: any) => s + parseInt(p.quantity || '1', 10), 0),
+        synced_at: new Date().toISOString(),
+      }, { onConflict: 'brand_id,tn_order_id' })
+    } catch { /* tabla puede no existir; no bloquea el webhook */ }
 
     // Log webhook event to Supabase for visibility (non-critical — table may not exist yet)
     try {

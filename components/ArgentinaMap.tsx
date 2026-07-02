@@ -114,7 +114,7 @@ export default function ArgentinaMap({ provinces, totalOrders }: Props) {
         {hovered && hoveredData ? (
           <>
             <p className="text-[12px] font-semibold text-gray-800 dark:text-zinc-200 leading-tight">{hovered}</p>
-            <p className="text-[11px] text-gray-500 dark:text-zinc-400">
+            <p className="text-mini text-gray-500 dark:text-zinc-400">
               {hoveredData.count} órdenes
               {totalOrders > 0 && (
                 <span className="ml-1 font-medium text-violet-600 dark:text-violet-400">· {hoveredData.pct}%</span>
@@ -122,12 +122,12 @@ export default function ArgentinaMap({ provinces, totalOrders }: Props) {
             </p>
           </>
         ) : (
-          <p className="text-[11px] text-gray-400 dark:text-zinc-600">Hover para ver detalles</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-600">Hover para ver detalles</p>
         )}
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-gray-400 dark:text-zinc-600">
+      <div className="flex items-center gap-1.5 mt-1 text-micro text-gray-400 dark:text-zinc-600">
         <span>Menos</span>
         <div className="flex gap-0.5">
           <div className="w-3 h-2 rounded-sm bg-violet-100 dark:bg-violet-950/40" />

@@ -65,7 +65,7 @@ export default function CreativeComparator({ ads }: Props) {
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 shadow-sm">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100 mb-1">Comparador de creativos</h3>
-      <p className="text-[11px] text-gray-400 dark:text-zinc-500 mb-3">Elegí hasta 3 · el mejor valor de cada fila se resalta</p>
+      <p className="text-mini text-gray-400 dark:text-zinc-500 mb-3">Elegí hasta 3 · el mejor valor de cada fila se resalta</p>
 
       {/* Selector */}
       <div className="flex flex-wrap gap-1.5 mb-4">
@@ -74,7 +74,7 @@ export default function CreativeComparator({ ads }: Props) {
             key={a.id}
             onClick={() => toggle(a.id)}
             className={
-              'px-2.5 py-1 text-[11px] rounded-lg border transition-all max-w-[180px] truncate ' +
+              'px-2.5 py-1 text-mini rounded-lg border transition-all max-w-[180px] truncate ' +
               (selected.includes(a.id)
                 ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
                 : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800')

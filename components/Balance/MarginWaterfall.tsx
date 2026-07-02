@@ -64,7 +64,7 @@ export default function MarginWaterfall({
           {marginPct.toFixed(0)}% margen
         </span>
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-zinc-500 mb-4">
+      <p className="text-mini text-gray-400 dark:text-zinc-500 mb-4">
         {orders} órdenes · {units} unidades · modelo de costos editable
       </p>
 
@@ -91,14 +91,14 @@ export default function MarginWaterfall({
             'bg-rose-400 dark:bg-rose-500/70'
           return (
             <div key={i} className="flex items-center gap-3">
-              <div className="w-28 shrink-0 text-[11px] text-gray-500 dark:text-zinc-400 truncate text-right">{s.label}</div>
+              <div className="w-28 shrink-0 text-mini text-gray-500 dark:text-zinc-400 truncate text-right">{s.label}</div>
               <div className="flex-1 h-6 relative bg-gray-50 dark:bg-zinc-800/50 rounded">
                 <div
                   className={'absolute top-0 h-full rounded ' + color}
                   style={{ left: left + '%', width: Math.max(width, 0.5) + '%' }}
                 />
               </div>
-              <div className={'w-24 shrink-0 text-[11px] text-right tabular-nums ' + (s.type === 'cost' ? 'text-rose-500 dark:text-rose-400' : 'text-gray-800 dark:text-zinc-200 font-medium')}>
+              <div className={'w-24 shrink-0 text-mini text-right tabular-nums ' + (s.type === 'cost' ? 'text-rose-500 dark:text-rose-400' : 'text-gray-800 dark:text-zinc-200 font-medium')}>
                 {s.type === 'cost' ? '−' : ''}{money(s.value)}
               </div>
             </div>

@@ -166,11 +166,11 @@ export default function IdeasClient({ snapshot }: Props) {
                       <div className="text-2xl shrink-0 mt-0.5">{FORMAT_EMOJI[idea.format] || '📝'}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${pCfg.bg} ${pCfg.text}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-mini font-semibold ${pCfg.bg} ${pCfg.text}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`} />
                             {pCfg.label}
                           </span>
-                          <span className="text-[11px] text-gray-400 dark:text-zinc-500 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                          <span className="text-mini text-gray-400 dark:text-zinc-500 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
                             {FORMAT_LABEL[idea.format] || idea.format}
                           </span>
                         </div>
@@ -186,20 +186,20 @@ export default function IdeasClient({ snapshot }: Props) {
                     {isOpen && (
                       <div className="border-t border-gray-100 dark:border-zinc-800 px-4 pb-4 pt-3 space-y-3">
                         <div>
-                          <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Hook (primeros 3 seg)</p>
+                          <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Hook (primeros 3 seg)</p>
                           <p className="text-sm text-gray-700 dark:text-zinc-300 leading-relaxed">{idea.hook}</p>
                         </div>
                         <div>
-                          <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Descripcion completa</p>
+                          <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Descripcion completa</p>
                           <p className="text-sm text-gray-700 dark:text-zinc-300 leading-relaxed">{idea.description}</p>
                         </div>
                         <div className="flex flex-wrap gap-3">
                           <div className="flex-1 min-w-[180px]">
-                            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Basado en</p>
+                            <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Basado en</p>
                             <p className="text-xs text-gray-600 dark:text-zinc-400 italic">{idea.based_on}</p>
                           </div>
                           <div>
-                            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">CTA sugerido</p>
+                            <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">CTA sugerido</p>
                             <span className="text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-3 py-1 rounded-full">{idea.cta}</span>
                           </div>
                         </div>

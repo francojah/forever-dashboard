@@ -53,7 +53,7 @@ export default function HealthPanel() {
         </div>
         <button
           onClick={load}
-          className="text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 px-2 py-1 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+          className="text-mini rounded-md border border-gray-200 dark:border-zinc-700 px-2 py-1 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
         >
           Refrescar
         </button>
@@ -83,7 +83,7 @@ export default function HealthPanel() {
 
           {runs.length > 0 && (
             <div className="pt-2 border-t border-gray-100 dark:border-zinc-800">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">
+              <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-2">
                 Últimas corridas
               </p>
               <div className="space-y-1.5">
@@ -104,7 +104,7 @@ export default function HealthPanel() {
           )}
 
           {runs.length === 0 && !snap?.error && (
-            <p className="text-[11px] text-gray-400 dark:text-zinc-500">
+            <p className="text-mini text-gray-400 dark:text-zinc-500">
               Sin registro de corridas todavía (tabla sync_runs vacía o migración pendiente).
             </p>
           )}

@@ -43,9 +43,9 @@ export default function QuadrantScatter({ items, breakeven = 30462, roasMin = 1.
     <div className={(className ?? '') + ' bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 shadow-sm'}>
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">Mapa de decisión · CPA vs ROAS</h3>
-        <span className="text-[11px] text-gray-400 dark:text-zinc-500">tamaño = gasto</span>
+        <span className="text-mini text-gray-400 dark:text-zinc-500">tamaño = gasto</span>
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-zinc-500 mb-3">
+      <p className="text-mini text-gray-400 dark:text-zinc-500 mb-3">
         Abajo-derecha (CPA bajo, ROAS alto) = escalar · arriba-izquierda = revisar/cortar
       </p>
 

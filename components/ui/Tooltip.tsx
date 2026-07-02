@@ -55,7 +55,7 @@ export function Tooltip({ content, children, maxWidth = 240, placement = 'top' }
             zIndex: 9999,
             pointerEvents: 'none',
           }}
-          className="bg-gray-900 dark:bg-zinc-700 text-white text-[11px] leading-snug rounded-lg px-3 py-2 shadow-xl border border-zinc-700 dark:border-zinc-600"
+          className="bg-gray-900 dark:bg-zinc-700 text-white text-mini leading-snug rounded-lg px-3 py-2 shadow-xl border border-zinc-700 dark:border-zinc-600"
         >
           {content}
           {/* Arrow */}

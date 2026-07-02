@@ -81,7 +81,7 @@ export default function AppShell({ children, userEmail }: { children: React.Reac
 
           {/* Logo small on right */}
           <div className="ml-auto">
-            <span className="text-[10px] font-semibold text-gray-300 dark:text-zinc-700 uppercase tracking-widest">Forever</span>
+            <span className="text-micro font-semibold text-gray-300 dark:text-zinc-700 uppercase tracking-widest">Forever</span>
           </div>
         </div>
 

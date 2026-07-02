@@ -38,7 +38,7 @@ function HealthDot({ cpa, roas, freq, spend }: { cpa?: number | null; roas?: num
     <Tooltip content={map.tip} maxWidth={220}>
       <span className="inline-flex items-center gap-1.5 cursor-help">
         <span className={`w-2 h-2 rounded-full shrink-0 ${map.dot}`} />
-        <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 hidden sm:inline">{map.label}</span>
+        <span className="text-mini font-medium text-gray-500 dark:text-zinc-400 hidden sm:inline">{map.label}</span>
       </span>
     </Tooltip>
   )
@@ -166,7 +166,7 @@ function CreativeBadge({ rank, tooltip }: { rank: CreativeRank; tooltip: string 
   if (!map) return null
   return (
     <Tooltip content={tooltip} maxWidth={256}>
-      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide cursor-help ${map.cls}`}>
+      <span className={`text-micro font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide cursor-help ${map.cls}`}>
         {map.label}
       </span>
     </Tooltip>
@@ -177,7 +177,7 @@ function CreativeBadge({ rank, tooltip }: { rank: CreativeRank; tooltip: string 
 function FormatBadge({ ad }: { ad: Ad }) {
   const isVideo = (ad.hook_rate != null && ad.hook_rate > 0) || (ad.view_rate != null && ad.view_rate > 0)
   return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${isVideo ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500'}`}>
+    <span className={`text-micro font-medium px-1.5 py-0.5 rounded-md ${isVideo ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500'}`}>
       {isVideo ? '▶ VID' : '🖼 IMG'}
     </span>
   )
@@ -382,7 +382,7 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, period }: Section
                           </svg>
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${campDotColor}`} />
                           <span className="text-xs font-bold text-gray-700 dark:text-zinc-200">{campName}</span>
-                          <span className="text-[10px] text-gray-400 dark:text-zinc-600 bg-gray-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded-full">
+                          <span className="text-micro text-gray-400 dark:text-zinc-600 bg-gray-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded-full">
                             {campAdsets.length} ad set{campAdsets.length !== 1 ? 's' : ''}
                           </span>
                           <div className="ml-auto flex items-center gap-4 text-xs text-gray-400 dark:text-zinc-500">
@@ -417,7 +417,7 @@ function AdsetSection({ title, type, adsets, ads, campaignMap, period }: Section
                               <div className="flex items-center gap-2">
                                 <span className="text-gray-400 dark:text-zinc-500 shrink-0"><Chevron open={isExpanded} /></span>
                                 <p className="font-semibold text-gray-900 dark:text-white leading-tight text-sm truncate max-w-[180px]">{adset.name}</p>
-                                {isPaused && <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 px-1.5 py-0.5 rounded-full font-medium shrink-0">PAUSADO</span>}
+                                {isPaused && <span className="text-micro bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 px-1.5 py-0.5 rounded-full font-medium shrink-0">PAUSADO</span>}
                               </div>
                             </td>
                             {/* Budget (read-only) */}

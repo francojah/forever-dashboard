@@ -74,7 +74,7 @@ export default function Funnel({ impressions, clicks, purchases, spend, classNam
                 />
               </div>
               {stepRate && (
-                <div className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1 pl-0.5">
+                <div className="text-mini text-gray-400 dark:text-zinc-500 mt-1 pl-0.5">
                   ↓ {stepRate} pasa a esta etapa
                 </div>
               )}
@@ -95,7 +95,7 @@ export default function Funnel({ impressions, clicks, purchases, spend, classNam
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
+      <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
       <p className="text-sm font-semibold text-gray-900 dark:text-zinc-100 mt-0.5 tabular-nums">{value}</p>
     </div>
   )

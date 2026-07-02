@@ -114,10 +114,10 @@ function TNConnectionCard() {
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Conectado</span>
               {status.source === 'supabase' && (
-                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">OAuth</span>
+                <span className="text-micro bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium">OAuth</span>
               )}
               {status.source === 'env' && (
-                <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 px-1.5 py-0.5 rounded-full font-medium">Env vars</span>
+                <span className="text-micro bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 px-1.5 py-0.5 rounded-full font-medium">Env vars</span>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -370,7 +370,7 @@ function RecurringExpensesSection() {
           </div>
         )}
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-2">
+      <p className="text-mini text-gray-400 dark:text-zinc-600 mt-2">
         Los gastos activos se suman automáticamente al P&amp;L mensual en Balance.
       </p>
     </div>
@@ -453,7 +453,7 @@ export default function SettingsClient({ initialSettings }: Props) {
       <div>
         <div className="flex items-center gap-2 mb-3">
           <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Costos financieros y fiscales</p>
-          <span className="text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">Monotributista</span>
+          <span className="text-micro bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">Monotributista</span>
         </div>
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 divide-y divide-gray-100 dark:divide-zinc-800 shadow-sm">
           {FIELDS.filter(f => f.section === 'fiscal').map(({ key, label, desc, prefix, suffix, step }) => (
@@ -476,7 +476,7 @@ export default function SettingsClient({ initialSettings }: Props) {
             </div>
           ))}
           <div className="px-5 py-3 bg-gray-50/60 dark:bg-zinc-800/30">
-            <p className="text-[11px] text-gray-400 dark:text-zinc-500 leading-relaxed">
+            <p className="text-mini text-gray-400 dark:text-zinc-500 leading-relaxed">
               La cuota mensual de monotributo la cargás en <strong className="text-gray-600 dark:text-zinc-400">Gastos Recurrentes</strong> (categoría: fijo).
               Si pasás a <strong className="text-gray-600 dark:text-zinc-400">Responsable Inscripto</strong>, también configurás aquí la alícuota de Ganancias.
             </p>

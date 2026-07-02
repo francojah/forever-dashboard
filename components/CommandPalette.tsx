@@ -102,7 +102,7 @@ export default function CommandPalette() {
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <span>Buscar...</span>
-      <kbd className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
+      <kbd className="text-micro bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
     </button>
   )
 
@@ -132,7 +132,7 @@ export default function CommandPalette() {
             placeholder="Buscar páginas y acciones..."
             className="flex-1 bg-transparent text-sm text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-600 outline-none"
           />
-          <kbd className="text-[10px] text-gray-400 dark:text-zinc-600 border border-gray-200 dark:border-zinc-700 rounded px-1.5 py-0.5 font-mono">ESC</kbd>
+          <kbd className="text-micro text-gray-400 dark:text-zinc-600 border border-gray-200 dark:border-zinc-700 rounded px-1.5 py-0.5 font-mono">ESC</kbd>
         </div>
 
         {/* Results */}
@@ -142,7 +142,7 @@ export default function CommandPalette() {
           )}
           {Object.entries(groups).map(([group, items]) => (
             <div key={group}>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-4 py-1.5">{group}</p>
+              <p className="text-micro font-bold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-4 py-1.5">{group}</p>
               {items.map(item => {
                 const idx = globalIdx++
                 const isSelected = idx === selected
@@ -163,7 +163,7 @@ export default function CommandPalette() {
                       {item.sub && <p className="text-xs text-gray-400 dark:text-zinc-600 truncate">{item.sub}</p>}
                     </div>
                     {isSelected && (
-                      <kbd className="text-[10px] text-gray-400 dark:text-zinc-600 border border-gray-200 dark:border-zinc-700 rounded px-1.5 py-0.5 font-mono shrink-0">↵</kbd>
+                      <kbd className="text-micro text-gray-400 dark:text-zinc-600 border border-gray-200 dark:border-zinc-700 rounded px-1.5 py-0.5 font-mono shrink-0">↵</kbd>
                     )}
                   </button>
                 )
@@ -173,7 +173,7 @@ export default function CommandPalette() {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-4 text-[10px] text-gray-400 dark:text-zinc-600">
+        <div className="border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-4 text-micro text-gray-400 dark:text-zinc-600">
           <span><kbd className="font-mono">↑↓</kbd> navegar</span>
           <span><kbd className="font-mono">↵</kbd> abrir</span>
           <span><kbd className="font-mono">ESC</kbd> cerrar</span>

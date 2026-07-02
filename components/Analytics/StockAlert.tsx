@@ -62,7 +62,7 @@ export default function StockAlert() {
         <span className="w-2 h-2 rounded-full bg-amber-400" />
         <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">Alerta de stock</h3>
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-zinc-500 mb-4">
+      <p className="text-mini text-gray-400 dark:text-zinc-500 mb-4">
         Productos que se agotan en ≤ {THRESHOLD_DAYS} días al ritmo de venta actual
       </p>
 
@@ -79,7 +79,7 @@ export default function StockAlert() {
           {rows.map((r, i) => (
             <div key={i} className="flex items-center justify-between gap-3 py-1.5 border-b border-gray-50 dark:border-zinc-800/50 last:border-0">
               <span className="text-xs text-gray-800 dark:text-zinc-200 truncate max-w-[220px]" title={r.name}>{r.name}</span>
-              <div className="flex items-center gap-3 shrink-0 text-[11px] tabular-nums">
+              <div className="flex items-center gap-3 shrink-0 text-mini tabular-nums">
                 <span className="text-gray-400 dark:text-zinc-500">{r.stock} u · {r.perDay}/día</span>
                 <span
                   className={

@@ -99,14 +99,14 @@ function KpiCard({ label, value, sub, status = 'neutral', delta, invertDelta, to
         <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${anomaly.color}`}>{anomaly.label}</span>
       )}
       <div className="flex items-center gap-1 mb-1.5">
-        <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
+        <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
         {tooltip && <InfoTooltip text={tooltip} />}
       </div>
       <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
       <div className="flex items-center gap-2 mt-2 min-h-[20px] flex-wrap">
         {sub && <p className="text-xs text-gray-400 dark:text-zinc-600">{sub}</p>}
         {delta != null && (
-          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${deltaCls}`}>
+          <span className={`text-mini font-semibold px-1.5 py-0.5 rounded-full ${deltaCls}`}>
             {isPosDelta ? '+' : ''}{delta}%
           </span>
         )}
@@ -138,16 +138,16 @@ function HeroKpi({ label, value, sub, status = 'neutral', delta, invertDelta, ac
     <div className="flex-1 min-w-[130px] rounded-xl border px-4 py-4"
          style={{ background: `${glowBg[status]}, #18181b`, borderColor: glowBorder[status] }}>
       <div className={`w-5 h-0.5 rounded-full mb-3 ${accent}`} />
-      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
+      <p className="text-micro font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
       {loading ? (
         <div className="h-9 w-20 bg-zinc-800 rounded-lg animate-pulse" />
       ) : (
         <p className={`text-3xl font-bold tabular-nums leading-none ${valueColor}`}>{value}</p>
       )}
       <div className="flex items-center gap-2 mt-2 min-h-[16px]">
-        {sub && <p className="text-[11px] text-zinc-600">{sub}</p>}
+        {sub && <p className="text-mini text-zinc-600">{sub}</p>}
         {delta != null && (
-          <span className={`text-[11px] font-semibold ${pctColor}`}>
+          <span className={`text-mini font-semibold ${pctColor}`}>
             {delta > 0 ? '+' : ''}{delta}%
           </span>
         )}
@@ -224,8 +224,8 @@ function FunnelSteps({ steps }: {
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: step.color }} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[11px] font-medium text-gray-600 dark:text-zinc-400 truncate">{step.label}</span>
-                  <span className="text-[11px] font-bold text-gray-800 dark:text-zinc-200 tabular-nums ml-2 shrink-0">{fmtVal(step.value)}</span>
+                  <span className="text-mini font-medium text-gray-600 dark:text-zinc-400 truncate">{step.label}</span>
+                  <span className="text-mini font-bold text-gray-800 dark:text-zinc-200 tabular-nums ml-2 shrink-0">{fmtVal(step.value)}</span>
                 </div>
                 <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                   <div
@@ -234,7 +234,7 @@ function FunnelSteps({ steps }: {
                   />
                 </div>
               </div>
-              <span className="text-[10px] text-gray-400 dark:text-zinc-600 tabular-nums w-7 text-right shrink-0">{pct}%</span>
+              <span className="text-micro text-gray-400 dark:text-zinc-600 tabular-nums w-7 text-right shrink-0">{pct}%</span>
             </div>
           </div>
         )
@@ -603,7 +603,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             <span className={`w-2 h-2 rounded-full ${roasStatus === 'ok' ? 'bg-emerald-400' : roasStatus === 'warn' ? 'bg-amber-400' : roasStatus === 'bad' ? 'bg-red-400' : 'bg-zinc-600'}`} />
             <div className="flex items-center gap-1.5 ml-1">
               <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-              <span className={`text-[10px] font-semibold ${isLive ? 'text-emerald-500 dark:text-emerald-400' : 'text-zinc-600'}`}>{isLive ? 'EN VIVO' : 'offline'}</span>
+              <span className={`text-micro font-semibold ${isLive ? 'text-emerald-500 dark:text-emerald-400' : 'text-zinc-600'}`}>{isLive ? 'EN VIVO' : 'offline'}</span>
             </div>
           </div>
           <p className="text-xs mt-0.5 text-gray-400 dark:text-zinc-500 flex items-center gap-1.5 flex-wrap">
@@ -755,22 +755,22 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             {/* Card 1: ¿Gané plata? */}
             <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${grossProfit == null ? 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900' : grossProfit >= 0 ? 'border-l-emerald-400 dark:border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-l-red-400 dark:border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900'} p-4 shadow-sm`}>
               <div className="flex items-center gap-1 mb-1.5">
-                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Gané plata?</p>
+                <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Gané plata?</p>
                 <InfoTooltip text={`Ventas TN × ${Math.round(MARGIN*100)}% margen − gasto Meta. Costo/orden: merch $19.5K + envío $5.8K + plataforma $1.4K + packaging $350 = $27K.`} />
               </div>
               <p className={`text-3xl font-bold tabular-nums leading-none ${grossProfit == null ? 'text-gray-300 dark:text-zinc-700' : grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {grossProfit != null ? fmtM(grossProfit) : '—'}
               </p>
-              <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-2 leading-snug">
+              <p className="text-micro text-gray-400 dark:text-zinc-500 mt-2 leading-snug">
                 {tnRevenue ? fmtM(tnRevenue) : '—'} × {Math.round(MARGIN*100)}% − {fmtM(metaSpend)}
               </p>
               {grossProfit != null && (
                 <div className="mt-2.5 flex items-center gap-1.5">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${grossProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400'}`}>
+                  <span className={`text-mini font-semibold px-2 py-0.5 rounded-full ${grossProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400'}`}>
                     {grossProfit >= 0 ? 'Rentable' : 'Sin cubrir'}
                   </span>
                   {contributionPct != null && (
-                    <span className="text-[11px] text-gray-400 dark:text-zinc-600">{contributionPct}% del total</span>
+                    <span className="text-mini text-gray-400 dark:text-zinc-600">{contributionPct}% del total</span>
                   )}
                 </div>
               )}
@@ -789,7 +789,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   : 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900')
             } p-4 shadow-sm`}>
               <div className="flex items-center gap-1 mb-1.5">
-                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cubrí la inversión?</p>
+                <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cubrí la inversión?</p>
                 <InfoTooltip text={period === 'today' ? `Compras necesarias para cubrir el gasto de hoy: gasto ÷ CPA bk ${fmtM(BREAKEVEN_CPA)}.` : `ROAS mínimo para no perder plata: 1 ÷ ${Math.round(MARGIN*100)}% margen = ${beRoas.toFixed(2)}x. Tu ROAS real es ${realRoas?.toFixed(2) ?? '—'}x.`} />
               </div>
               {period === 'today' && dailyBudget > 0 ? (
@@ -797,12 +797,12 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <p className={`text-3xl font-bold tabular-nums leading-none ${bePct == null ? 'text-gray-300 dark:text-zinc-700' : bePct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : bePct >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
                     {beCurrentPurchases ?? 0}<span className="text-xl text-gray-400 dark:text-zinc-600">/{beTargetPurchases ?? '?'}</span>
                   </p>
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">compras para cubrir el gasto</p>
+                  <p className="text-micro text-gray-400 dark:text-zinc-500 mt-1.5">compras para cubrir el gasto</p>
                   <div className="mt-2 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full transition-all ${(bePct ?? 0) >= 100 ? 'bg-emerald-400' : (bePct ?? 0) >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
                          style={{ width: `${Math.min(bePct ?? 0, 100)}%` }} />
                   </div>
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1.5">
+                  <p className="text-micro text-gray-400 dark:text-zinc-600 mt-1.5">
                     {beRemaining === 0 ? 'Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} · CPA bk ${fmtM(BREAKEVEN_CPA)}`}
                   </p>
                 </>
@@ -811,14 +811,14 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <p className={`text-3xl font-bold tabular-nums leading-none ${roasBeStatus === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : roasBeStatus === 'warn' ? 'text-amber-600 dark:text-amber-400' : roasBeStatus === 'bad' ? 'text-red-600 dark:text-red-400' : 'text-gray-300 dark:text-zinc-700'}`}>
                     {realRoas ? realRoas.toFixed(2) + 'x' : '—'}
                   </p>
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">mínimo para BEP: {beRoas.toFixed(2)}x</p>
+                  <p className="text-micro text-gray-400 dark:text-zinc-500 mt-1.5">mínimo para BEP: {beRoas.toFixed(2)}x</p>
                   {roasVsBe != null && (
                     <div className="mt-2 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${roasBeStatus === 'ok' ? 'bg-emerald-400' : roasBeStatus === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`}
                            style={{ width: `${roasVsBe}%` }} />
                     </div>
                   )}
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1.5">
+                  <p className="text-micro text-gray-400 dark:text-zinc-600 mt-1.5">
                     {roasBeStatus === 'ok' ? `+${((realRoas! / beRoas - 1) * 100).toFixed(0)}% sobre el mínimo` : roasBeStatus === 'warn' ? 'Casi en punto de equilibrio' : 'Por debajo del BEP'}
                   </p>
                 </>
@@ -828,43 +828,43 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             {/* Card 3: ¿Cómo termino el mes? */}
             <div className="rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] border-l-violet-400 dark:border-l-violet-500 bg-gradient-to-br from-violet-50/60 to-white dark:from-violet-950/20 dark:to-zinc-900 p-4 shadow-sm">
               <div className="flex items-center gap-1 mb-1.5">
-                <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cómo termino el mes?</p>
+                <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cómo termino el mes?</p>
                 <InfoTooltip text={`Si mantenés el ritmo de los últimos 7 días todo el mes (${daysInMonth} días). TN revenue 7d: ${fmtM(tnRev7d)} → ${fmtM(dailyRevAvg7d)}/día promedio.`} />
               </div>
               <p className={`text-3xl font-bold tabular-nums leading-none ${projRevenueMonth == null ? 'text-gray-300 dark:text-zinc-700' : 'text-violet-600 dark:text-violet-400'}`}>
                 {projRevenueMonth != null ? fmtM(projRevenueMonth) : '—'}
               </p>
-              <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5">ventas proyectadas</p>
+              <p className="text-micro text-gray-400 dark:text-zinc-500 mt-1.5">ventas proyectadas</p>
               {projProfitMonth != null && (
                 <p className={`text-sm font-semibold mt-2 ${projProfitMonth >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                   {fmtM(projProfitMonth)} ganancia · ritmo 7d
                 </p>
               )}
-              <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">{daysRemaining}d restantes · {fmtM(dailyRevAvg7d)}/día promedio</p>
+              <p className="text-micro text-gray-400 dark:text-zinc-600 mt-1">{daysRemaining}d restantes · {fmtM(dailyRevAvg7d)}/día promedio</p>
             </div>
 
             {/* Card 4: Acción urgente */}
             <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${urgentBorderL} ${urgentBg} p-4 shadow-sm`}>
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Acción urgente</p>
+              <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">Acción urgente</p>
               {topAlert ? (
                 <>
-                  <div className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 ${topAlert.severity === 'danger' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
+                  <div className={`inline-block text-mini font-semibold px-2 py-0.5 rounded-full mb-2 ${topAlert.severity === 'danger' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
                     {topAlert.severity === 'danger' ? 'Crítico' : 'Atención'}
                   </div>
                   <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200 leading-snug line-clamp-1">{topAlert.entity_name}</p>
-                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">{topAlert.message}</p>
+                  <p className="text-mini text-gray-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">{topAlert.message}</p>
                 </>
               ) : fatigueStatus !== 'ok' ? (
                 <>
-                  <div className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 ${fatigueStatus === 'bad' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
+                  <div className={`inline-block text-mini font-semibold px-2 py-0.5 rounded-full mb-2 ${fatigueStatus === 'bad' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'}`}>
                     {fatigueStatus === 'bad' ? 'Creativos saturados' : 'Frecuencia alta'}
                   </div>
                   <p className="text-3xl font-bold tabular-nums leading-none text-gray-800 dark:text-zinc-200">{convFreq > 0 ? convFreq.toFixed(1) + 'x' : '—'}</p>
-                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1.5 leading-snug">{fatigueMsg}</p>
+                  <p className="text-mini text-gray-500 dark:text-zinc-400 mt-1.5 leading-snug">{fatigueMsg}</p>
                 </>
               ) : (
                 <>
-                  <div className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+                  <div className="inline-block text-mini font-semibold px-2 py-0.5 rounded-full mb-2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
                     Todo en orden
                   </div>
                   <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1 leading-snug">Sin alertas activas · Frecuencia saludable {convFreq > 0 ? `(${convFreq.toFixed(1)}x)` : ''}</p>
@@ -937,7 +937,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               </div>
               <div>
                 <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Pacing del día</p>
-                <p className="text-[10px] text-gray-400 dark:text-zinc-500">Gasto vs ritmo esperado a las {new Date().getHours()}h</p>
+                <p className="text-micro text-gray-400 dark:text-zinc-500">Gasto vs ritmo esperado a las {new Date().getHours()}h</p>
               </div>
             </div>
             <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${pacingStatus === 'ok' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : pacingStatus === 'warn' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400'}`}>
@@ -949,11 +949,11 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             <div className={`h-full rounded-full transition-all duration-500 ${pacingStatus === 'ok' ? 'bg-emerald-400' : pacingStatus === 'warn' ? 'bg-amber-400' : 'bg-red-400'}`}
                  style={{ width: `${Math.min(pacePct, 100)}%` }} />
           </div>
-          <div className="flex justify-between text-[10px] text-gray-400 dark:text-zinc-600 mt-2">
+          <div className="flex justify-between text-micro text-gray-400 dark:text-zinc-600 mt-2">
             <span>Gastado: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(spendToday)}</strong> ({pacePct.toFixed(0)}%)</span>
             <span>Budget: <strong className="text-gray-600 dark:text-zinc-300">{fmtM(dailyBudget)}</strong></span>
           </div>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1">
+          <p className="text-micro text-gray-400 dark:text-zinc-600 mt-1">
             Ritmo esperado: {expectedPct.toFixed(0)}% &middot; {pacingRatio != null ? `${(pacingRatio * 100).toFixed(0)}% del ritmo` : ''}
           </p>
         </div>
@@ -967,7 +967,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         <div className="space-y-3">
           {convAdsets.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <p className="text-micro font-bold text-blue-500 dark:text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" /> Conversión
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -980,7 +980,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           )}
           {trafAdsets.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold text-violet-500 dark:text-violet-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <p className="text-micro font-bold text-violet-500 dark:text-violet-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block" /> Tráfico web
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1056,7 +1056,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               <div className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Mejor creativo conv.</p>
+              <p className="text-micro font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Mejor creativo conv.</p>
             </div>
             {bestConvAd ? (
               <>
@@ -1077,7 +1077,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               <div className="w-6 h-6 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </div>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Mejor creativo tráfico</p>
+              <p className="text-micro font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Mejor creativo tráfico</p>
             </div>
             {bestTrafAd ? (
               <>
@@ -1098,7 +1098,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
               </div>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ventas por origen</p>
+              <p className="text-micro font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ventas por origen</p>
             </div>
             {tnRevenue && tnRevenue > 0 ? (
               <div className="space-y-2.5">
@@ -1130,7 +1130,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               </div>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Top provincias TN</p>
+              <p className="text-micro font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Top provincias TN</p>
             </div>
             {topProvince && tnData?.top_provinces ? (
               <div className="space-y-2">
@@ -1139,11 +1139,11 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   const isTop = p.name === topProvince.name
                   return (
                     <div key={p.name} className="flex items-center gap-2">
-                      <span className={`text-[10px] w-20 truncate ${isTop ? 'font-semibold text-gray-700 dark:text-zinc-200' : 'text-gray-400 dark:text-zinc-600'}`}>{p.name}</span>
+                      <span className={`text-micro w-20 truncate ${isTop ? 'font-semibold text-gray-700 dark:text-zinc-200' : 'text-gray-400 dark:text-zinc-600'}`}>{p.name}</span>
                       <div className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-full h-1.5">
                         <div className={`h-1.5 rounded-full ${isTop ? 'bg-emerald-500' : 'bg-emerald-300 dark:bg-emerald-700'}`} style={{ width: `${Math.min(pct,100)}%` }} />
                       </div>
-                      <span className="text-[10px] text-gray-400 w-8 text-right">{Math.round(pct)}%</span>
+                      <span className="text-micro text-gray-400 w-8 text-right">{Math.round(pct)}%</span>
                     </div>
                   )
                 })}
@@ -1168,7 +1168,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                 const metaAdMatch = adsets.find((a: { name: string }) => a.name.toLowerCase().split(' ').some((w: string) => w.length > 4 && p.name.toLowerCase().includes(w)))
                 return (
                   <div key={p.name} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="text-[10px] text-gray-400 dark:text-zinc-600 w-3 font-mono shrink-0">{i + 1}</span>
+                    <span className="text-micro text-gray-400 dark:text-zinc-600 w-3 font-mono shrink-0">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-800 dark:text-zinc-200 truncate">{p.name}</p>
                       <div className="mt-1 h-1 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden w-full">
@@ -1176,8 +1176,8 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                       </div>
                     </div>
                     <div className="flex items-center gap-4 shrink-0 text-right">
-                      <div><p className="text-xs font-bold text-gray-700 dark:text-zinc-200">{fmtM(p.revenue)}</p><p className="text-[10px] text-gray-400">{p.quantity} uds</p></div>
-                      {metaAdMatch && <div className="hidden sm:block text-[10px] text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full max-w-[80px] truncate" title={(metaAdMatch as { name: string }).name}>&harr; Meta</div>}
+                      <div><p className="text-xs font-bold text-gray-700 dark:text-zinc-200">{fmtM(p.revenue)}</p><p className="text-micro text-gray-400">{p.quantity} uds</p></div>
+                      {metaAdMatch && <div className="hidden sm:block text-micro text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full max-w-[80px] truncate" title={(metaAdMatch as { name: string }).name}>&harr; Meta</div>}
                     </div>
                   </div>
                 )
@@ -1217,7 +1217,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               </div>
               <div>
                 <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Funnel de conversión</p>
-                <p className="text-[10px] text-gray-400 dark:text-zinc-500">Impresiones → Tiendanube · {PERIOD_LABELS[period]}</p>
+                <p className="text-micro text-gray-400 dark:text-zinc-500">Impresiones → Tiendanube · {PERIOD_LABELS[period]}</p>
               </div>
             </div>
           </div>
@@ -1241,19 +1241,19 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <div className="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800 grid grid-cols-3 gap-2 text-center">
                     {ctr && (
                       <div>
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">CTR</p>
+                        <p className="text-micro text-gray-400 dark:text-zinc-500">CTR</p>
                         <p className="text-xs font-bold text-blue-500">{ctr}%</p>
                       </div>
                     )}
                     {cvr && (
                       <div>
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">CVR</p>
+                        <p className="text-micro text-gray-400 dark:text-zinc-500">CVR</p>
                         <p className="text-xs font-bold text-indigo-500">{cvr}%</p>
                       </div>
                     )}
                     {attr != null && (
                       <div>
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">Pixel</p>
+                        <p className="text-micro text-gray-400 dark:text-zinc-500">Pixel</p>
                         <p className={`text-xs font-bold ${attr >= 60 ? 'text-emerald-500' : attr >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{attr}%</p>
                       </div>
                     )}
@@ -1271,7 +1271,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             </div>
             <div>
               <p className="text-xs font-bold text-gray-700 dark:text-zinc-200">Reconciliación &middot; Meta vs TN</p>
-              <p className="text-[10px] text-gray-400 dark:text-zinc-500">Pixel reportado vs ventas reales</p>
+              <p className="text-micro text-gray-400 dark:text-zinc-500">Pixel reportado vs ventas reales</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -1282,7 +1282,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{metaPurchases} compras</p>
-                <p className="text-[10px] text-gray-400">ROAS {summary.blended_roas?.toFixed(2) ?? '—'}x</p>
+                <p className="text-micro text-gray-400">ROAS {summary.blended_roas?.toFixed(2) ?? '—'}x</p>
               </div>
             </div>
             <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
@@ -1292,7 +1292,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-violet-600 dark:text-violet-400">{tnData?.total_orders ?? '—'} órdenes</p>
-                <p className="text-[10px] text-gray-400">ROAS {realRoas?.toFixed(2) ?? '—'}x</p>
+                <p className="text-micro text-gray-400">ROAS {realRoas?.toFixed(2) ?? '—'}x</p>
               </div>
             </div>
             {tnData?.total_orders != null && metaPurchases != null && (
@@ -1302,7 +1302,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                   <p className="text-sm font-bold text-gray-600 dark:text-zinc-300">
                     {tnData.total_orders - metaPurchases} órdenes no capturadas
                   </p>
-                  <p className="text-[10px] text-gray-400">
+                  <p className="text-micro text-gray-400">
                     {tnData.total_orders > 0
                       ? Math.round(((tnData.total_orders - metaPurchases) / tnData.total_orders) * 100)
                       : 0}% sin atribución Meta
@@ -1312,7 +1312,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             )}
             {/* Explanatory note */}
             <div className="mt-1 px-1">
-              <p className="text-[10px] text-gray-400 dark:text-zinc-600 leading-relaxed">
+              <p className="text-micro text-gray-400 dark:text-zinc-600 leading-relaxed">
                 El ROAS de Meta usa ventana de atribución 7d click + 1d view. El ROAS de TN es ventas reales ÷ gasto.
                 {summary.blended_roas != null && realRoas != null && summary.blended_roas > realRoas * 3 && (
                   <span className="text-amber-500 dark:text-amber-400 font-medium"> · Brecha alta: verificá que el pixel envíe valores en ARS.</span>

@@ -209,14 +209,14 @@ export default function CreativosClient({ snapshot }: Props) {
                     <td className="px-4 py-3 text-xs text-gray-400">{i + 1}</td>
                     <td className="px-4 py-3 max-w-[200px]">
                       <p className="font-medium text-gray-800 dark:text-zinc-200 truncate text-xs">{r.name}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-zinc-600 truncate mt-0.5">{r.adset_name}</p>
+                      <p className="text-mini text-gray-400 dark:text-zinc-600 truncate mt-0.5">{r.adset_name}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ' + cfg.bg + ' ' + cfg.darkBg + ' ' + cfg.color}>
+                      <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-mini font-semibold ' + cfg.bg + ' ' + cfg.darkBg + ' ' + cfg.color}>
                         <span className={'w-1.5 h-1.5 rounded-full ' + cfg.dot} />
                         {cfg.label}
                       </span>
-                      <p className="text-[11px] text-gray-500 dark:text-zinc-500 mt-1 max-w-[200px] leading-snug">{r.reason}</p>
+                      <p className="text-mini text-gray-500 dark:text-zinc-500 mt-1 max-w-[200px] leading-snug">{r.reason}</p>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-gray-600 dark:text-zinc-400">${Math.round(r.spend / 1000)}K</td>
                     <td className="px-4 py-3 text-right text-xs text-gray-600 dark:text-zinc-400">{r.results || '—'}</td>

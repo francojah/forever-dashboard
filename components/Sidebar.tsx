@@ -20,6 +20,7 @@ const icons = {
   competencia: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   resumen:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
   analitica:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12" y="8" width="3" height="10" rx="0.5"/><rect x="17" y="5" width="3" height="13" rx="0.5"/></svg>,
+  recomendaciones: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 2a7 7 0 0 1 4 12.7V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.3A7 7 0 0 1 12 2z"/><path d="M9 21h6"/><path d="M10 14l1.5-2 1.5 2"/></svg>,
   sun:         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
   moon:        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
   logout:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
@@ -48,6 +49,7 @@ const NAV_SECTIONS = [
   {
     label: 'Inteligencia',
     items: [
+      { href: '/recomendaciones', label: 'Recomendaciones', icon: 'recomendaciones', accent: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30' },
       { href: '/competencia', label: 'Competencia', icon: 'competencia', accent: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
       { href: '/resumen',     label: 'Resumen IA',  icon: 'resumen',     accent: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
       { href: '/assistant',   label: 'AI Assistant',icon: 'assistant',   accent: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
@@ -158,7 +160,7 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
       <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-4">
         {NAV_SECTIONS.map(section => (
           <div key={section.label}>
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-2 mb-1.5">
+            <p className="text-micro font-semibold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-2 mb-1.5">
               {section.label}
             </p>
             <div className="space-y-0.5">
@@ -189,7 +191,7 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
 
       {/* Quick links */}
       <div className="px-3 pb-2 space-y-2 border-t border-gray-100 dark:border-zinc-800/60 pt-3">
-        <p className="text-[10px] font-semibold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-2 mb-1.5">
+        <p className="text-micro font-semibold text-gray-400 dark:text-zinc-600 uppercase tracking-widest px-2 mb-1.5">
           Accesos rápidos
         </p>
         {QUICK_LINKS.map(group => (
@@ -217,7 +219,7 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
           {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
         </button>
         <div className="px-2.5 py-1">
-          <p className="text-[11px] text-gray-400 dark:text-zinc-600 truncate">{userEmail}</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-600 truncate">{userEmail}</p>
         </div>
         <button onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100 transition-all">

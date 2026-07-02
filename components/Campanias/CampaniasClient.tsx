@@ -120,12 +120,12 @@ function CampaignOverview({ adsets, campMap, period }: {
       {/* Top KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
         <div>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Gasto total</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Gasto total</p>
           <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100">${Math.round(totalSpend / 1000)}K</p>
           {totalBudget > 0 && <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">Budget: ${Math.round(totalBudget / 1000)}K/día</p>}
         </div>
         <div>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">ROAS blend</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">ROAS blend</p>
           <p className={`text-xl font-semibold ${period === 'today' ? 'text-gray-400 dark:text-zinc-600' : blendedRoas ? (blendedRoas >= ROAS_MIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500') : 'text-gray-400 dark:text-zinc-600'}`}>
             {period === 'today' ? '—' : blendedRoas ? blendedRoas.toFixed(2) + 'x' : '—'}
           </p>
@@ -134,14 +134,14 @@ function CampaignOverview({ adsets, campMap, period }: {
           </p>
         </div>
         <div>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">CPA blend</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">CPA blend</p>
           <p className={`text-xl font-semibold ${blendedCPA ? (blendedCPA <= BREAKEVEN_CPA ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500') : 'text-gray-400 dark:text-zinc-600'}`}>
             {blendedCPA ? '$' + Math.round(blendedCPA / 1000) + 'K' : '—'}
           </p>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">BE ${Math.round(BREAKEVEN_CPA / 1000)}K</p>
         </div>
         <div>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Ad sets</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Ad sets</p>
           <p className="text-xl font-semibold text-gray-900 dark:text-zinc-100">{activeCount}</p>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{pausedCount > 0 ? `+${pausedCount} pausados` : 'activos'}</p>
         </div>
@@ -150,7 +150,7 @@ function CampaignOverview({ adsets, campMap, period }: {
       {/* Budget distribution bars */}
       {totalSpend > 0 && (
         <div>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-3">Distribución de inversión</p>
+          <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-3">Distribución de inversión</p>
           <div className="space-y-2.5">
             {convSpend > 0 && (
               <BudgetBar

@@ -55,7 +55,7 @@ export default function ProductsPanel() {
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-gray-700 dark:text-zinc-200"
+          className="text-mini rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-gray-700 dark:text-zinc-200"
         >
           <option value={7}>7d</option>
           <option value={30}>30d</option>
@@ -84,7 +84,7 @@ export default function ProductsPanel() {
           </div>
 
           {(data.products_without_cost || 0) > 0 && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 mb-3">
+            <p className="text-mini text-amber-600 dark:text-amber-400 mb-3">
               Cargá el costo de esos productos en Configuración para ver su margen real.
             </p>
           )}
@@ -131,9 +131,9 @@ function Kpi({ label, value, sub, accent, warn }: { label: string; value: string
   const color = warn ? 'text-amber-600 dark:text-amber-400' : accent ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-zinc-100'
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
+      <p className="text-mini uppercase tracking-wide text-gray-400 dark:text-zinc-500">{label}</p>
       <p className={'text-lg font-semibold mt-0.5 ' + color}>{value}</p>
-      {sub && <p className="text-[10px] text-gray-400 dark:text-zinc-500">{sub}</p>}
+      {sub && <p className="text-micro text-gray-400 dark:text-zinc-500">{sub}</p>}
     </div>
   )
 }

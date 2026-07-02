@@ -104,7 +104,7 @@ export default function TrendChart({
           <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">
             Tendencia · {meta.label}
           </h3>
-          <p className="text-[11px] text-gray-400 dark:text-zinc-500">
+          <p className="text-mini text-gray-400 dark:text-zinc-500">
             {entityName || (entityType === 'account' ? 'Cuenta completa' : entityType)} · últimos {days} días
           </p>
         </div>
@@ -115,7 +115,7 @@ export default function TrendChart({
                 key={m.key}
                 onClick={() => setMetric(m.key)}
                 className={
-                  'px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ' +
+                  'px-2.5 py-1 text-mini font-medium rounded-md transition-all ' +
                   (metric === m.key
                     ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm'
                     : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200')
@@ -128,7 +128,7 @@ export default function TrendChart({
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-gray-700 dark:text-zinc-200"
+            className="text-mini rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-gray-700 dark:text-zinc-200"
           >
             <option value={7}>7d</option>
             <option value={14}>14d</option>

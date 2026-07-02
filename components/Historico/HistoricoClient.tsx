@@ -110,7 +110,7 @@ function StatCard({ metric, points, window }: { metric: MetricDef; points: DataP
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-      <p className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase tracking-wide font-medium mb-1">
+      <p className="text-mini text-gray-400 dark:text-zinc-500 uppercase tracking-wide font-medium mb-1">
         {metric.label} — {windowLabel}
       </p>
       <p className="text-2xl font-semibold tabular-nums" style={{ color: metric.color }}>
@@ -123,7 +123,7 @@ function StatCard({ metric, points, window }: { metric: MetricDef; points: DataP
       )}
       {/* Reference context */}
       {metric.refLine && curr != null && (
-        <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
+        <p className="text-mini text-gray-400 dark:text-zinc-500 mt-1">
           {metric.key === 'blended_roas'
             ? curr >= ROAS_MIN
               ? `✓ Sobre el mínimo (${ROAS_MIN}x)`

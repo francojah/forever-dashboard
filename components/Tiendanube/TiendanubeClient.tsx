@@ -389,7 +389,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300">Top productos · {PERIOD_LABELS[period]}</h2>
-                <span className="text-[11px] text-gray-400 dark:text-zinc-600">Hacé click para ver variantes</span>
+                <span className="text-mini text-gray-400 dark:text-zinc-600">Hacé click para ver variantes</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -432,7 +432,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                                 )}
                                 <span className="text-gray-700 dark:text-zinc-300">{p.name}</span>
                                 {hasVariants && (
-                                  <span className="text-[10px] text-indigo-400 dark:text-indigo-500 font-medium">
+                                  <span className="text-micro text-indigo-400 dark:text-indigo-500 font-medium">
                                     {p.variants!.length} variantes
                                   </span>
                                 )}
@@ -463,7 +463,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                                 <td className="px-4 py-2 pl-10">
                                   <div className="flex items-center gap-2">
                                     {isTop && (
-                                      <span className="text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
+                                      <span className="text-micro font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
                                         #1
                                       </span>
                                     )}
@@ -476,11 +476,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                                       <div className="h-1 rounded-full bg-indigo-400/70" style={{ width: `${Math.min(vPct, 100)}%` }} />
                                     </div>
                                     <span className="text-xs font-medium text-gray-700 dark:text-zinc-300">{v.quantity}</span>
-                                    <span className="text-[10px] text-gray-400 dark:text-zinc-600">un</span>
+                                    <span className="text-micro text-gray-400 dark:text-zinc-600">un</span>
                                   </div>
                                 </td>
                                 <td className="px-4 py-2 text-right text-xs text-gray-500 dark:text-zinc-500">{fmt(v.revenue)}</td>
-                                <td className="px-4 py-2 text-right text-[11px] text-indigo-400 dark:text-indigo-500">{vPct.toFixed(0)}%</td>
+                                <td className="px-4 py-2 text-right text-mini text-indigo-400 dark:text-indigo-500">{vPct.toFixed(0)}%</td>
                               </tr>
                             )
                           })}
@@ -540,7 +540,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                         <div key={prov.name}>
                           <div className="flex items-center justify-between text-xs mb-0.5">
                             <span className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-400 min-w-0">
-                              <span className="text-[10px] text-gray-300 dark:text-zinc-600 w-3 shrink-0">{i + 1}</span>
+                              <span className="text-micro text-gray-300 dark:text-zinc-600 w-3 shrink-0">{i + 1}</span>
                               <span className="truncate">{prov.name}</span>
                             </span>
                             <span className="font-medium text-violet-600 dark:text-violet-400 shrink-0 ml-2">{pct.toFixed(0)}%</span>
@@ -625,7 +625,7 @@ function KpiCard({ label, value, sub, color, tooltip }: {
   return (
     <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${bl} ${bg} p-4 shadow-sm hover:shadow-md transition-shadow overflow-hidden`}>
       <div className="flex items-center gap-1 mb-1.5">
-        <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
+        <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
         {tooltip && <InfoTooltip text={tooltip} />}
       </div>
       <p className={`text-3xl font-bold tabular-nums leading-none ${vc}`}>{value}</p>
