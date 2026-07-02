@@ -144,8 +144,11 @@ export default function LoginPage() {
             </form>
           </div>
 
-          <p className="text-center text-xs text-zinc-500 mt-6">
-            <Link href="/" className="hover:text-zinc-300 transition-colors">← Volver al inicio</Link>
+          <p className="text-center text-xs text-zinc-400 mt-6">
+            ¿No tenés cuenta? <Link href="/signup" className="text-zinc-200 hover:text-white font-medium transition-colors">Creá una gratis</Link>
+          </p>
+          <p className="text-center text-xs text-zinc-600 mt-2">
+            <Link href="/" className="hover:text-zinc-400 transition-colors">← Volver al inicio</Link>
           </p>
         </div>
       </div>

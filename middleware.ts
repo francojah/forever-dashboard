@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Resto de rutas protegidas: sin sesión → login
-  if (!user && !pathname.startsWith('/login')) {
+  if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/signup')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
