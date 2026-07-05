@@ -31,7 +31,7 @@ export async function GET() {
   // Señales
   const [{ data: meta }, { data: tn }] = await Promise.all([
     supabase.from('meta_snapshots').select('summary, adsets').order('snapshot_date', { ascending: false }).limit(1).single(),
-    supabase.from('tiendanube_snapshots').select('summary_today, summary_7d').order('snapshot_date', { ascending: false }).limit(1).single(),
+    supabase.from('tiendanube_snapshots').select('summary_today, summary_7d, summary_30d, summary_mtd').order('snapshot_date', { ascending: false }).limit(1).single(),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,6 +42,14 @@ export async function GET() {
   const tnToday = (tn?.summary_today || {}) as any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tn7d = (tn?.summary_7d || {}) as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tn30 = (tn?.summary_30d || {}) as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tnMtd = (tn?.summary_mtd || {}) as any
+
+  // Ritmo: venta diaria promedio 7d vs hoy (para leer tendencia, no solo el día)
+  const avgDaily7d = tn7d?.total_revenue ? tn7d.total_revenue / 7 : null
+  const topProducts30 = (tn30?.top_products || []).slice(0, 4).map((p: { name: string; revenue: number }) => `${p.name} (${fmt(p.revenue)})`).join(', ')
 
   // Adsets problemáticos y ganadores
   const activos = adsets.filter((a) => a.status === 'ACTIVE' && (a.spend || 0) > 0)
@@ -53,20 +61,26 @@ export async function GET() {
 
   const realRoas = tn7d?.total_revenue && s.total_spend_7d ? (tn7d.total_revenue / s.total_spend_7d).toFixed(2) : 'N/A'
 
-  const prompt = `Sos el copiloto de decisiones de un ecommerce (marca de indumentaria, Argentina, ARS).
-Breakeven CPA ~${fmt(DEFAULT_BREAKEVEN_CPA)}, ROAS mínimo rentable ${DEFAULT_ROAS_MIN}x, target 10x.
+  const prompt = `Sos el copiloto ESTRATÉGICO de un ecommerce (marca de indumentaria, Argentina, ARS).
+No sos un apagador de incendios: pensás en estructura, tendencia y rentabilidad sostenible, no solo en el número de hoy.
+Breakeven CPA ~${fmt(DEFAULT_BREAKEVEN_CPA)}, ROAS mínimo rentable ${DEFAULT_ROAS_MIN}x, target 10x, margen ~53%.
 
-SEÑALES DE HOY / 7 DÍAS:
-- Ventas hoy (Tiendanube): ${fmt(tnToday?.total_revenue)} · ${tnToday?.total_orders || 0} órdenes
-- Ventas 7d: ${fmt(tn7d?.total_revenue)} · ${tn7d?.total_orders || 0} órdenes · AOV ${fmt(tn7d?.aov)}
+SEÑALES (día → mes):
+- Ventas hoy (TN): ${fmt(tnToday?.total_revenue)} · ${tnToday?.total_orders || 0} órdenes
+- Ventas 7d: ${fmt(tn7d?.total_revenue)} · ${tn7d?.total_orders || 0} órdenes · AOV ${fmt(tn7d?.aov)} · promedio diario ${fmt(avgDaily7d)}
+- Ventas 30d: ${fmt(tn30?.total_revenue)} · MTD: ${fmt(tnMtd?.total_revenue)}
 - Gasto Meta 7d: ${fmt(s.total_spend_7d)} · Compras ${s.total_purchases_7d || 0} · CPA ${fmt(s.blended_cpa)} · ROAS pixel ${s.blended_roas || 'N/A'}x
-- ROAS REAL (ventas TN / gasto Meta): ${realRoas}x
-- Ad sets ACTIVOS sobre breakeven (quemando margen): ${sobreCPA.length ? sobreCPA.map((a) => `"${a.name}" CPA ${fmt(a.cost_per_result)} gasto ${fmt(a.spend)}`).join(' · ') : 'ninguno'}
-- Ad sets ganadores (ROAS alto, candidatos a escalar): ${ganadores.length ? ganadores.map((a) => `"${a.name}" ROAS ${a.roas}x`).join(' · ') : 'ninguno'}
+- ROAS REAL 7d (ventas TN / gasto Meta): ${realRoas}x
+- Ad sets sobre breakeven (queman margen): ${sobreCPA.length ? sobreCPA.map((a) => `"${a.name}" CPA ${fmt(a.cost_per_result)} gasto ${fmt(a.spend)}`).join(' · ') : 'ninguno'}
+- Ad sets ganadores (escalar): ${ganadores.length ? ganadores.map((a) => `"${a.name}" ROAS ${a.roas}x`).join(' · ') : 'ninguno'}
+- Top productos 30d: ${topProducts30 || 'N/A'}
 
-Devolvé EXACTAMENTE 3 acciones para HOY, priorizadas, concretas y accionables (qué hacer y por qué).
-Respondé SOLO JSON, sin texto extra:
-{"actions":[{"priority":"alta|media|baja","title":"acción corta e imperativa","why":"el dato que la justifica, 1 oración","action":"el paso concreto a ejecutar","link":"/campanias|/analytics|/creativos|/tiendanube|/historico"}]}`
+Devolvé EXACTAMENTE 3 acciones priorizadas. REGLAS:
+1) Al menos UNA debe ser ESTRUCTURAL / de mediano plazo (estructura de campañas, mix de producto, retención/recompra, presupuesto semanal, stock), NO solo del día.
+2) Cada acción debe apoyarse en la tendencia (comparar día vs 7d/30d), no en un dato aislado.
+3) Concreta y accionable: qué hacer y por qué.
+Ordená de mayor a menor prioridad. Respondé SOLO JSON, sin texto extra:
+{"actions":[{"priority":"alta|media|baja","title":"acción corta e imperativa","why":"el dato/tendencia que la justifica, 1 oración","action":"el paso concreto a ejecutar","link":"/campanias|/analytics|/recomendaciones|/creativos|/tiendanube|/historico"}]}`
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })

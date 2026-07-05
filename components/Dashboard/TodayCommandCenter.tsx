@@ -45,6 +45,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
   const [todaySpend, setTodaySpend] = useState<number | null>(null)
   const [actions, setActions] = useState<Action[] | null>(null)
   const [loadingActions, setLoadingActions] = useState(true)
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
   const tnToday = tnSnapshot?.summary_today
@@ -52,14 +53,41 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
   const ordersToday = tnToday?.total_orders ?? 0
   const realRoasToday = revenueToday != null && todaySpend && todaySpend > 0 ? revenueToday / todaySpend : null
 
+  const cacheKey = () => `faro_actions_${new Date().toISOString().slice(0, 10)}`
+
+  function loadActions(force = false) {
+    // Cache diario en localStorage: se genera una vez por día y queda estable.
+    if (!force) {
+      try {
+        const raw = localStorage.getItem(cacheKey())
+        if (raw) {
+          const cached = JSON.parse(raw) as { actions: Action[]; at: string }
+          setActions(cached.actions)
+          setGeneratedAt(cached.at)
+          setLoadingActions(false)
+          return
+        }
+      } catch { /* cache inválido → regenerar */ }
+    }
+    setLoadingActions(true)
+    fetch('/api/today-actions')
+      .then((r) => r.json())
+      .then((d) => {
+        const acts = d.actions || []
+        const at = new Date().toISOString()
+        setActions(acts)
+        setGeneratedAt(at)
+        try { localStorage.setItem(cacheKey(), JSON.stringify({ actions: acts, at })) } catch { /* ignore */ }
+      })
+      .catch(() => setActions([]))
+      .finally(() => setLoadingActions(false))
+  }
+
   useEffect(() => {
     setMounted(true)
     fetch('/api/meta-today').then((r) => r.json()).then((d) => setTodaySpend(typeof d.spend === 'number' ? d.spend : null)).catch(() => {})
-    fetch('/api/today-actions')
-      .then((r) => r.json())
-      .then((d) => setActions(d.actions || []))
-      .catch(() => setActions([]))
-      .finally(() => setLoadingActions(false))
+    loadActions(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Solo tras montar (evita mismatch de hidratación por hora/fecha del cliente)
@@ -93,10 +121,26 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
 
         {/* Acciones para hoy */}
         <div className="rounded-xl bg-white/70 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 p-4 backdrop-blur">
-          <div className="flex items-center gap-2 mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-brand" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">3 acciones para hoy</h3>
-            <span className="text-micro text-gray-400 dark:text-zinc-600">· sugeridas por IA</span>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-brand" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">Plan de hoy</h3>
+              <span className="text-micro text-gray-400 dark:text-zinc-600">· por IA</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {mounted && generatedAt && (
+                <span className="text-micro text-gray-400 dark:text-zinc-600">
+                  {new Date(generatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={() => loadActions(true)}
+                disabled={loadingActions}
+                className="text-micro rounded-md border border-gray-200 dark:border-zinc-700 px-2 py-1 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-40"
+              >
+                Regenerar
+              </button>
+            </div>
           </div>
 
           {loadingActions ? (

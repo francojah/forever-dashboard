@@ -30,7 +30,9 @@ export async function GET() {
       return NextResponse.json({ error: 'No Meta credentials' }, { status: 500 })
     }
 
-    const url = new URL(`https://graph.facebook.com/v21.0/act_${accountId}/insights`)
+    // El env puede venir con o sin el prefijo "act_"; normalizamos para no duplicarlo.
+    const acct = accountId.startsWith('act_') ? accountId : `act_${accountId}`
+    const url = new URL(`https://graph.facebook.com/v21.0/${acct}/insights`)
     url.searchParams.set('date_preset', 'today')
     url.searchParams.set('fields', 'spend,actions,impressions,clicks')
     url.searchParams.set('level', 'account')
