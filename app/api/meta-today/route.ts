@@ -6,8 +6,12 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'edge'
 export const revalidate = 0
 
-export async function GET() {
+const ALLOWED_PRESETS = new Set(['today', 'yesterday', 'this_month', 'last_month', 'last_7d', 'last_30d'])
+
+export async function GET(req: Request) {
   try {
+    const presetParam = new URL(req.url).searchParams.get('preset') || 'today'
+    const preset = ALLOWED_PRESETS.has(presetParam) ? presetParam : 'today'
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -33,7 +37,7 @@ export async function GET() {
     // El env puede venir con o sin el prefijo "act_"; normalizamos para no duplicarlo.
     const acct = accountId.startsWith('act_') ? accountId : `act_${accountId}`
     const url = new URL(`https://graph.facebook.com/v21.0/${acct}/insights`)
-    url.searchParams.set('date_preset', 'today')
+    url.searchParams.set('date_preset', preset)
     url.searchParams.set('fields', 'spend,actions,impressions,clicks')
     url.searchParams.set('level', 'account')
     url.searchParams.set('access_token', token)

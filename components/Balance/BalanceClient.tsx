@@ -394,6 +394,16 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [savingMan,  setSavingMan]  = useState(false)
   const [syncingMonth, setSyncingMonth] = useState(false)
 
+  // Gasto Meta ACUMULADO del mes calendario (this_month), en vivo.
+  // Evita usar last_30d (ventana móvil) que sobre-cuenta a principio de mes.
+  const [mtdMetaSpend, setMtdMetaSpend] = useState<number | null>(null)
+  useEffect(() => {
+    fetch('/api/meta-today?preset=this_month')
+      .then((r) => r.json())
+      .then((d) => setMtdMetaSpend(typeof d.spend === 'number' ? d.spend : null))
+      .catch(() => {})
+  }, [])
+
   // ── Live data from snapshots ───────────────────────────────────────────────
   // summary_mtd = mes calendario del día 1 al hoy (sin solapamiento con meses anteriores)
   const liveData: MonthData = useMemo(() => {
@@ -403,7 +413,9 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       tn_revenue:    mtd?.total_revenue    ?? s30?.total_revenue    ?? 0,
       tn_orders:     mtd?.total_orders     ?? s30?.total_orders     ?? 0,
       tn_units:      mtd?.total_units_sold ?? s30?.total_units_sold ?? 0,
-      meta_spend:    metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d
+      // Gasto Meta del mes calendario acumulado; fallback a last_30d solo si no llegó.
+      meta_spend:    mtdMetaSpend
+                  ?? metaSnapshot?.periods?.last_30d?.summary?.total_spend_7d
                   ?? metaSnapshot?.summary?.total_spend_7d
                   ?? 0,
       // Costo real de envío: shipping_cost_owner acumulado por el sync
@@ -412,7 +424,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       installments_real: mtd?.total_installments_cost ?? s30?.total_installments_cost ?? null,
       source: 'live' as const,
     }
-  }, [tnSnapshot, metaSnapshot])
+  }, [tnSnapshot, metaSnapshot, mtdMetaSpend])
 
   // ── Get data for any month key ─────────────────────────────────────────────
   const getMonthData = useCallback((key: string): MonthData => {
