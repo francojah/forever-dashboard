@@ -68,7 +68,10 @@ export async function POST(req: NextRequest) {
 
     // Persistir la orden en tn_orders (near real-time, sin esperar el sync diario)
     try {
-      await supabase.from('tn_orders').upsert({
+      // Dedupe: borramos cualquier fila previa de esta orden y reinsertamos
+      // (la UNIQUE con brand_id NULL no dedupe, así evitamos duplicar).
+      await supabase.from('tn_orders').delete().eq('tn_order_id', String(order.id))
+      await supabase.from('tn_orders').insert({
         brand_id: null,
         tn_order_id: String(order.id),
         order_number: order.number != null ? String(order.number) : null,
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         units: (order.products || []).reduce((s: number, p: any) => s + parseInt(p.quantity || '1', 10), 0),
         synced_at: new Date().toISOString(),
-      }, { onConflict: 'brand_id,tn_order_id' })
+      })
     } catch { /* tabla puede no existir; no bloquea el webhook */ }
 
     // Log webhook event to Supabase for visibility (non-critical — table may not exist yet)

@@ -127,68 +127,79 @@ export default function CompetenciaClient({ savedAnalyses }: { savedAnalyses: An
       {/* Right: analysis result */}
       <div className="md:col-span-2">
         {!selected ? (
-          <div className="flex items-center justify-center h-64 text-center text-gray-400">
+          <div className="flex items-center justify-center h-64 text-center text-gray-400 dark:text-zinc-500">
             <div>
               <p className="text-4xl mb-3">🔍</p>
               <p className="text-sm">Ingresá un competidor y hacé clic en Analizar</p>
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">{selected.competitor_name}</h2>
-              {selected.competitor_url && (
-                <a href={selected.competitor_url} target="_blank" rel="noopener noreferrer"
-                   className="text-xs text-blue-600 hover:underline">{selected.competitor_url}</a>
-              )}
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm text-gray-700">{selected.analysis.summary}</p>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Posicionamiento</p>
-              <p className="text-sm text-gray-700">{selected.analysis.positioning}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Temas de mensajería</p>
-                <ul className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">{selected.competitor_name}</h2>
+                  <span className="text-micro px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">competidor</span>
+                </div>
+                {selected.competitor_url && (
+                  <a href={selected.competitor_url} target="_blank" rel="noopener noreferrer"
+                     className="text-xs text-brand hover:underline">{selected.competitor_url}</a>
+                )}
+              </div>
+            </div>
+
+            {/* Resumen destacado */}
+            <div className="rounded-xl p-4 bg-brand-soft">
+              <p className="text-sm leading-relaxed">{selected.analysis.summary}</p>
+            </div>
+
+            {/* Posicionamiento vs nosotros */}
+            <div className="rounded-xl border border-gray-200 dark:border-zinc-800 p-4">
+              <p className="text-micro font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1.5">Posicionamiento · vs vos</p>
+              <p className="text-sm text-gray-700 dark:text-zinc-300 leading-relaxed">{selected.analysis.positioning}</p>
+            </div>
+
+            {/* Mensajería + patrones creativos como chips */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-micro font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-2">Temas de mensajería</p>
+                <div className="flex flex-wrap gap-1.5">
                   {(selected.analysis.messaging_themes || []).map((t, i) => (
-                    <li key={i} className="text-sm text-gray-700 flex items-start gap-1.5">
-                      <span className="text-gray-400 mt-0.5">•</span>{t}
-                    </li>
+                    <span key={i} className="text-xs px-2 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300">{t}</span>
                   ))}
-                </ul>
+                </div>
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Patrones creativos</p>
-                <ul className="space-y-1">
+                <p className="text-micro font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-2">Patrones creativos</p>
+                <div className="flex flex-wrap gap-1.5">
                   {(selected.analysis.creative_patterns || []).map((p, i) => (
-                    <li key={i} className="text-sm text-gray-700 flex items-start gap-1.5">
-                      <span className="text-gray-400 mt-0.5">•</span>{p}
-                    </li>
+                    <span key={i} className="text-xs px-2 py-1 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">{p}</span>
                   ))}
-                </ul>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 rounded-lg p-3">
-                <p className="text-xs font-semibold text-green-700 mb-2">✅ Oportunidades para Forever</p>
-                <ul className="space-y-1">
+            {/* Oportunidades / Amenazas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-xl p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40">
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2 flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21 8 14 2 9.4h7.6z"/></svg>
+                  Oportunidades para vos
+                </p>
+                <ul className="space-y-1.5">
                   {(selected.analysis.opportunities || []).map((o, i) => (
-                    <li key={i} className="text-xs text-green-800">{o}</li>
+                    <li key={i} className="text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-1.5"><span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />{o}</li>
                   ))}
                 </ul>
               </div>
-              <div className="bg-red-50 rounded-lg p-3">
-                <p className="text-xs font-semibold text-red-700 mb-2">⚠️ Amenazas</p>
-                <ul className="space-y-1">
+              <div className="rounded-xl p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-2 flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
+                  Dónde te ganan
+                </p>
+                <ul className="space-y-1.5">
                   {(selected.analysis.threats || []).map((t, i) => (
-                    <li key={i} className="text-xs text-red-800">{t}</li>
+                    <li key={i} className="text-xs text-red-800 dark:text-red-300 flex items-start gap-1.5"><span className="mt-1 w-1 h-1 rounded-full bg-red-500 shrink-0" />{t}</li>
                   ))}
                 </ul>
               </div>

@@ -248,14 +248,21 @@ async function persistOrders(supabase: SupabaseClient, orders: any[]) {
     synced_at: new Date().toISOString(),
   }))
   try {
-    // Chunks de 500 para no exceder límites de payload
-    for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supabase
-        .from('tn_orders')
-        .upsert(rows.slice(i, i + 500), { onConflict: 'brand_id,tn_order_id' })
+    // Dedupe en escritura: la constraint UNIQUE(brand_id, tn_order_id) NO aplica
+    // con brand_id NULL (Postgres trata NULLs como distintos), así que el upsert
+    // duplicaba. Filtramos las órdenes ya existentes y solo insertamos las nuevas.
+    const ids = rows.map((r) => r.tn_order_id)
+    const existing = new Set<string>()
+    for (let i = 0; i < ids.length; i += 500) {
+      const { data } = await supabase.from('tn_orders').select('tn_order_id').in('tn_order_id', ids.slice(i, i + 500))
+      ;(data || []).forEach((d: { tn_order_id: string }) => existing.add(d.tn_order_id))
+    }
+    const nuevas = rows.filter((r) => !existing.has(r.tn_order_id))
+    for (let i = 0; i < nuevas.length; i += 500) {
+      const { error } = await supabase.from('tn_orders').insert(nuevas.slice(i, i + 500))
       if (error) throw error
     }
-    return rows.length
+    return nuevas.length
   } catch (e) {
     console.warn('⚠️ No se pudieron persistir órdenes en tn_orders:', (e as Error).message)
     return 0
