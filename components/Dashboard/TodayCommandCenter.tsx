@@ -48,6 +48,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [done, setDone] = useState<Set<string>>(new Set())
+  const [planOpen, setPlanOpen] = useState(false)
 
   const tnToday = tnSnapshot?.summary_today
   const revenueToday = tnToday?.total_revenue ?? null
@@ -138,33 +139,37 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
 
         {/* Acciones para hoy */}
         <div className="rounded-xl bg-white/70 dark:bg-zinc-900/60 border border-gray-100 dark:border-zinc-800 p-4 backdrop-blur">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-brand" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => setPlanOpen((o) => !o)} className="flex items-center gap-2 flex-1 text-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-brand shrink-0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-100">Plan de hoy</h3>
               {mounted && actions && actions.length > 0 && (
                 <span className="text-micro text-gray-400 dark:text-zinc-600">
                   {actions.filter((a) => done.has(a.title)).length}/{actions.length} hechas
                 </span>
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              {mounted && generatedAt && (
-                <span className="text-micro text-gray-400 dark:text-zinc-600">
-                  {new Date(generatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-              <button
-                onClick={() => loadActions(true)}
-                disabled={loadingActions}
-                className="text-micro rounded-md border border-gray-200 dark:border-zinc-700 px-2 py-1 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-40"
-              >
-                Regenerar
-              </button>
-            </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className={'text-gray-400 dark:text-zinc-500 transition-transform ' + (planOpen ? 'rotate-180' : '')}><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {planOpen && (
+              <div className="flex items-center gap-2">
+                {mounted && generatedAt && (
+                  <span className="text-micro text-gray-400 dark:text-zinc-600">
+                    {new Date(generatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                <button
+                  onClick={() => loadActions(true)}
+                  disabled={loadingActions}
+                  className="text-micro rounded-md border border-gray-200 dark:border-zinc-700 px-2 py-1 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-40"
+                >
+                  Regenerar
+                </button>
+              </div>
+            )}
           </div>
 
-          {loadingActions ? (
+          {planOpen && (loadingActions ? (
             <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
           ) : !actions || actions.length === 0 ? (
             <p className="text-mini text-gray-400 dark:text-zinc-500 py-3">Sin señales suficientes todavía. Corré un sync para generar recomendaciones.</p>
@@ -204,7 +209,7 @@ export default function TodayCommandCenter({ snapshot, tnSnapshot }: Props) {
                   )
                 })}
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>

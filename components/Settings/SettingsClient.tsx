@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import HealthPanel from '@/components/Settings/HealthPanel'
+import ProductCostsCard from '@/components/Settings/ProductCostsCard'
 
 interface Settings {
   breakeven_cpa:     number
@@ -421,6 +422,12 @@ export default function SettingsClient({ initialSettings }: Props) {
       <div>
         <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Estado del sistema</p>
         <HealthPanel />
+      </div>
+
+      {/* Costos de producto */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Costos de producto</p>
+        <ProductCostsCard />
       </div>
 
       {/* Business parameters */}

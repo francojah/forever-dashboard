@@ -290,8 +290,8 @@ export default function HistoricoClient({ data }: Props) {
                   tickFormatter={v => '$' + Math.round(v / 1000) + 'K'}
                   tickLine={false} axisLine={false} className="text-gray-400 dark:text-zinc-500" width={48} />
               )}
-              {activeYAxes.has('units') && !activeYAxes.has('roas') && (
-                <YAxis yAxisId="units" orientation="left" tick={{ fontSize: 11 }}
+              {activeYAxes.has('units') && (
+                <YAxis yAxisId="units" orientation="left" hide={activeYAxes.has('roas')} tick={{ fontSize: 11 }}
                   tickLine={false} axisLine={false} className="text-gray-400 dark:text-zinc-500" width={32} />
               )}
 
