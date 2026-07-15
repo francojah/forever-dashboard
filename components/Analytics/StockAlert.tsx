@@ -28,8 +28,8 @@ export default function StockAlert() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/tn-stock').then((r) => r.json()),
-      fetch('/api/analytics/velocity?days=14').then((r) => r.json()),
+      fetch('/api/tn-stock', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/analytics/velocity?days=14', { cache: 'no-store' }).then((r) => r.json()),
     ])
       .then(([stock, vel]) => {
         if (stock.error) { setNote('No se pudo leer el stock de Tiendanube.'); return }

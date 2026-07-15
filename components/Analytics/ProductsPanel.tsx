@@ -39,7 +39,7 @@ export default function ProductsPanel() {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/analytics/products?days=${days}`)
+    fetch(`/api/analytics/products?days=${days}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData({ empty: true, message: 'Error cargando datos.' }))

@@ -29,7 +29,7 @@ export default function CustomersPanel() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/analytics/customers')
+    fetch('/api/analytics/customers', { cache: 'no-store' })
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData({ empty: true, message: 'Error cargando datos.' }))
