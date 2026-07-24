@@ -26,15 +26,15 @@ require('dotenv').config({ path: '.env.local' })
 const cfg = require('./lib/config')
 const { parseInsights } = require('./lib/parse-insights')
 
-const META_TOKEN = process.env.META_ACCESS_TOKEN
+let META_TOKEN = process.env.META_ACCESS_TOKEN || ''
 const ACCOUNT_ID = cfg.META_ACCOUNT_ID
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const META_API = cfg.META_API_BASE
 const ALERT_WEBHOOK = process.env.SYNC_ALERT_WEBHOOK
 
-if (!META_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('❌ Faltan variables de entorno. Revisá .env.local')
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('❌ Faltan variables de entorno de Supabase. Revisá .env.local')
   process.exit(1)
 }
 
@@ -325,6 +325,17 @@ async function main() {
   const startedAt = Date.now()
   const today = new Date().toISOString().split('T')[0]
   console.log(`\n🔄 Sincronizando Meta Ads — ${today}`)
+
+  // Token de Meta: preferir app_config (rotable sin tocar secrets/env)
+  try {
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_access_token').single()
+    const t = data && data.value && data.value.access_token
+    if (t) META_TOKEN = t
+  } catch { /* usa env */ }
+  if (!META_TOKEN) {
+    console.error('❌ Sin token de Meta (ni en app_config ni en env)')
+    process.exit(1)
+  }
 
   try {
     console.log('  📊 Fetching last_7d (principal)...')

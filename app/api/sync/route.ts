@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
-const META_TOKEN   = process.env.META_ACCESS_TOKEN!
+let META_TOKEN     = process.env.META_ACCESS_TOKEN || ''
 const ACCOUNT_ID   = process.env.META_ACCOUNT_ID || 'act_1614288152915913'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -176,14 +176,24 @@ export async function POST() {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
-  if (!META_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
     return NextResponse.json({ error: 'Faltan variables de entorno' }, { status: 500 })
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+  // Token de Meta: preferir el guardado en app_config (rotable sin redeploy)
+  try {
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_access_token').single()
+    const t = (data?.value as { access_token?: string } | null)?.access_token
+    if (t) META_TOKEN = t
+  } catch { /* usa env */ }
+  if (!META_TOKEN) {
+    return NextResponse.json({ error: 'Sin token de Meta' }, { status: 500 })
   }
 
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     const { breakeven_cpa, roas_min } = await getThresholds(supabase)
 
     // Primary fetch (last_7d)
