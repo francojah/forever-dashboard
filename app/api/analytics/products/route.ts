@@ -47,8 +47,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ empty: true, message: 'Sin órdenes persistidas todavía. Corré el sync de TN.' })
   }
 
+  // Normalizar el product_id a string: la columna puede devolverlo como número
+  // y en tn_orders.products viene como string → sin String() no matchean.
   const costMap = new Map<string, number>()
-  ;((costsRes.data || []) as unknown as CostRow[]).forEach((c) => costMap.set(c.product_id, c.unit_cost))
+  ;((costsRes.data || []) as unknown as CostRow[]).forEach((c) => costMap.set(String(c.product_id), c.unit_cost))
 
   // Revenue neto: pagadas vs canceladas
   let grossRevenue = 0
@@ -70,7 +72,7 @@ export async function GET(req: Request) {
       const key = p.product_id || p.name
       const baseName = (p.name || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || p.name
       const lineRev = (p.price || 0) * (p.quantity || 0)
-      const unitCost = p.product_id != null ? costMap.get(p.product_id) : undefined
+      const unitCost = p.product_id != null ? costMap.get(String(p.product_id)) : undefined
       const acc = prodMap.get(key) || { name: baseName, units: 0, revenue: 0, cost: 0, hasCost: unitCost != null }
       acc.units += p.quantity || 0
       acc.revenue += lineRev
