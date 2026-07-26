@@ -61,6 +61,7 @@ interface MonthData {
   tn_units:           number
   shipping_real:      number | null  // costo real shipping_cost_owner desde TN; null = usar fallback %
   installments_real:  number | null  // costo real cuotas s/interés (payment_details.installments_cost); null = usar % estimado
+  merch_real?:        number | null  // COGS real por producto (product_costs); null = usar UNIT_COST plano
   source:             'live' | 'saved' | 'empty'
 }
 
@@ -123,10 +124,11 @@ function calcPnL(
   tnCommissionPct      = PLATFORM_PCT_DEFAULT * 100,
   shippingFallbackPct  = SHIPPING_PCT_DEFAULT * 100,
 ): PnL {
-  const { tn_revenue, meta_spend, tn_orders, tn_units, shipping_real, installments_real } = data
+  const { tn_revenue, meta_spend, tn_orders, tn_units, shipping_real, installments_real, merch_real } = data
   const aov    = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
   const units  = tn_units  > 0 ? tn_units  : tn_orders * UNITS_PER_ORDER
-  const merch  = units * UNIT_COST
+  // COGS real por producto (product_costs) cuando está disponible; si no, costo plano.
+  const merch  = merch_real != null && merch_real >= 0 ? merch_real : units * UNIT_COST
 
   // ── Envío: usar dato real de TN cuando esté disponible ──────────────────────
   const shipping_is_real = shipping_real !== null && shipping_real >= 0
@@ -397,10 +399,16 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   // Gasto Meta ACUMULADO del mes calendario (this_month), en vivo.
   // Evita usar last_30d (ventana móvil) que sobre-cuenta a principio de mes.
   const [mtdMetaSpend, setMtdMetaSpend] = useState<number | null>(null)
+  const [mtdMerch, setMtdMerch] = useState<number | null>(null)
   useEffect(() => {
     fetch('/api/meta-today?preset=this_month')
       .then((r) => r.json())
       .then((d) => setMtdMetaSpend(typeof d.spend === 'number' ? d.spend : null))
+      .catch(() => {})
+    // COGS real del mes por producto (product_costs), fallback al costo plano
+    fetch(`/api/analytics/cogs?fallback=${UNIT_COST}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (typeof d.merch === 'number' && d.units > 0) setMtdMerch(d.merch) })
       .catch(() => {})
   }, [])
 
@@ -422,9 +430,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       shipping_real: mtd?.shipping_revenue ?? s30?.shipping_revenue ?? null,
       // Costo real de cuotas s/interés: payment_details.installments_cost por orden
       installments_real: mtd?.total_installments_cost ?? s30?.total_installments_cost ?? null,
+      // COGS real por producto (product_costs); null → costo plano
+      merch_real: mtdMerch,
       source: 'live' as const,
     }
-  }, [tnSnapshot, metaSnapshot, mtdMetaSpend])
+  }, [tnSnapshot, metaSnapshot, mtdMetaSpend, mtdMerch])
 
   // ── Get data for any month key ─────────────────────────────────────────────
   const getMonthData = useCallback((key: string): MonthData => {
@@ -600,7 +610,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       '',
       'Concepto,Importe (ARS),% Ventas',
       `Ventas brutas,${Math.round(pnl.tn_revenue)},100%`,
-      `Merch (${pnl.tn_units} un × $${UNIT_COST.toLocaleString('es-AR')}),-${Math.round(pnl.merch)},${pct(pnl.merch/pnl.tn_revenue)}`,
+      `Merch (${pnl.tn_units} un prom $${pnl.tn_units > 0 ? Math.round(pnl.merch / pnl.tn_units) : 0}),-${Math.round(pnl.merch)},${pct(pnl.merch/pnl.tn_revenue)}`,
       `"${pnl.shipping_is_real ? 'Envío (real)' : `Envío (~${shippingFallbackPct.toFixed(0)}%)`}",-${Math.round(pnl.shipping)},${pct(pnl.shipping/pnl.tn_revenue)}`,
       `"Comisión TN (${tnCommissionPct.toFixed(1)}%)",-${Math.round(pnl.platform)},${pct(pnl.platform/pnl.tn_revenue)}`,
       `Packaging,-${Math.round(pnl.packaging)},${pct(pnl.packaging/pnl.tn_revenue)}`,
@@ -902,7 +912,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <tbody>
             <PnLRow label="Ventas brutas (Tiendanube)" value={pnl.tn_revenue} positive
               note={`${pnl.tn_orders} órdenes · ${pnl.tn_units} unidades · AOV ${fmt(pnl.aov)}`} />
-            <PnLRow label={`Mercadería (${pnl.tn_units} un × $${UNIT_COST.toLocaleString('es-AR')})`} value={-pnl.merch}
+            <PnLRow label={`Mercadería (${pnl.tn_units} un · prom $${pnl.tn_units > 0 ? Math.round(pnl.merch / pnl.tn_units).toLocaleString('es-AR') : 0})`} value={-pnl.merch}
               pctVal={pnl.tn_revenue > 0 ? pnl.merch / pnl.tn_revenue : 0} indent />
             <PnLRow
               label={pnl.shipping_is_real
