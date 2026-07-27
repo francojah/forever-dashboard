@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClientServer } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +28,10 @@ export async function GET(req: Request) {
   since.setDate(since.getDate() - days)
   const sinceIso = since.toISOString()
 
-  const supabase = createClientServer()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return NextResponse.json({ error: 'Sin credenciales' }, { status: 500 })
+  const supabase = createClient(url, key)
   const [ordersRes, costsRes] = await Promise.all([
     supabase
       .from('tn_orders')
