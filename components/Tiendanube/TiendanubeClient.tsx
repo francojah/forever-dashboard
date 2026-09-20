@@ -82,6 +82,31 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const tn   = getSummary(tnSnapshot, period)
   const meta = getMetaSummary(metaSnapshot, period)
 
+  // ── Prior period for delta comparison ─────────────────────────
+  // today → yesterday | 7d → compare daily avg vs 30d daily avg
+  function getPrior() {
+    if (period === 'today')     return getSummary(tnSnapshot, 'yesterday')
+    if (period === 'yesterday') return null
+    if (period === '7d')        return getSummary(tnSnapshot, '30d')   // daily avg comparison
+    if (period === '30d')       return getSummary(tnSnapshot, 'ytd')
+    return null
+  }
+  const priorRaw = getPrior()
+
+  // Normalize to "daily average" when comparing periods of different length
+  const periodDaysMap: Record<Period, number> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, ytd: Math.max(1, (new Date().getMonth()) * 30 + new Date().getDate()) }
+  const curDays   = periodDaysMap[period]
+  const priorPeriod: Period | null = period === 'today' ? 'yesterday' : period === '7d' ? '30d' : period === '30d' ? 'ytd' : null
+  const priorDays = priorPeriod ? periodDaysMap[priorPeriod] : 1
+
+  function delta(cur: number | undefined, priorVal: number | undefined): number | null {
+    if (cur == null || priorVal == null) return null
+    const curPerDay   = curDays   > 0 ? cur   / curDays   : cur
+    const priorPerDay = priorDays > 0 ? priorVal / priorDays : priorVal
+    if (priorPerDay <= 0) return null
+    return ((curPerDay - priorPerDay) / priorPerDay) * 100
+  }
+
   // ── Attribution math ──────────────────────────────────────────
   const tnRevenue     = tn?.total_revenue ?? 0
   const tnOrders      = tn?.total_orders  ?? 0
@@ -106,8 +131,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const organicOrders = Math.max(0, tnOrders - metaPurchases)
 
   // Days in period
-  const periodDays: Record<Period, number> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, ytd: new Date().getDate() + new Date().getMonth() * 30 }
-  const days = periodDays[period]
+  const days = curDays
   const revenuePerDay = tnRevenue > 0 ? tnRevenue / days : 0
   const ordersPerDay  = tnOrders  > 0 ? tnOrders  / days : 0
 
@@ -202,14 +226,19 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <KpiCard label="Ventas totales"   value={fmt(tnRevenue)}         sub={`${fmt(revenuePerDay)}/día`}   color="indigo"
+                delta={delta(tnRevenue, priorRaw?.total_revenue)}
                 tooltip="Total facturado en Tiendanube en el período. Incluye todas las fuentes de tráfico, no solo Meta Ads." />
               <KpiCard label="Órdenes"           value={fmt(tnOrders, 'number')} sub={`${ordersPerDay.toFixed(1)}/día`} color="violet"
+                delta={delta(tnOrders, priorRaw?.total_orders)}
                 tooltip="Cantidad de órdenes pagadas en el período. Es la base para calcular el ticket promedio y la conversión." />
               <KpiCard label="Ticket promedio"   value={fmt(tn?.aov)}            sub="por orden"                    color="purple"
+                delta={priorRaw?.aov != null && tn?.aov != null ? ((tn.aov - priorRaw.aov) / priorRaw.aov) * 100 : null}
                 tooltip="Valor promedio por orden (AOV). Calculado como ventas totales ÷ cantidad de órdenes. Subir el AOV mejora el ROAS sin aumentar el gasto." />
               <KpiCard label="Clientes únicos"   value={fmt(tn?.unique_customers, 'number')} sub="en el período"   color="fuchsia"
+                delta={delta(tn?.unique_customers, priorRaw?.unique_customers)}
                 tooltip="Clientes con al menos una compra en el período. Un cliente que compra dos veces cuenta una sola vez." />
               <KpiCard label="Unidades vendidas" value={fmt(tn?.total_units_sold, 'number')} sub="artículos"       color="purple"
+                delta={delta(tn?.total_units_sold, priorRaw?.total_units_sold)}
                 tooltip="Total de artículos vendidos sumando las cantidades de todos los productos de las órdenes pagadas." />
             </div>
           </div>
@@ -283,115 +312,57 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             </div>
           )}
 
-          {/* ── Attribution Analysis ── */}
+          {/* ── Attribution Summary (compact) ── */}
           {hasMetaData && (
-            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-5">
-                Análisis de atribución — Orgánico vs. Meta
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+              <h2 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">
+                Atribución · Meta vs Orgánico
               </h2>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                {/* Revenue breakdown */}
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-500 dark:text-zinc-500 font-medium uppercase tracking-wide">Ventas por origen</p>
-
-                  {/* Bar visual */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block" />
-                        Meta Ads
-                      </span>
-                      <span className="font-semibold">{fmt(metaAttributedRevenue)} · {metaPct.toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-3">
-                      <div
-                        className="h-3 rounded-full bg-indigo-500 transition-all duration-500"
-                        style={{ width: `${Math.min(metaPct, 100)}%` }}
-                      />
-                    </div>
-
-                    <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mt-3">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
-                        Orgánico
-                      </span>
-                      <span className="font-semibold">{fmt(organicRevenue)} · {organicPct.toFixed(0)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-3">
-                      <div
-                        className="h-3 rounded-full bg-emerald-500 transition-all duration-500"
-                        style={{ width: `${Math.min(organicPct, 100)}%` }}
-                      />
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Stacked bar */}
+                <div className="space-y-2">
+                  <div className="w-full h-4 rounded-full overflow-hidden flex">
+                    <div className="bg-indigo-500 transition-all duration-500" style={{ width: `${Math.min(metaPct, 100)}%` }} />
+                    <div className="bg-emerald-400 flex-1" />
                   </div>
-
-                  {/* Orders breakdown */}
-                  <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 grid grid-cols-2 gap-3">
-                    <div className="text-center">
-                      <p className="text-xs text-gray-400 dark:text-zinc-500">Órdenes Meta</p>
-                      <p className="text-xl font-semibold text-indigo-600 dark:text-indigo-400">{metaPurchases}</p>
-                      <p className="text-xs text-gray-400 dark:text-zinc-500">{tnOrders > 0 ? ((metaPurchases / tnOrders) * 100).toFixed(0) : 0}% del total</p>
+                  <div className="flex items-center justify-between text-xs text-gray-600 dark:text-zinc-400">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-indigo-500 inline-block" />Meta {metaPct.toFixed(0)}%</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-emerald-400 inline-block" />Orgánico {organicPct.toFixed(0)}%</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">Ventas Meta</p>
+                      <p className="text-base font-semibold text-indigo-600 dark:text-indigo-400">{fmt(metaAttributedRevenue)}</p>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">{metaPurchases} órdenes</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-400 dark:text-zinc-500">Órdenes orgánicas</p>
-                      <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{organicOrders}</p>
-                      <p className="text-xs text-gray-400 dark:text-zinc-500">{tnOrders > 0 ? ((organicOrders / tnOrders) * 100).toFixed(0) : 0}% del total</p>
+                    <div>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">Ventas orgánicas</p>
+                      <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">{fmt(organicRevenue)}</p>
+                      <p className="text-xs text-gray-400 dark:text-zinc-500">{organicOrders} órdenes</p>
                     </div>
                   </div>
                 </div>
-
-                {/* ROAS & efficiency */}
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-500 dark:text-zinc-500 font-medium uppercase tracking-wide">Eficiencia real de Meta</p>
-
-                  <div className="space-y-3">
-                    <MetricRow
-                      label="ROAS real (ventas TN / gasto Meta)"
-                      value={trueRoas ? `${trueRoas.toFixed(2)}x` : '—'}
-                      note="Total vendido en TN dividido gasto en Meta — incluye ventas orgánicas"
-                      highlight={trueRoas != null && trueRoas >= 5 ? 'green' : trueRoas != null && trueRoas >= 3 ? 'yellow' : 'red'}
-                    />
-                    <MetricRow
-                      label="ROAS reportado por Meta"
-                      value={reportedRoas ? `${reportedRoas.toFixed(2)}x` : '—'}
-                      note="Según atribución del pixel de Meta"
-                      highlight="neutral"
-                    />
-                    {trueRoas != null && reportedRoas != null && (
-                      <MetricRow
-                        label="Diferencia de atribución"
-                        value={`${((reportedRoas - trueRoas) / trueRoas * 100).toFixed(0)}%`}
-                        note={reportedRoas > trueRoas
-                          ? 'Meta sobre-reporta vs ventas reales'
-                          : 'Meta sub-reporta vs ventas reales'}
-                        highlight={reportedRoas > trueRoas ? 'yellow' : 'green'}
-                      />
-                    )}
-                    <MetricRow
-                      label="Revenue por $ invertido en Meta"
-                      value={trueRoas ? `$${trueRoas.toFixed(2)}` : '—'}
-                      note="Por cada peso invertido en Meta, ingresó este monto total"
-                      highlight="neutral"
-                    />
-                    <MetricRow
-                      label="CPA real (TN)"
-                      value={tnOrders > 0 && metaSpend > 0 ? fmt(metaSpend / tnOrders) : '—'}
-                      note="Gasto Meta / total órdenes TN (incluyendo orgánicas)"
-                      highlight="neutral"
-                    />
+                {/* Key ROAS metrics */}
+                <div className="space-y-2 border-l border-gray-100 dark:border-zinc-800 pl-4">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-zinc-400">ROAS real (TN / Meta)</span>
+                    <span className={`font-semibold ${trueRoas != null && trueRoas >= 5 ? 'text-emerald-600 dark:text-emerald-400' : trueRoas != null && trueRoas >= 3 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500'}`}>
+                      {trueRoas ? `${trueRoas.toFixed(2)}x` : '—'}
+                    </span>
                   </div>
-
-                  <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg">
-                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">💡 Interpretación</p>
-                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      {trueRoas != null && reportedRoas != null && reportedRoas > trueRoas
-                        ? `Meta atribuye más ventas de las que aparecen en Tiendanube. Esto es común por la ventana de atribución de 7 días de Meta. El ROAS real del negocio es ${trueRoas.toFixed(2)}x.`
-                        : `Los datos de Meta y Tiendanube están alineados. El ${organicPct.toFixed(0)}% de las ventas es orgánico, lo que indica buen desempeño del canal directo.`
-                      }
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-zinc-400">ROAS reportado por Meta</span>
+                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{reportedRoas ? `${reportedRoas.toFixed(2)}x` : '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-zinc-400">CPA real (gasto / órdenes TN)</span>
+                    <span className="font-semibold text-gray-700 dark:text-zinc-300">{tnOrders > 0 && metaSpend > 0 ? fmt(metaSpend / tnOrders) : '—'}</span>
+                  </div>
+                  {trueRoas != null && reportedRoas != null && Math.abs(reportedRoas - trueRoas) > 0.5 && (
+                    <p className="text-micro text-amber-600 dark:text-amber-400 mt-2 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                      Meta {reportedRoas > trueRoas ? 'sobre-reporta' : 'sub-reporta'} vs ventas reales de TN
                     </p>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -513,10 +484,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             {tn?.payment_methods && Object.keys(tn.payment_methods).length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de pago</h2>
-                <DonutChart
+                <HBarChart
                   items={Object.entries(tn.payment_methods as Record<string, number>).sort((a, b) => b[1] - a[1])}
                   total={tn.total_orders}
-                  hue="violet"
+                  colorClass="bg-violet-500"
+                  revenue={tn.payment_revenue as Record<string, number> | undefined}
                 />
               </div>
             )}
@@ -525,10 +497,10 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             {tn?.shipping_methods && Object.keys(tn.shipping_methods).length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de envío</h2>
-                <DonutChart
+                <HBarChart
                   items={Object.entries(tn.shipping_methods as Record<string, number>).sort((a, b) => b[1] - a[1])}
                   total={tn.total_orders}
-                  hue="sky"
+                  colorClass="bg-sky-500"
                 />
               </div>
             )}
@@ -590,8 +562,8 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
 
 // ── Sub-components ─────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color, tooltip }: {
-  label: string; value: string; sub: string; color: string; tooltip?: string
+function KpiCard({ label, value, sub, color, tooltip, delta }: {
+  label: string; value: string; sub: string; color: string; tooltip?: string; delta?: number | null
 }) {
   const borderL: Record<string, string> = {
     indigo:  'border-l-indigo-400 dark:border-l-indigo-500',
@@ -641,119 +613,49 @@ function KpiCard({ label, value, sub, color, tooltip }: {
         <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
         {tooltip && <InfoTooltip text={tooltip} />}
       </div>
-      <p className={`text-3xl font-bold tabular-nums leading-none ${vc}`}>{value}</p>
+      <div className="flex items-end gap-2">
+        <p className={`text-3xl font-bold tabular-nums leading-none ${vc}`}>{value}</p>
+        {delta != null && (
+          <span className={`text-xs font-semibold mb-0.5 ${delta >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+            {delta >= 0 ? '↑' : '↓'}{Math.abs(delta).toFixed(0)}%
+          </span>
+        )}
+      </div>
       <p className="text-xs text-gray-400 dark:text-zinc-600 mt-2">{sub}</p>
     </div>
   )
 }
 
-function MetricRow({ label, value, note, highlight }: {
-  label: string; value: string; note: string; highlight: 'green' | 'yellow' | 'red' | 'neutral'
+function HBarChart({ items, total, colorClass, revenue }: {
+  items: [string, number][]
+  total: number
+  colorClass: string
+  revenue?: Record<string, number>
 }) {
-  const colors = {
-    green:   'text-emerald-600 dark:text-emerald-400',
-    yellow:  'text-amber-600 dark:text-amber-400',
-    red:     'text-red-600 dark:text-red-400',
-    neutral: 'text-gray-800 dark:text-zinc-200',
-  }
+  const maxCount = Math.max(...items.map(([, c]) => c), 1)
   return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-gray-100 dark:border-zinc-800 last:border-0">
-      <div>
-        <p className="text-xs text-gray-600 dark:text-zinc-400">{label}</p>
-        <p className="text-xs text-gray-400 dark:text-zinc-600 mt-0.5">{note}</p>
-      </div>
-      <p className={`text-base font-semibold shrink-0 ${colors[highlight]}`}>{value}</p>
-    </div>
-  )
-}
-
-function DonutChart({ items, total, hue }: {
-  items: [string, number][];
-  total: number;
-  hue: 'violet' | 'sky';
-}) {
-  const cx = 40, cy = 40, r = 28, sw = 11;
-
-  const palettes = {
-    violet: ['#7c3aed', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'],
-    sky:    ['#0284c7', '#38bdf8', '#7dd3fc', '#bae6fd', '#e0f2fe'],
-  };
-  const palette = palettes[hue];
-
-  function polarXY(angleDeg: number) {
-    const rad = (angleDeg - 90) * Math.PI / 180;
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  }
-
-  let offset = 0;
-  const topLabel = items[0]?.[0]?.replace(/_/g, ' ') ?? '';
-  const topPct   = total > 0 ? ((items[0]?.[1] ?? 0) / total) * 100 : 0;
-  const shortLabel = topLabel.length > 9 ? topLabel.slice(0, 8) + '…' : topLabel;
-
-  return (
-    <div>
-      <svg viewBox="0 0 80 80" className="w-full max-w-[120px] mx-auto block">
-        {/* Track ring */}
-        <circle cx={cx} cy={cy} r={r} fill="none"
-          strokeWidth={sw} stroke="currentColor"
-          className="text-gray-100 dark:text-zinc-800" />
-
-        {/* Segments */}
-        {items.map(([name, count], i) => {
-          const frac = total > 0 ? count / total : 0;
-          const startDeg = offset * 360;
-          const endDeg   = (offset + frac) * 360;
-          offset += frac;
-          const diff = endDeg - startDeg;
-          if (diff <= 0) return null;
-          const color = palette[i % palette.length];
-          if (diff >= 359.9) {
-            return (
-              <circle key={name} cx={cx} cy={cy} r={r}
-                fill="none" stroke={color} strokeWidth={sw} />
-            );
-          }
-          const s = polarXY(startDeg);
-          const e = polarXY(endDeg);
-          const large = diff > 180 ? 1 : 0;
-          return (
-            <path key={name}
-              d={`M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r} 0 ${large} 1 ${e.x.toFixed(2)},${e.y.toFixed(2)}`}
-              fill="none" stroke={color} strokeWidth={sw} strokeLinecap="butt" />
-          );
-        })}
-
-        {/* Center labels */}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="10" fontWeight="700"
-          className="fill-gray-800 dark:fill-zinc-200">
-          {topPct.toFixed(0)}%
-        </text>
-        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="5.5"
-          className="fill-gray-400 dark:fill-zinc-500 capitalize">
-          {shortLabel}
-        </text>
-      </svg>
-
-      <div className="space-y-1.5 mt-3">
-        {items.map(([name, count], i) => {
-          const pct = total > 0 ? (count / total) * 100 : 0;
-          return (
-            <div key={name} className="flex items-center justify-between text-xs gap-1">
-              <span className="flex items-center gap-1.5 text-gray-600 dark:text-zinc-400 min-w-0">
-                <span className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: palette[i % palette.length] }} />
-                <span className="truncate capitalize">{name.replace(/_/g, ' ')}</span>
-              </span>
-              <span className="font-semibold text-gray-700 dark:text-zinc-300 shrink-0">
-                {pct.toFixed(0)}%
-                <span className="font-normal text-gray-400 dark:text-zinc-600 ml-1">({count})</span>
+    <div className="space-y-2.5">
+      {items.map(([name, count]) => {
+        const pct = total > 0 ? (count / total) * 100 : 0
+        const barPct = (count / maxCount) * 100
+        const rev = revenue?.[name]
+        return (
+          <div key={name}>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-gray-600 dark:text-zinc-400 capitalize truncate max-w-[60%]">{name.replace(/_/g, ' ')}</span>
+              <span className="font-semibold text-gray-700 dark:text-zinc-300 shrink-0 ml-2">
+                {count} <span className="font-normal text-gray-400 dark:text-zinc-600">({pct.toFixed(0)}%)</span>
+                {rev != null && <span className="font-normal text-gray-400 dark:text-zinc-600 ml-1">· {rev >= 1_000_000 ? `$${(rev/1_000_000).toFixed(1)}M` : rev >= 1_000 ? `$${Math.round(rev/1000)}K` : `$${rev}`}</span>}
               </span>
             </div>
-          );
-        })}
-      </div>
+            <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-2">
+              <div className={`h-2 rounded-full ${colorClass} opacity-80`} style={{ width: `${barPct}%` }} />
+            </div>
+          </div>
+        )
+      })}
     </div>
-  );
+  )
 }
 
 function StatPill({ label, value }: { label: string; value: string }) {
