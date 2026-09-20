@@ -215,11 +215,11 @@ function buildTNSummary(orders) {
   if (shipping_counts['Retiro']) shipping_methods['Retiro'] = shipping_counts['Retiro']
   if (shipping_counts['Moto'])   shipping_methods['Moto']   = shipping_counts['Moto']
 
-  // Facturación por método de envío (para mostrar $ además de %)
+  // Costo de envío por método (shipping_cost_owner = lo que pagó el comprador por el envío)
   const shipping_method_revenue = {}
   paid.forEach(o => {
     const cat = normalizeShipping(o)
-    shipping_method_revenue[cat] = (shipping_method_revenue[cat] || 0) + parseFloat(o.total || '0')
+    shipping_method_revenue[cat] = (shipping_method_revenue[cat] || 0) + parseFloat(o.shipping_cost_owner || '0')
   })
   Object.keys(shipping_method_revenue).forEach(k => {
     shipping_method_revenue[k] = Math.round(shipping_method_revenue[k])

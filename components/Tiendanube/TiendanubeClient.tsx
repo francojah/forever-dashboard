@@ -615,7 +615,7 @@ function HBarChart({ items, total, colorClass, revenue }: {
               <span className="text-gray-600 dark:text-zinc-400 capitalize truncate max-w-[60%]">{name.replace(/_/g, ' ')}</span>
               <span className="font-semibold text-gray-700 dark:text-zinc-300 shrink-0 ml-2">
                 {count} <span className="font-normal text-gray-400 dark:text-zinc-600">({pct.toFixed(0)}%)</span>
-                {rev != null && <span className="font-normal text-gray-400 dark:text-zinc-600 ml-1">· {rev >= 1_000_000 ? `$${(rev/1_000_000).toFixed(1)}M` : rev >= 1_000 ? `$${Math.round(rev/1000)}K` : `$${rev}`}</span>}
+                {rev != null && <span className="font-normal text-gray-400 dark:text-zinc-600 ml-1">· envío {rev >= 1_000_000 ? `$${(rev/1_000_000).toFixed(1)}M` : rev >= 1_000 ? `$${Math.round(rev/1000)}K` : `$${rev}`}</span>}
               </span>
             </div>
             <div className="w-full bg-gray-100 dark:bg-zinc-800 rounded-full h-2">

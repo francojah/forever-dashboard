@@ -186,11 +186,11 @@ function buildSummary(orders: any[]) {
   if (shippingCounts['Retiro']) shipping_methods['Retiro'] = shippingCounts['Retiro']
   if (shippingCounts['Moto'])   shipping_methods['Moto']   = shippingCounts['Moto']
 
-  // Facturación por método de envío (para mostrar $ además de %)
+  // Costo de envío por método (shipping_cost_owner = lo que pagó el comprador por el envío)
   const shipping_method_revenue: Record<string, number> = {}
-  paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string; total?: string }) => {
+  paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string; shipping_cost_owner?: string }) => {
     const cat = normalizeShipping(o)
-    shipping_method_revenue[cat] = Math.round((shipping_method_revenue[cat] || 0) + parseFloat(o.total || '0'))
+    shipping_method_revenue[cat] = Math.round((shipping_method_revenue[cat] || 0) + parseFloat(o.shipping_cost_owner || '0'))
   })
 
   const total_units_sold = paid.reduce((sum: number, o: { products?: { quantity?: string }[] }) =>
