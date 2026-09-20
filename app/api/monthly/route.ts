@@ -29,12 +29,12 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/monthly  { month, meta_spend, tn_revenue, tn_orders, tn_units, notes }
+// POST /api/monthly  { month, meta_spend, tn_revenue, tn_orders, tn_units, merch_cost, notes }
 // Uses upsert — creates or updates by month key
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { month, meta_spend, tn_revenue, tn_orders, tn_units, notes } = body
+    const { month, meta_spend, tn_revenue, tn_orders, tn_units, merch_cost, notes } = body
     if (!month) return NextResponse.json({ error: 'Falta month' }, { status: 400 })
 
     const { data, error } = await sb()
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
         tn_revenue:  tn_revenue  != null ? Number(tn_revenue)  : null,
         tn_orders:   tn_orders   != null ? Number(tn_orders)   : null,
         tn_units:    tn_units    != null ? Number(tn_units)    : null,
+        merch_cost:  merch_cost  != null ? Number(merch_cost)  : null,
         notes:       notes ?? null,
         updated_at:  new Date().toISOString(),
       }, { onConflict: 'month' })
