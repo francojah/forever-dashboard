@@ -215,6 +215,16 @@ function buildTNSummary(orders) {
   if (shipping_counts['Retiro']) shipping_methods['Retiro'] = shipping_counts['Retiro']
   if (shipping_counts['Moto'])   shipping_methods['Moto']   = shipping_counts['Moto']
 
+  // Facturación por método de envío (para mostrar $ además de %)
+  const shipping_method_revenue = {}
+  paid.forEach(o => {
+    const cat = normalizeShipping(o)
+    shipping_method_revenue[cat] = (shipping_method_revenue[cat] || 0) + parseFloat(o.total || '0')
+  })
+  Object.keys(shipping_method_revenue).forEach(k => {
+    shipping_method_revenue[k] = Math.round(shipping_method_revenue[k])
+  })
+
   // Provincias / geografía
   const provinces = {}
   paid.forEach(o => {
@@ -271,6 +281,7 @@ function buildTNSummary(orders) {
     total_installments_cost,
     total_orders_with_installments,
     shipping_methods,
+    shipping_method_revenue,
     top_provinces,
     shipping_revenue,
     total_units_sold,

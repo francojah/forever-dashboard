@@ -497,11 +497,20 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             {tn?.shipping_methods && Object.keys(tn.shipping_methods).length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de envío</h2>
-                <HBarChart
-                  items={Object.entries(tn.shipping_methods as Record<string, number>).sort((a, b) => b[1] - a[1])}
-                  total={tn.total_orders}
-                  colorClass="bg-sky-500"
-                />
+                {(() => {
+                  // Mapa de nombres para mostrar: "Retiro" → "Moto Express"
+                  const SHIPPING_NAME: Record<string, string> = { Retiro: 'Moto Express' }
+                  const rename = (k: string) => SHIPPING_NAME[k] ?? k
+                  const raw = tn.shipping_methods as Record<string, number>
+                  const rawRev = tn.shipping_method_revenue as Record<string, number> | undefined
+                  const items: [string, number][] = Object.entries(raw)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([k, v]) => [rename(k), v])
+                  const revenue = rawRev
+                    ? Object.fromEntries(Object.entries(rawRev).map(([k, v]) => [rename(k), v]))
+                    : undefined
+                  return <HBarChart items={items} total={tn.total_orders} colorClass="bg-sky-500" revenue={revenue} />
+                })()}
               </div>
             )}
 

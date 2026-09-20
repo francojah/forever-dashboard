@@ -186,6 +186,13 @@ function buildSummary(orders: any[]) {
   if (shippingCounts['Retiro']) shipping_methods['Retiro'] = shippingCounts['Retiro']
   if (shippingCounts['Moto'])   shipping_methods['Moto']   = shippingCounts['Moto']
 
+  // Facturación por método de envío (para mostrar $ además de %)
+  const shipping_method_revenue: Record<string, number> = {}
+  paid.forEach((o: { shipping_option?: { name?: string }; shipping?: { option_reference?: string }; shipping_pickup_type?: string; total?: string }) => {
+    const cat = normalizeShipping(o)
+    shipping_method_revenue[cat] = Math.round((shipping_method_revenue[cat] || 0) + parseFloat(o.total || '0'))
+  })
+
   const total_units_sold = paid.reduce((sum: number, o: { products?: { quantity?: string }[] }) =>
     sum + (o.products || []).reduce((s, p) => s + parseInt(p.quantity || '1'), 0), 0)
 
@@ -229,7 +236,7 @@ function buildSummary(orders: any[]) {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
     unique_customers, top_products, payment_methods, payment_revenue,
     total_installments_cost, total_orders_with_installments,
-    shipping_methods, top_provinces, shipping_revenue, total_units_sold,
+    shipping_methods, shipping_method_revenue, top_provinces, shipping_revenue, total_units_sold,
     repeat_customers, day_of_week_stats,
   }
 }

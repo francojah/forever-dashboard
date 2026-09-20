@@ -210,6 +210,7 @@ export type TNSummary = {
   total_installments_cost?: number                    // cuotas sin interés absorbidas (campo TN: installments_cost por orden)
   total_orders_with_installments?: number             // cantidad de pedidos que usaron cuotas
   shipping_methods?: Record<string, number>
+  shipping_method_revenue?: Record<string, number>     // ARS facturado por método de envío
   top_provinces?: { name: string; count: number }[]
   shipping_revenue?: number
   total_units_sold?: number
