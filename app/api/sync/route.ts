@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 
 let META_TOKEN                = process.env.META_ACCESS_TOKEN || ''
 const DEFAULT_ACCOUNT_ID      = process.env.META_ACCOUNT_ID || 'act_1614288152915913'
+let ACCOUNT_ID                = DEFAULT_ACCOUNT_ID  // overridden per-request from app_config
 const SUPABASE_URL            = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY            = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const META_API                = 'https://graph.facebook.com/v21.0'
@@ -191,9 +192,10 @@ export async function POST() {
   }
 
   // Cuenta activa de Meta: configurable desde Configuración (multi-cuenta)
-  let ACCOUNT_ID = DEFAULT_ACCOUNT_ID
+  ACCOUNT_ID = DEFAULT_ACCOUNT_ID
   try {
-    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_active_account').single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_active_account').single() as any
     const id = (data?.value as { account_id?: string } | null)?.account_id
     if (id) ACCOUNT_ID = id
   } catch { /* usa default */ }
