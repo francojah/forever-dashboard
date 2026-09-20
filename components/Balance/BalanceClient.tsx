@@ -964,7 +964,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               pctVal={pnl.tn_revenue > 0 ? pnl.platform / pnl.tn_revenue : 0}
               note="Comisión de la plataforma Tiendanube · configurá el % de tu plan en Ajustes"
               indent />
-            <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${PACKAGING_PER_ORD.toLocaleString('es-AR')})`} value={-pnl.packaging}
+            <PnLRow label={`Packaging (${pnl.tn_orders} órd × $${packagingPerOrder.toLocaleString('es-AR')})`} value={-pnl.packaging}
               pctVal={pnl.tn_revenue > 0 ? pnl.packaging / pnl.tn_revenue : 0} indent />
             {(pnl.cuotas_is_real || cuotasCostPct > 0) && pnl.cuotas_cost > 0 && (
               <PnLRow
@@ -1026,7 +1026,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         </table>
         <div className="px-5 py-2.5 bg-gray-50 dark:bg-zinc-800/30 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-micro text-gray-400 dark:text-zinc-600">
-            Merch ${UNIT_COST.toLocaleString('es-AR')}/un × {UNITS_PER_ORDER} + envío {pnl.shipping_is_real ? 'real TN' : `~${shippingFallbackPct.toFixed(0)}%`} + TN {tnCommissionPct.toFixed(1)}% + packaging ${PACKAGING_PER_ORD.toLocaleString('es-AR')}/ord{pnl.cuotas_is_real ? ' + cuotas real TN' : cuotasCostPct > 0 ? ` + cuotas ~${cuotasCostPct}% est.` : ''}
+            Merch ${unitCostDefault.toLocaleString('es-AR')}/un × {unitsPerOrder} + envío {pnl.shipping_is_real ? 'real TN' : `~${shippingFallbackPct.toFixed(0)}%`} + TN {tnCommissionPct.toFixed(1)}% + packaging ${packagingPerOrder.toLocaleString('es-AR')}/ord{pnl.cuotas_is_real ? ' + cuotas real TN' : cuotasCostPct > 0 ? ` + cuotas ~${cuotasCostPct}% est.` : ''}
           </p>
         </div>
       </div>
