@@ -202,7 +202,7 @@ function TNConnectionCard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/tiendanube/status')
+    fetch('/api/tn-status')
       .then(r => r.json())
       .then(d => { setStatus(d); setLoading(false) })
       .catch(() => setLoading(false))
