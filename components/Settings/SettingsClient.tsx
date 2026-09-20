@@ -617,23 +617,50 @@ export default function SettingsClient({ initialSettings }: Props) {
       {/* ── Tab: Costos ── */}
       {tab === 'costos' && (
         <div className="space-y-4">
+
+          {/* Explainer: how costs work */}
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 rounded-xl px-4 py-3.5 space-y-2">
+            <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01"/></svg>
+              Cómo se calcula el costo de mercadería
+            </p>
+            <div className="flex items-start gap-2 text-xs text-blue-700 dark:text-blue-300">
+              <div className="flex flex-col gap-1.5 w-full">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
+                  <span><strong>Costo por producto</strong> (sección de abajo) — si el producto tiene costo cargado, se usa ese valor exacto. Es el más preciso.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-blue-400 text-white text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
+                  <span><strong>Costo unitario default</strong> — si un producto NO tiene costo individual, se multiplica este valor × unidades vendidas. Se usa como fallback.</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-blue-600 dark:text-blue-400 opacity-80">
+              Para máxima exactitud en Balance y Analítica, cargá el costo de cada producto en la lista. El default solo aplica a los que no estén cargados.
+            </p>
+          </div>
+
           {/* Per-product costs (ProductCostsCard) */}
           <ProductCostsCard />
 
           {/* COGS fallback defaults */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Fallback COGS (cuando no hay costo por producto)</p>
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fallback — productos sin costo individual</p>
+              <span className="text-mini bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">Solo si falta costo</span>
+            </div>
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 divide-y divide-gray-100 dark:divide-zinc-800 shadow-sm">
               <FieldRow
                 label="Costo unitario default"
-                desc="ARS por unidad cuando un producto no tiene costo cargado individualmente."
+                desc="ARS por unidad para productos sin costo cargado individualmente. Puede no reflejar la variación entre productos."
                 prefix="$" suffix="ARS" step={100}
                 value={settings.unit_cost_default}
                 onChange={v => handleChange('unit_cost_default', v)}
               />
               <FieldRow
                 label="Packaging por orden"
-                desc="Costo de packaging e insumos (bolsas, papel tissue, etc.) por cada orden enviada."
+                desc="Costo de packaging e insumos (bolsas, papel tissue, etc.) por cada orden enviada. Aplica a todas las órdenes."
                 prefix="$" suffix="ARS" step={10}
                 value={settings.packaging_per_order}
                 onChange={v => handleChange('packaging_per_order', v)}

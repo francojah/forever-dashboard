@@ -121,7 +121,7 @@ export default function ProductCostsCard() {
               {filtered.length === 0 && <p className="text-xs text-gray-400 dark:text-zinc-500 py-3 text-center">Sin resultados.</p>}
             </div>
             <p className="text-mini text-gray-400 dark:text-zinc-600 mt-3">
-              Los costos alimentan el margen real por producto en <span className="text-brand">Analítica</span>. Moneda: {LOCALE === 'es-AR' ? 'ARS' : ''}.
+              Los costos alimentan el margen real por producto en <span className="text-brand">Analítica</span> y el P&L en <span className="text-brand">Balance</span>. Moneda: {LOCALE === 'es-AR' ? 'ARS' : ''}.
             </p>
           </>
         )}

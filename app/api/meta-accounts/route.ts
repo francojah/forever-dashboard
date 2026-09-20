@@ -31,24 +31,58 @@ export async function GET() {
   const token    = await getMetaToken(supabase)
   if (!token) return NextResponse.json({ error: 'Sin token de Meta' }, { status: 500 })
 
+  // account_status labels and mapper (declared outside try so they're in scope)
+  const STATUS_LABEL: Record<number, string> = { 1: 'Activa', 2: 'Desactivada', 3: 'Sin saldo', 9: 'En gracia', 100: 'Por cerrar', 101: 'Cerrada' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapAccount = (a: any) => ({ id: a.id as string, name: a.name as string, status: a.account_status as number, status_label: STATUS_LABEL[a.account_status as number] ?? `Estado ${a.account_status}`, currency: a.currency as string })
+  type MappedAccount = ReturnType<typeof mapAccount>
+
   try {
-    const res = await fetch(
-      `${META_API}/me/adaccounts?fields=id,name,account_status,currency&limit=50&access_token=${token}`,
+    // 1) Direct user ad accounts
+    const directRes = await fetch(
+      `${META_API}/me/adaccounts?fields=id,name,account_status,currency&limit=100&access_token=${token}`,
       { cache: 'no-store' },
     )
-    const json = await res.json()
-    if (json.error) throw new Error(json.error.message || 'Error de Meta API')
+    const directJson = await directRes.json()
+    if (directJson.error) throw new Error(directJson.error.message || 'Error de Meta API')
 
-    // account_status: 1=ACTIVE, 2=DISABLED, 3=UNSETTLED, 7=PENDING_RISK_REVIEW, 8=PENDING_SETTLEMENT, 9=IN_GRACE_PERIOD, 100=PENDING_CLOSURE, 101=CLOSED
-    const STATUS_LABEL: Record<number, string> = { 1: 'Activa', 2: 'Desactivada', 3: 'Sin saldo', 9: 'En gracia', 100: 'Por cerrar', 101: 'Cerrada' }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const accounts = (json.data || []).map((a: any) => ({
-      id:       a.id,
-      name:     a.name,
-      status:   a.account_status,
-      status_label: STATUS_LABEL[a.account_status] ?? `Estado ${a.account_status}`,
-      currency: a.currency,
-    }))
+    const directAccounts: MappedAccount[] = (directJson.data || []).map(mapAccount)
+
+    // 2) Business Manager accounts
+    let bizAccounts: MappedAccount[] = []
+    try {
+      const bizRes = await fetch(
+        `${META_API}/me/businesses?fields=id,name&limit=50&access_token=${token}`,
+        { cache: 'no-store' },
+      )
+      const bizJson = await bizRes.json()
+      if (!bizJson.error && Array.isArray(bizJson.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const biz of bizJson.data as any[]) {
+          for (const endpoint of ['owned_ad_accounts', 'client_ad_accounts']) {
+            try {
+              const r = await fetch(
+                `${META_API}/${biz.id}/${endpoint}?fields=id,name,account_status,currency&limit=100&access_token=${token}`,
+                { cache: 'no-store' },
+              )
+              const j = await r.json()
+              if (!j.error && Array.isArray(j.data)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                bizAccounts = bizAccounts.concat((j.data as any[]).map(mapAccount) as MappedAccount[])
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
+    } catch { /* Business Manager optional */ }
+
+    // Merge + deduplicate by account ID
+    const seen = new Set<string>()
+    const allAccounts: MappedAccount[] = []
+    for (const acc of [...directAccounts, ...bizAccounts]) {
+      if (!seen.has(acc.id)) { seen.add(acc.id); allAccounts.push(acc) }
+    }
+    const accounts = allAccounts
 
     // Cuenta activa guardada
     let activeAccountId = process.env.META_ACCOUNT_ID || ''

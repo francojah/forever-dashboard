@@ -781,32 +781,55 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         )}
       </div>
 
-      {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard
-          label="Ventas"
-          value={hasData ? fmt(pnl.tn_revenue) : '—'}
-          sub={hasData ? `${pnl.tn_orders} órdenes · AOV ${fmt(pnl.aov)}` : 'Sin datos'}
-          color={hasData ? 'border-l-blue-400' : 'border-l-gray-200 dark:border-l-zinc-700'}
-        />
-        <KpiCard
-          label="Ganancia bruta"
-          value={hasData ? fmt(pnl.gross_profit) : '—'}
-          sub={hasData ? `${pct(pnl.margin_gross)} de ventas` : 'antes de Meta'}
-          color={hasData ? (pnl.gross_profit >= 0 ? 'border-l-emerald-400' : 'border-l-red-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
-        />
-        <KpiCard
-          label="Resultado pub."
-          value={hasData ? fmt(pnl.ad_result) : '—'}
-          sub={hasData ? `Meta: ${fmt(pnl.meta_spend)}` : 'después de Meta'}
-          color={hasData ? (pnl.ad_result >= 0 ? 'border-l-emerald-400' : 'border-l-amber-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
-        />
-        <KpiCard
-          label="Resultado neto"
-          value={hasData ? fmt(pnl.net_result) : '—'}
-          sub={hasData ? `${pct(Math.abs(pnl.margin_net))} de ventas` : 'después de todo'}
-          color={hasData ? (pnl.net_result >= 0 ? 'border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900') : 'border-l-gray-200 dark:border-l-zinc-700'}
-        />
+      {/* ── KPI Cards: hero + secondary ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3">
+        {/* Hero: Resultado neto */}
+        <div className={`rounded-xl border border-l-[4px] p-5 shadow-sm flex flex-col justify-between min-h-[120px] ${
+          !hasData ? 'border-gray-100 dark:border-zinc-800 border-l-gray-200 dark:border-l-zinc-700 bg-white dark:bg-zinc-900'
+          : pnl.net_result >= 0
+            ? 'border-gray-100 dark:border-zinc-800 border-l-emerald-500 bg-gradient-to-br from-emerald-50/70 to-white dark:from-emerald-950/30 dark:to-zinc-900'
+            : 'border-gray-100 dark:border-zinc-800 border-l-red-500 bg-gradient-to-br from-red-50/70 to-white dark:from-red-950/30 dark:to-zinc-900'
+        }`}>
+          <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Resultado neto</p>
+          <div>
+            <p className={`text-4xl font-bold tabular-nums leading-none mt-2 ${
+              !hasData ? 'text-gray-300 dark:text-zinc-700'
+              : pnl.net_result >= 0 ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-red-600 dark:text-red-400'
+            }`}>{hasData ? fmt(pnl.net_result) : '—'}</p>
+            {hasData && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${pnl.net_result >= 0 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400'}`}>
+                  {pct(Math.abs(pnl.margin_net))} margen
+                </span>
+                <span className="text-xs text-gray-400 dark:text-zinc-500">ROI {pnl.roi_negocio.toFixed(0)}%</span>
+              </div>
+            )}
+          </div>
+          {!hasData && <p className="text-xs text-gray-400 dark:text-zinc-500">Después de todos los costos</p>}
+        </div>
+
+        {/* Secondary: 3 cards in grid */}
+        <div className="grid grid-cols-3 gap-3">
+          <KpiCard
+            label="Ventas"
+            value={hasData ? fmt(pnl.tn_revenue) : '—'}
+            sub={hasData ? `${pnl.tn_orders} órd · AOV ${fmt(pnl.aov)}` : 'Sin datos'}
+            color={hasData ? 'border-l-blue-400' : 'border-l-gray-200 dark:border-l-zinc-700'}
+          />
+          <KpiCard
+            label="Ganancia bruta"
+            value={hasData ? fmt(pnl.gross_profit) : '—'}
+            sub={hasData ? `${pct(pnl.margin_gross)} ventas` : 'antes de Meta'}
+            color={hasData ? (pnl.gross_profit >= 0 ? 'border-l-emerald-400' : 'border-l-red-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
+          />
+          <KpiCard
+            label="Resultado pub."
+            value={hasData ? fmt(pnl.ad_result) : '—'}
+            sub={hasData ? `Meta ${fmt(pnl.meta_spend)}` : 'después de Meta'}
+            color={hasData ? (pnl.ad_result >= 0 ? 'border-l-emerald-400' : 'border-l-amber-400') : 'border-l-gray-200 dark:border-l-zinc-700'}
+          />
+        </div>
       </div>
 
       {/* ── ROI Cards ──────────────────────────────────────────────────────── */}
@@ -897,6 +920,53 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           </div>
         </div>
       )}
+
+      {/* ── Monthly Trend Chart ────────────────────────────────────────────── */}
+      {mode !== 'year' && (() => {
+        const bars = annualRows.filter(r => r.data.tn_revenue > 0 || r.data.meta_spend > 0 || r.key === curKey)
+        if (bars.length === 0) return null
+        const maxRev = Math.max(...bars.map(r => r.pnl.tn_revenue), 1)
+        return (
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-3">Ventas y resultado neto — {year}</p>
+            <div className="flex items-end gap-1.5" style={{ height: 72 }}>
+              {annualRows.map(row => {
+                if (row.key > curKey) return (
+                  <div key={row.m} className="flex-1 flex flex-col items-center gap-0.5" title={MONTH_SHORT[row.m - 1]}>
+                    <div className="w-full rounded-t bg-gray-100 dark:bg-zinc-800" style={{ height: 8 }} />
+                    <span className="text-[9px] text-gray-300 dark:text-zinc-700">{MONTH_SHORT[row.m - 1]}</span>
+                  </div>
+                )
+                const revH = Math.round((row.pnl.tn_revenue / maxRev) * 56)
+                const netIsPos = row.pnl.net_result >= 0
+                const netH = Math.round((Math.abs(row.pnl.net_result) / maxRev) * 56)
+                const isSelected = mode === 'month' ? row.m === selMonth : mode === 'quarter' ? Math.ceil(row.m / 3) === selQ : false
+                return (
+                  <button key={row.m} className="flex-1 flex flex-col items-center gap-0.5 group" onClick={() => { if (mode === 'month') setSelMonth(row.m); else setSelQ(Math.ceil(row.m / 3)) }} title={`${MONTH_SHORT[row.m - 1]}: ${fmt(row.pnl.tn_revenue)} ventas, ${fmt(row.pnl.net_result)} neto`}>
+                    <div className="relative w-full flex flex-col-reverse" style={{ height: 60 }}>
+                      {/* Revenue bar (background) */}
+                      <div className={`absolute inset-x-0 bottom-0 rounded-t transition-opacity ${isSelected ? 'opacity-100' : 'opacity-50 group-hover:opacity-80'}`}
+                        style={{ height: revH, background: 'rgba(96,165,250,0.3)' }} />
+                      {/* Net result overlay */}
+                      {row.pnl.tn_revenue > 0 && (
+                        <div className={`absolute inset-x-0.5 bottom-0 rounded-t transition-opacity ${isSelected ? 'opacity-100' : 'opacity-60 group-hover:opacity-90'}`}
+                          style={{ height: Math.min(netH, revH), background: netIsPos ? 'rgba(16,185,129,0.7)' : 'rgba(239,68,68,0.7)' }} />
+                      )}
+                      {/* Selected ring */}
+                      {isSelected && <div className="absolute inset-0 rounded-t ring-2 ring-violet-400 ring-inset" />}
+                    </div>
+                    <span className={`text-[9px] font-medium tabular-nums leading-none ${isSelected ? 'text-violet-500 dark:text-violet-400' : 'text-gray-400 dark:text-zinc-600'}`}>{MONTH_SHORT[row.m - 1]}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1"><div className="w-3 h-2 rounded-sm" style={{ background: 'rgba(96,165,250,0.4)' }} /><span className="text-[10px] text-gray-400 dark:text-zinc-500">Ventas</span></div>
+              <div className="flex items-center gap-1"><div className="w-3 h-2 rounded-sm bg-emerald-400 opacity-70" /><span className="text-[10px] text-gray-400 dark:text-zinc-500">Resultado neto</span></div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── P&L Table ──────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">

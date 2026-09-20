@@ -7,30 +7,16 @@ import { createClientBrowser } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ReferenceLine } from 'recharts'
 
-// Estructura de costos Forever Basics (actualizada Jun 2026)
-// Desglose por orden con ticket promedio $57.500 (3 unidades):
-//   Mercadería:  3 un × $6.500            = $19.500
-//   Envío:       10% × $57.500            =  $5.750
-//   Plataforma:  2.5% × $57.500 (TN fee)  =  $1.438
-//   Packaging:   fijo                     =    $350
-//   ─────────────────────────────────────────────────
-//   TOTAL costo/orden                     = $27.038
-//
-// Margen real:     ($57.500 − $27.038) / $57.500 ≈ 53%
-// BREAKEVEN_CPA:   $57.500 − $27.038             ≈ $30.462
-const AOV_DEFAULT    = 57500   // ARS — ticket promedio estimado
-const UNIT_COST      = 6500    // ARS — costo mercadería por unidad
-const UNITS_PER_ORDER= 3       // unidades promedio por orden
-const SHIPPING_PCT   = 0.10    // envío = 10% del ticket
-const PLATFORM_PCT   = 0.025   // comisión TN = 2.5% del ticket
-const PACKAGING      = 350     // ARS — packaging por orden
-const COST_PER_ORDER = Math.round(
-  UNITS_PER_ORDER * UNIT_COST +
-  (SHIPPING_PCT + PLATFORM_PCT) * AOV_DEFAULT +
-  PACKAGING
-) // ≈ 27.038
-const MARGIN         = parseFloat(((AOV_DEFAULT - COST_PER_ORDER) / AOV_DEFAULT).toFixed(4)) // ≈ 0.5299 (53%)
-const BREAKEVEN_CPA  = AOV_DEFAULT - COST_PER_ORDER // ≈ 30.462
+// Defaults used as initial state before /api/settings loads
+const AOV_DEFAULT    = 57500
+const DEF_UNIT_COST      = 6500
+const DEF_UNITS_PER_ORDER= 3
+const DEF_SHIPPING_PCT   = 0.10
+const DEF_PLATFORM_PCT   = 0.025
+const DEF_PACKAGING      = 350
+const _DEF_COST = Math.round(DEF_UNITS_PER_ORDER * DEF_UNIT_COST + (DEF_SHIPPING_PCT + DEF_PLATFORM_PCT) * AOV_DEFAULT + DEF_PACKAGING)
+const DEF_MARGIN        = parseFloat(((AOV_DEFAULT - _DEF_COST) / AOV_DEFAULT).toFixed(4))
+const DEF_BREAKEVEN_CPA = AOV_DEFAULT - _DEF_COST
 const AUTO_REFRESH_SECS = 180
 const TRAFFIC_GOALS = ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'BRAND_AWARENESS', 'POST_ENGAGEMENT']
 
@@ -260,6 +246,26 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const [aiSummary, setAiSummary]         = useState<string | null>(null)
   const [aiLoading, setAiLoading]         = useState(false)
   const [aiExpanded, setAiExpanded]       = useState(true)
+
+  // Live cost settings (override defaults)
+  const [dynMargin, setDynMargin]         = useState(DEF_MARGIN)
+  const [dynBreakevenCpa, setDynBkCpa]    = useState(DEF_BREAKEVEN_CPA)
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      if (!d || d.error) return
+      const unitCost   = Number(d.unit_cost_default  ?? DEF_UNIT_COST)
+      const unitsOrd   = Number(d.units_per_order    ?? DEF_UNITS_PER_ORDER)
+      const shipPct    = Number(d.shipping_pct       ?? DEF_SHIPPING_PCT * 100) / 100
+      const platPct    = Number(d.tn_commission_pct  ?? DEF_PLATFORM_PCT * 100) / 100
+      const packaging  = Number(d.packaging_per_order ?? DEF_PACKAGING)
+      const bkCpa      = Number(d.breakeven_cpa      ?? 0)
+      const costPerOrd = Math.round(unitsOrd * unitCost + (shipPct + platPct) * AOV_DEFAULT + packaging)
+      const margin     = (AOV_DEFAULT - costPerOrd) / AOV_DEFAULT
+      setDynMargin(margin > 0 && margin < 1 ? margin : DEF_MARGIN)
+      setDynBkCpa(bkCpa > 0 ? bkCpa : AOV_DEFAULT - costPerOrd)
+    }).catch(() => {})
+  }, [])
 
   // Intraday Meta data
   const [todayMeta, setTodayMeta]         = useState<{ spend: number; purchases: number } | null>(null)
@@ -492,12 +498,12 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
 
   // ── Financial insights ────────────────────────────────────────────
   const periodDays       = period === 'last_30d' ? 30 : period === 'last_7d' ? 7 : 1
-  const grossProfit      = tnRevenue != null ? Math.round(tnRevenue * MARGIN - metaSpend) : null
+  const grossProfit      = tnRevenue != null ? Math.round(tnRevenue * dynMargin - metaSpend) : null
   const contributionPct  = tnRevenue != null && tnRevenue > 0 ? Math.round((grossProfit ?? 0) / tnRevenue * 100) : null
 
   // Break-even tracker (purchases needed to reach breakeven daily spend)
   // beCurrentPurchases must be consistent with metaPurchases shown in the KPI
-  const beTargetPurchases  = dailyBudget > 0 ? Math.ceil(dailyBudget / BREAKEVEN_CPA) : null
+  const beTargetPurchases  = dailyBudget > 0 ? Math.ceil(dailyBudget / dynBreakevenCpa) : null
   const beCurrentPurchases = period === 'today' ? metaPurchases : null
   const beRemaining        = beTargetPurchases != null && beCurrentPurchases != null
     ? Math.max(0, beTargetPurchases - beCurrentPurchases)
@@ -520,7 +526,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const projRevenueMonth  = dailyRevAvg7d > 0 ? Math.round(dailyRevAvg7d * daysInMonth) : null
   const projSpendMonth    = dailySpendAvg7d > 0 ? Math.round(dailySpendAvg7d * daysInMonth) : null
   const projProfitMonth   = projRevenueMonth != null && projSpendMonth != null
-    ? Math.round(projRevenueMonth * MARGIN - projSpendMonth)
+    ? Math.round(projRevenueMonth * dynMargin - projSpendMonth)
     : null
 
   // Fatigue predictor
@@ -556,7 +562,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           tnRevenue, topAdset,
           alerts: summary.alerts?.slice(0, 3) ?? [],
           period: PERIOD_SHORT[period],
-          breakeven: BREAKEVEN_CPA,
+          breakeven: dynBreakevenCpa,
           dailyBudget,
           activeAdsets: summary.active_adsets ?? 0,
         }),
@@ -571,7 +577,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const syncTime   = lastSynced ?? new Date(snapshot.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   const pLabel     = PERIOD_SHORT[period] === 'custom' ? 'rango' : PERIOD_SHORT[period]
   const roasStatus = !realRoas ? 'neutral' : realRoas >= 5 ? 'ok' : realRoas >= 3 ? 'warn' : 'bad'
-  const cpaStatus  = !summary.blended_cpa ? 'neutral' : summary.blended_cpa <= BREAKEVEN_CPA ? 'ok' : summary.blended_cpa <= BREAKEVEN_CPA * 1.3 ? 'warn' : 'bad'
+  const cpaStatus  = !summary.blended_cpa ? 'neutral' : summary.blended_cpa <= dynBreakevenCpa ? 'ok' : summary.blended_cpa <= dynBreakevenCpa * 1.3 ? 'warn' : 'bad'
   const freqConvSt = (!convQ.freq ? 'neutral' : convQ.freq >= 4 ? 'bad' : convQ.freq >= 2.5 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
   const freqTrafSt = (!trafQ.freq ? 'neutral' : trafQ.freq >= 4 ? 'bad' : trafQ.freq >= 2.5 ? 'warn' : 'ok') as 'ok'|'warn'|'bad'|'neutral'
   const ctrConvSt  = (!convQ.ctr ? 'neutral' : convQ.ctr >= 1.2 ? 'ok' : convQ.ctr >= 0.6 ? 'warn' : 'bad') as 'ok'|'warn'|'bad'|'neutral'
@@ -697,7 +703,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         <HeroKpi label={`Ventas TN ${pLabel}`} value={fmtM(tnRevenue)} sub="todas las fuentes" accent="bg-violet-400" />
         <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400"
           delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} loading={period === 'today' && todayLoading} />
-        <HeroKpi label="CPA blended" value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-amber-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} />
+        <HeroKpi label="CPA blended" value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(dynBreakevenCpa)}`} status={cpaStatus} invertDelta accent="bg-amber-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} />
         <HeroKpi label="Compras pixel" value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" loading={period === 'today' && todayLoading} />
       </div>
 
@@ -729,7 +735,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
       {/* BUSINESS INSIGHTS ROW — 4 preguntas de negocio */}
       {(() => {
         // Breakeven ROAS mínimo = 1 / margen
-        const beRoas = 1 / MARGIN  // ≈ 1.77x con margen 56.5%
+        const beRoas = dynMargin > 0 ? 1 / dynMargin : 1 / DEF_MARGIN
         const roasVsBe = realRoas != null ? Math.min((realRoas / beRoas) * 100, 100) : null
         const roasBeStatus = realRoas == null ? 'neutral' : realRoas >= beRoas ? 'ok' : realRoas >= beRoas * 0.8 ? 'warn' : 'bad'
 
@@ -756,13 +762,13 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             <div className={`rounded-xl border border-gray-100 dark:border-zinc-800 border-l-[3px] ${grossProfit == null ? 'border-l-gray-100 dark:border-l-zinc-800 bg-white dark:bg-zinc-900' : grossProfit >= 0 ? 'border-l-emerald-400 dark:border-l-emerald-500 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-l-red-400 dark:border-l-red-500 bg-gradient-to-br from-red-50/60 to-white dark:from-red-950/20 dark:to-zinc-900'} p-4 shadow-sm`}>
               <div className="flex items-center gap-1 mb-1.5">
                 <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Gané plata?</p>
-                <InfoTooltip text={`Ventas TN × ${Math.round(MARGIN*100)}% margen − gasto Meta. Costo/orden: merch $19.5K + envío $5.8K + plataforma $1.4K + packaging $350 = $27K.`} />
+                <InfoTooltip text={`Ventas TN × ${Math.round(dynMargin*100)}% margen − gasto Meta.`} />
               </div>
               <p className={`text-3xl font-bold tabular-nums leading-none ${grossProfit == null ? 'text-gray-300 dark:text-zinc-700' : grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {grossProfit != null ? fmtM(grossProfit) : '—'}
               </p>
               <p className="text-micro text-gray-400 dark:text-zinc-500 mt-2 leading-snug">
-                {tnRevenue ? fmtM(tnRevenue) : '—'} × {Math.round(MARGIN*100)}% − {fmtM(metaSpend)}
+                {tnRevenue ? fmtM(tnRevenue) : '—'} × {Math.round(dynMargin*100)}% − {fmtM(metaSpend)}
               </p>
               {grossProfit != null && (
                 <div className="mt-2.5 flex items-center gap-1.5">
@@ -790,7 +796,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             } p-4 shadow-sm`}>
               <div className="flex items-center gap-1 mb-1.5">
                 <p className="text-mini font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">¿Cubrí la inversión?</p>
-                <InfoTooltip text={period === 'today' ? `Compras necesarias para cubrir el gasto de hoy: gasto ÷ CPA bk ${fmtM(BREAKEVEN_CPA)}.` : `ROAS mínimo para no perder plata: 1 ÷ ${Math.round(MARGIN*100)}% margen = ${beRoas.toFixed(2)}x. Tu ROAS real es ${realRoas?.toFixed(2) ?? '—'}x.`} />
+                <InfoTooltip text={period === 'today' ? `Compras necesarias para cubrir el gasto de hoy: gasto ÷ CPA bk ${fmtM(dynBreakevenCpa)}.` : `ROAS mínimo para no perder plata: 1 ÷ ${Math.round(dynMargin*100)}% margen = ${beRoas.toFixed(2)}x. Tu ROAS real es ${realRoas?.toFixed(2) ?? '—'}x.`} />
               </div>
               {period === 'today' && dailyBudget > 0 ? (
                 <>
@@ -803,7 +809,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
                          style={{ width: `${Math.min(bePct ?? 0, 100)}%` }} />
                   </div>
                   <p className="text-micro text-gray-400 dark:text-zinc-600 mt-1.5">
-                    {beRemaining === 0 ? 'Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} · CPA bk ${fmtM(BREAKEVEN_CPA)}`}
+                    {beRemaining === 0 ? 'Breakeven alcanzado' : `Faltan ${beRemaining ?? '?'} · CPA bk ${fmtM(dynBreakevenCpa)}`}
                   </p>
                 </>
               ) : (
@@ -922,7 +928,7 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <KpiCard label="Budget/día" value={fmtM(summary.daily_budget_active)} sub="ARS activo" accent="bg-blue-400" tooltip="Presupuesto diario activo." />
           <KpiCard label={`Compras ${pLabel}`} value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" delta={calcDelta(metaPurchases, prevSummary?.total_purchases_7d)} tooltip="Compras atribuidas por pixel Meta." anomaly={purchAnomaly} />
           <KpiCard label="ROAS real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="ventas TN / gasto" status={roasStatus} accent="bg-blue-400" tooltip="ROAS real = ventas TN ÷ gasto Meta." />
-          <KpiCard label="CPA blend." value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(BREAKEVEN_CPA)}`} status={cpaStatus} invertDelta accent="bg-blue-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} tooltip={`Costo por compra. Verde = debajo de ${fmtM(BREAKEVEN_CPA)}.`} anomaly={cpaAnomaly} />
+          <KpiCard label="CPA blend." value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(dynBreakevenCpa)}`} status={cpaStatus} invertDelta accent="bg-blue-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} tooltip={`Costo por compra. Verde = debajo de ${fmtM(dynBreakevenCpa)}.`} anomaly={cpaAnomaly} />
           <KpiCard label="Ad sets activos" value={String(summary.active_adsets || 0)} sub="corriendo" accent="bg-blue-400" tooltip="Ad sets ACTIVE en este momento." />
         </div>
       </div>
