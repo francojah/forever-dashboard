@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClientBrowser } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme-context'
 import { PRODUCT, DEFAULT_CLIENT_BRAND, productMonogram } from '@/lib/brand'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 const icons = {
   dashboard:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
@@ -107,6 +107,24 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
       root.style.setProperty('--brand-700', PRODUCT.accent)
     }
   }, [])
+
+  const [syncing, setSyncing] = useState(false)
+  const [syncOk, setSyncOk] = useState(false)
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncOk(false)
+    try {
+      const res = await fetch('/api/sync-tiendanube', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Error')
+      setSyncOk(true)
+      setTimeout(() => setSyncOk(false), 3000)
+      router.refresh()
+    } catch { /* silent */ } finally {
+      setSyncing(false)
+    }
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -213,6 +231,26 @@ export default function Sidebar({ userEmail, onClose }: { userEmail: string; onC
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-gray-100 dark:border-zinc-800/60 space-y-0.5">
+        {/* Sync / Actualizar */}
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-all disabled:opacity-50
+            text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100"
+        >
+          <span className={`text-gray-400 dark:text-zinc-600 ${syncing ? 'animate-spin' : ''}`}>
+            {syncOk ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-500">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+              </svg>
+            )}
+          </span>
+          {syncing ? 'Actualizando…' : syncOk ? 'Actualizado ✓' : 'Actualizar datos'}
+        </button>
         <button onClick={toggle}
           className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100 transition-all">
           <span className="text-gray-400 dark:text-zinc-600">{theme === 'dark' ? icons.sun : icons.moon}</span>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
@@ -58,29 +58,20 @@ function getMetaSummary(metaSnapshot: Snapshot | null, period: Period): any {
 
 export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const [period, setPeriod] = useState<Period>('7d')
-  const [syncing, setSyncing] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
-  const router = useRouter()
-
-  const triggerSync = useCallback(async () => {
-    setSyncing(true)
-    setSyncMsg(null)
-    try {
-      const res = await fetch('/api/sync-tiendanube', { method: 'POST' })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setSyncMsg(`✓ Sync OK — hoy: ${data.orders_today} órdenes · 7d: ${data.orders_7d} órdenes`)
-      router.refresh()
-    } catch (e) {
-      setSyncMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
-    } finally {
-      setSyncing(false)
-    }
-  }, [router])
 
   const tn   = getSummary(tnSnapshot, period)
   const meta = getMetaSummary(metaSnapshot, period)
+
+  // Mapa de nombres de envío para la UI
+  const SHIPPING_NAME: Record<string, string> = { Retiro: 'Moto Express' }
+  const shippingItems: [string, number][] = Object.entries(
+    (tn?.shipping_methods as Record<string, number>) ?? {}
+  ).sort((a, b) => b[1] - a[1]).map(([k, v]) => [SHIPPING_NAME[k] ?? k, v])
+  const shippingRevenue: Record<string, number> | undefined = tn?.shipping_method_revenue
+    ? Object.fromEntries(Object.entries(tn.shipping_method_revenue as Record<string, number>)
+        .map(([k, v]) => [SHIPPING_NAME[k] ?? k, v]))
+    : undefined
 
   // ── Prior period for delta comparison ─────────────────────────
   // today → yesterday | 7d → compare daily avg vs 30d daily avg
@@ -160,30 +151,13 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">Datos Tiendanube</h1>
           <p className="text-sm mt-0.5">
-            {syncMsg
-              ? <span className={syncMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>{syncMsg}</span>
-              : <span className="text-gray-500 dark:text-zinc-500">
-                  {tnSnapshot ? `Última actualización: ${tnSnapshot.snapshot_date}` : 'Sin datos — hacé sync'}
-                </span>
-            }
+            <span className="text-gray-500 dark:text-zinc-500">
+              {tnSnapshot ? `Última actualización: ${tnSnapshot.snapshot_date}` : 'Sin datos'}
+            </span>
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync button */}
-          <button
-            onClick={triggerSync}
-            disabled={syncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-all"
-            title="Sincronizar datos de Tiendanube"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
-            </svg>
-            {syncing ? 'Sincronizando…' : 'Actualizar'}
-          </button>
-
           {/* Period tabs */}
           <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 rounded-lg p-1">
           {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
@@ -494,23 +468,10 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
             )}
 
             {/* Métodos de envío */}
-            {tn?.shipping_methods && Object.keys(tn.shipping_methods).length > 0 && (
+            {shippingItems.length > 0 && (
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">Métodos de envío</h2>
-                {(() => {
-                  // Mapa de nombres para mostrar: "Retiro" → "Moto Express"
-                  const SHIPPING_NAME: Record<string, string> = { Retiro: 'Moto Express' }
-                  const rename = (k: string) => SHIPPING_NAME[k] ?? k
-                  const raw = tn.shipping_methods as Record<string, number>
-                  const rawRev = tn.shipping_method_revenue as Record<string, number> | undefined
-                  const items: [string, number][] = Object.entries(raw)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([k, v]) => [rename(k), v])
-                  const revenue = rawRev
-                    ? Object.fromEntries(Object.entries(rawRev).map(([k, v]) => [rename(k), v]))
-                    : undefined
-                  return <HBarChart items={items} total={tn.total_orders} colorClass="bg-sky-500" revenue={revenue} />
-                })()}
+                <HBarChart items={shippingItems} total={tn.total_orders} colorClass="bg-sky-500" revenue={shippingRevenue} />
               </div>
             )}
 
