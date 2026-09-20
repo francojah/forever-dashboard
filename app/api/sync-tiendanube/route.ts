@@ -201,15 +201,36 @@ function buildSummary(orders: any[]) {
   const customerIds = paid.map((o: { customer?: { id?: number } }) => o.customer?.id).filter(Boolean)
   const unique_customers = new Set(customerIds).size
 
+  // Clientes con más de 1 orden en el período
+  const customerOrderCount: Record<string, number> = {}
+  customerIds.forEach((id) => {
+    const key = String(id)
+    customerOrderCount[key] = (customerOrderCount[key] || 0) + 1
+  })
+  const repeat_customers = Object.values(customerOrderCount).filter(c => c > 1).length
+
   const shipping_revenue = Math.round(
     paid.reduce((s: number, o: { shipping_cost_owner?: string }) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
   )
+
+  // Ventas por día de semana (hora Argentina UTC-3)
+  const DOW_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const day_of_week_stats: Record<string, number> = {}
+  DOW_LABELS.forEach(d => { day_of_week_stats[d] = 0 })
+  paid.forEach((o: { created_at?: string; total?: string }) => {
+    if (!o.created_at) return
+    const arMs = new Date(o.created_at).getTime() - 3 * 60 * 60 * 1000
+    const dow = new Date(arMs).getDay()   // 0=Dom … 6=Sáb
+    const label = DOW_LABELS[dow]
+    day_of_week_stats[label] = Math.round((day_of_week_stats[label] || 0) + parseFloat(o.total || '0'))
+  })
 
   return {
     total_revenue: Math.round(total_revenue), total_orders, aov: Math.round(aov),
     unique_customers, top_products, payment_methods, payment_revenue,
     total_installments_cost, total_orders_with_installments,
     shipping_methods, top_provinces, shipping_revenue, total_units_sold,
+    repeat_customers, day_of_week_stats,
   }
 }
 

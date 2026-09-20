@@ -1,17 +1,19 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 
 // ─── Estructura de costos ─────────────────────────────────────────────────────
-// Los valores de % son fallbacks para meses históricos sin datos reales de TN.
-// El mes actual usa datos reales por orden desde el sync de TN.
-const UNIT_COST           = 6500    // ARS por unidad
-const UNITS_PER_ORDER     = 3       // unidades promedio por orden
-const SHIPPING_PCT_DEFAULT  = 0.10  // fallback: 10% cuando no hay dato real
-const PLATFORM_PCT_DEFAULT  = 0.012 // fallback: ~1.2% (comisión plan TN típica)
-const PACKAGING_PER_ORD   = 350     // ARS por orden
-const AOV_DEFAULT         = 57500   // ticket promedio estimado
+// Estos son los valores DEFAULT del módulo. Se sobreescriben con lo guardado en
+// Settings (app_settings en Supabase) — tanto server-side (initialSettings prop)
+// como vía el useEffect que llama a /api/settings en el cliente.
+const UNIT_COST_DEFAULT_FALLBACK = 6500    // ARS por unidad (si settings no carga)
+const UNITS_PER_ORDER_FALLBACK   = 3       // unidades promedio por orden
+const SHIPPING_PCT_DEFAULT       = 0.10   // fallback: 10% cuando no hay dato real
+const PLATFORM_PCT_DEFAULT       = 0.012  // fallback: ~1.2% (comisión plan TN típica)
+const PACKAGING_PER_ORD_FALLBACK = 350    // ARS por orden (si settings no carga)
+const AOV_DEFAULT                = 57500  // ticket promedio estimado (AOV calculado desde TN cuando hay datos)
 
 // ─── Constantes de UI ─────────────────────────────────────────────────────────
 const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -96,6 +98,12 @@ interface Props {
   metaSnapshot:      Snapshot | null
   initialExpenses:   Expense[]
   initialSummaries:  MonthlySummary[]
+  initialYear?:      number    // año seleccionado (desde searchParams)
+  initialSettings?: {
+    unit_cost_default:   number
+    packaging_per_order: number
+    units_per_order:     number
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -123,12 +131,15 @@ function calcPnL(
   cardFraction         = 1,
   tnCommissionPct      = PLATFORM_PCT_DEFAULT * 100,
   shippingFallbackPct  = SHIPPING_PCT_DEFAULT * 100,
+  unitCostDefault      = UNIT_COST_DEFAULT_FALLBACK,
+  packagingPerOrder    = PACKAGING_PER_ORD_FALLBACK,
+  unitsPerOrder        = UNITS_PER_ORDER_FALLBACK,
 ): PnL {
   const { tn_revenue, meta_spend, tn_orders, tn_units, shipping_real, installments_real, merch_real } = data
   const aov    = tn_orders > 0 ? tn_revenue / tn_orders : AOV_DEFAULT
-  const units  = tn_units  > 0 ? tn_units  : tn_orders * UNITS_PER_ORDER
-  // COGS real por producto (product_costs) cuando está disponible; si no, costo plano.
-  const merch  = merch_real != null && merch_real >= 0 ? merch_real : units * UNIT_COST
+  const units  = tn_units  > 0 ? tn_units  : tn_orders * unitsPerOrder
+  // COGS real por producto (product_costs) cuando está disponible; si no, costo configurado en Settings.
+  const merch  = merch_real != null && merch_real >= 0 ? merch_real : units * unitCostDefault
 
   // ── Envío: usar dato real de TN cuando esté disponible ──────────────────────
   const shipping_is_real = shipping_real !== null && shipping_real >= 0
@@ -138,7 +149,7 @@ function calcPnL(
 
   // ── Comisión TN del plan (separada del costo procesadora MP) ────────────────
   const platform  = tn_revenue * (tnCommissionPct / 100)
-  const packaging = tn_orders * PACKAGING_PER_ORD
+  const packaging = tn_orders * packagingPerOrder
 
   // ── Cuotas s/interés: usar dato real por orden cuando esté disponible ────────
   // installments_real = suma de payment_details.installments_cost por orden (solo pedidos con cuotas)
@@ -180,6 +191,9 @@ function aggregatePnL(
   cardFraction         = 1,
   tnCommissionPct      = PLATFORM_PCT_DEFAULT * 100,
   shippingFallbackPct  = SHIPPING_PCT_DEFAULT * 100,
+  unitCostDefault      = UNIT_COST_DEFAULT_FALLBACK,
+  packagingPerOrder    = PACKAGING_PER_ORD_FALLBACK,
+  unitsPerOrder        = UNITS_PER_ORDER_FALLBACK,
 ): PnL {
   // Pre-computar envío y cuotas por mes (real o fallback) antes de mergear
   let totalShipping     = 0
@@ -209,7 +223,7 @@ function aggregatePnL(
 
   const expenses = allExpenses.filter(e => keys.includes(e.month))
   // shippingFallbackPct = 0 y cuotasCostPct = 0 porque ya están pre-computados
-  return calcPnL(merged, expenses, recurringTotal, 0, iibbRatePct, cardFraction, tnCommissionPct, 0)
+  return calcPnL(merged, expenses, recurringTotal, 0, iibbRatePct, cardFraction, tnCommissionPct, 0, unitCostDefault, packagingPerOrder, unitsPerOrder)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -257,7 +271,7 @@ function PnLRow({ label, value, pctVal, indent, isTotal, isSubtotal, isSeparator
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpenses, initialSummaries }: Props) {
+export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpenses, initialSummaries, initialYear, initialSettings }: Props) {
   const today    = new Date()
   const curYear  = today.getFullYear()
   const curMonth = today.getMonth() + 1  // 1-12
@@ -265,7 +279,17 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const curQ     = Math.ceil(curMonth / 3)
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [year,     setYear]     = useState(curYear)
+  const router = useRouter()
+  const [year,     setYear]     = useState(initialYear ?? curYear)
+
+  // Cambio de año → recarga server-side con los datos del año seleccionado
+  function changeYear(newYear: number) {
+    setYear(newYear)
+    const params = new URLSearchParams(window.location.search)
+    if (newYear === curYear) params.delete('year')
+    else params.set('year', String(newYear))
+    router.push(`?${params.toString()}`, { scroll: false })
+  }
   const [mode,     setMode]     = useState<'month' | 'quarter' | 'year'>('month')
   const [selMonth, setSelMonth] = useState(curMonth)
   const [selQ,     setSelQ]     = useState(curQ)
@@ -289,21 +313,28 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   }, [])
 
   // ── Parámetros de costos desde /api/settings ──────────────────────────────
-  const [cuotasCostPct,     setCuotasCostPct]     = useState(0)
-  const [cardSalesPct,      setCardSalesPct]      = useState(50)
-  const [iibbRatePct,       setIibbRatePct]       = useState(0)
-  const [tnCommissionPct,   setTnCommissionPct]   = useState(PLATFORM_PCT_DEFAULT * 100)
+  const [cuotasCostPct,       setCuotasCostPct]       = useState(0)
+  const [cardSalesPct,        setCardSalesPct]        = useState(50)
+  const [iibbRatePct,         setIibbRatePct]         = useState(0)
+  const [tnCommissionPct,     setTnCommissionPct]     = useState(PLATFORM_PCT_DEFAULT * 100)
   const [shippingFallbackPct, setShippingFallbackPct] = useState(SHIPPING_PCT_DEFAULT * 100)
+  // Costos de COGS — inicializados desde initialSettings (server-side) o fallback hardcoded
+  const [unitCostDefault,   setUnitCostDefault]   = useState(initialSettings?.unit_cost_default   ?? UNIT_COST_DEFAULT_FALLBACK)
+  const [packagingPerOrder, setPackagingPerOrder] = useState(initialSettings?.packaging_per_order ?? PACKAGING_PER_ORD_FALLBACK)
+  const [unitsPerOrder,     setUnitsPerOrder]     = useState(initialSettings?.units_per_order     ?? UNITS_PER_ORDER_FALLBACK)
 
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.json())
       .then(d => {
-        if (d.cuotas_cost_pct  != null) setCuotasCostPct(Number(d.cuotas_cost_pct))
-        if (d.card_sales_pct   != null) setCardSalesPct(Number(d.card_sales_pct))
-        if (d.iibb_rate_pct    != null) setIibbRatePct(Number(d.iibb_rate_pct))
-        if (d.tn_commission_pct != null) setTnCommissionPct(Number(d.tn_commission_pct))
-        if (d.shipping_pct     != null) setShippingFallbackPct(Number(d.shipping_pct))
+        if (d.cuotas_cost_pct    != null) setCuotasCostPct(Number(d.cuotas_cost_pct))
+        if (d.card_sales_pct     != null) setCardSalesPct(Number(d.card_sales_pct))
+        if (d.iibb_rate_pct      != null) setIibbRatePct(Number(d.iibb_rate_pct))
+        if (d.tn_commission_pct  != null) setTnCommissionPct(Number(d.tn_commission_pct))
+        if (d.shipping_pct       != null) setShippingFallbackPct(Number(d.shipping_pct))
+        if (d.unit_cost_default  != null) setUnitCostDefault(Number(d.unit_cost_default))
+        if (d.packaging_per_order != null) setPackagingPerOrder(Number(d.packaging_per_order))
+        if (d.units_per_order    != null) setUnitsPerOrder(Number(d.units_per_order))
       })
       .catch(() => { /* silent */ })
   }, [])
@@ -405,8 +436,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       .then((r) => r.json())
       .then((d) => setMtdMetaSpend(typeof d.spend === 'number' ? d.spend : null))
       .catch(() => {})
-    // COGS real del mes por producto (product_costs), fallback al costo plano
-    fetch(`/api/analytics/cogs?fallback=${UNIT_COST}`, { cache: 'no-store' })
+    // COGS real del mes por producto (product_costs), fallback al costo configurado en Settings
+    fetch(`/api/analytics/cogs?fallback=${unitCostDefault}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => { if (typeof d.merch === 'number' && d.units > 0) setMtdMerch(d.merch) })
       .catch(() => {})
@@ -488,9 +519,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       recurringMonthTotal * periodKeys.length,
       cuotasCostPct, iibbRatePct, cardFraction,
       tnCommissionPct, shippingFallbackPct,
+      unitCostDefault, packagingPerOrder, unitsPerOrder,
     )
   }, [periodKeys, getMonthData, expenses, recurringMonthTotal,
-      cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct])
+      cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct,
+      unitCostDefault, packagingPerOrder, unitsPerOrder])
 
   const periodExpenses = useMemo(
     () => expenses.filter(e => periodKeys.includes(e.month)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -504,10 +537,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       const key = mkKey(year, m)
       const data = getMonthData(key)
       const exp  = expenses.filter(e => e.month === key)
-      const p    = calcPnL(data, exp, recurringMonthTotal, cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct)
+      const p    = calcPnL(data, exp, recurringMonthTotal, cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct, unitCostDefault, packagingPerOrder, unitsPerOrder)
       return { m, key, data, pnl: p }
     }), [year, getMonthData, expenses, recurringMonthTotal,
-         cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct])
+         cuotasCostPct, iibbRatePct, cardFraction, tnCommissionPct, shippingFallbackPct,
+         unitCostDefault, packagingPerOrder, unitsPerOrder])
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = mode === 'month'
@@ -659,12 +693,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         {/* Year + mode */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1">
-            <button onClick={() => setYear(y => y - 1)}
+            <button onClick={() => changeYear(year - 1)}
               className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
             <span className="text-sm font-semibold text-gray-800 dark:text-zinc-200 min-w-[48px] text-center">{year}</span>
-            <button onClick={() => setYear(y => Math.min(y + 1, curYear))}
+            <button onClick={() => changeYear(Math.min(year + 1, curYear))}
               disabled={year >= curYear}
               className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="9 18 15 12 9 6"/></svg>

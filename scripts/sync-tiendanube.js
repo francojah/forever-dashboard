@@ -230,6 +230,14 @@ function buildTNSummary(orders) {
   const customerIds = paid.map(o => o.customer?.id).filter(Boolean)
   const unique_customers = new Set(customerIds).size
 
+  // Clientes con más de 1 orden en el período
+  const customerOrderCount = {}
+  customerIds.forEach(id => {
+    const key = String(id)
+    customerOrderCount[key] = (customerOrderCount[key] || 0) + 1
+  })
+  const repeat_customers = Object.values(customerOrderCount).filter(c => c > 1).length
+
   // Costo de envío cobrado al cliente
   const shipping_revenue = Math.round(
     paid.reduce((s, o) => s + parseFloat(o.shipping_cost_owner || '0'), 0)
@@ -239,6 +247,18 @@ function buildTNSummary(orders) {
   const total_units_sold = paid.reduce((sum, o) => {
     return sum + (o.products || []).reduce((s, p) => s + parseInt(p.quantity || '1'), 0)
   }, 0)
+
+  // Ventas por día de semana (hora Argentina UTC-3)
+  const DOW_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const day_of_week_stats = {}
+  DOW_LABELS.forEach(d => { day_of_week_stats[d] = 0 })
+  paid.forEach(o => {
+    if (!o.created_at) return
+    const arMs = new Date(o.created_at).getTime() - 3 * 60 * 60 * 1000
+    const dow = new Date(arMs).getDay()   // 0=Dom … 6=Sáb
+    const label = DOW_LABELS[dow]
+    day_of_week_stats[label] = Math.round((day_of_week_stats[label] || 0) + parseFloat(o.total || '0'))
+  })
 
   return {
     total_revenue:   Math.round(total_revenue),
@@ -254,6 +274,8 @@ function buildTNSummary(orders) {
     top_provinces,
     shipping_revenue,
     total_units_sold,
+    repeat_customers,
+    day_of_week_stats,
   }
 }
 

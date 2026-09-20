@@ -213,6 +213,8 @@ export type TNSummary = {
   top_provinces?: { name: string; count: number }[]
   shipping_revenue?: number
   total_units_sold?: number
+  repeat_customers?: number                           // clientes con más de 1 orden en el período
+  day_of_week_stats?: Record<string, number>          // ventas por día de semana: 'Lun', 'Mar', …, 'Dom'
 }
 
 export type TNSnapshot = {

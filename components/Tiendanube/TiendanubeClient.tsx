@@ -112,16 +112,18 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
   const ordersPerDay  = tnOrders  > 0 ? tnOrders  / days : 0
 
   // ── Derived customer metrics ──────────────────────────────────
-  const uniqueCustomers = tn?.unique_customers ?? 0
-  const totalUnitsSold  = tn?.total_units_sold ?? 0
+  const uniqueCustomers  = tn?.unique_customers ?? 0
+  const repeatCustomers  = tn?.repeat_customers ?? 0
+  const totalUnitsSold   = tn?.total_units_sold ?? 0
   const revenuePerCustomer = uniqueCustomers > 0 ? tnRevenue / uniqueCustomers : 0
   const ordersPerCustomer  = uniqueCustomers > 0 ? tnOrders  / uniqueCustomers : 0
-  const repeatRate         = ordersPerCustomer > 1 ? ((ordersPerCustomer - 1) * 100) : 0
+  const repeatRate         = uniqueCustomers > 0 ? (repeatCustomers / uniqueCustomers) * 100 : 0
   const unitsPerOrder      = tnOrders > 0 ? totalUnitsSold / tnOrders : 0
   const topProvinces       = (tn?.top_provinces ?? []) as { name: string; count: number }[]
   const top3PctNum         = tnOrders > 0 && topProvinces.length >= 3
     ? (topProvinces.slice(0, 3).reduce((s, p) => s + p.count, 0) / tnOrders) * 100
     : 0
+  const dowStats = tn?.day_of_week_stats as Record<string, number> | undefined
 
   const hasData = tn != null
   const hasMetaData = meta != null && metaSpend > 0
@@ -227,11 +229,11 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                   tooltip="Total vendido dividido la cantidad de clientes únicos. Muestra cuánto vale en promedio cada cliente en el período."
                 />
                 <KpiCard
-                  label="Órdenes / cliente"
-                  value={ordersPerCustomer.toFixed(2)}
-                  sub={repeatRate > 5 ? `${repeatRate.toFixed(0)}% recompra` : 'sin recompra significativa'}
-                  color={repeatRate > 10 ? 'emerald' : repeatRate > 5 ? 'amber' : 'slate'}
-                  tooltip="Cantidad promedio de órdenes por cliente. Si es mayor a 1, hay clientes que compraron más de una vez en el período — señal de fidelización."
+                  label="Clientes recurrentes"
+                  value={fmt(repeatCustomers, 'number')}
+                  sub={repeatRate > 0 ? `${repeatRate.toFixed(1)}% tasa recompra` : 'sin recompra en período'}
+                  color={repeatRate > 15 ? 'emerald' : repeatRate > 5 ? 'amber' : 'slate'}
+                  tooltip="Clientes que hicieron más de una compra en el período. La tasa de recompra es un indicador clave de fidelización y LTV."
                 />
                 <KpiCard
                   label="Unidades / orden"
@@ -248,6 +250,17 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                   tooltip="Porcentaje de órdenes que vienen de las 3 provincias principales. Más del 80% indica concentración geográfica alta — oportunidad de expandir en otras regiones."
                 />
               </div>
+            </div>
+          )}
+
+          {/* ── Ventas por día de semana ── */}
+          {dowStats && Object.values(dowStats).some(v => v > 0) && (
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-4">
+                Ventas por día de semana · {PERIOD_LABELS[period]}
+                <InfoTooltip text="Monto total vendido (ARS) agrupado por día de la semana. Útil para identificar los mejores días y planificar presupuesto de ads." />
+              </h2>
+              <DowBarChart stats={dowStats} />
             </div>
           )}
 
@@ -748,6 +761,62 @@ function StatPill({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-gray-400 dark:text-zinc-500">{label}</p>
       <p className="text-lg font-semibold text-gray-800 dark:text-zinc-200">{value}</p>
+    </div>
+  )
+}
+
+function DowBarChart({ stats }: { stats: Record<string, number> }) {
+  const ORDER = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+  const values = ORDER.map(d => stats[d] ?? 0)
+  const maxVal = Math.max(...values, 1)
+  const total  = values.reduce((s, v) => s + v, 0)
+
+  // Determine best/worst day
+  const bestIdx  = values.indexOf(Math.max(...values))
+  const worstIdx = values.indexOf(Math.min(...values.filter(v => v > 0)))
+
+  return (
+    <div>
+      <div className="flex items-end gap-2 h-28">
+        {ORDER.map((label, i) => {
+          const val  = values[i]
+          const pct  = (val / maxVal) * 100
+          const isBest  = i === bestIdx && val > 0
+          const isWorst = i === worstIdx && val > 0 && val !== values[bestIdx]
+          return (
+            <div key={label} className="flex-1 flex flex-col items-center gap-1">
+              <span className="text-micro text-gray-400 dark:text-zinc-600 tabular-nums">
+                {val > 0 ? (val >= 1_000_000 ? `$${(val/1_000_000).toFixed(1)}M` : val >= 1_000 ? `$${Math.round(val/1000)}K` : `$${val}`) : ''}
+              </span>
+              <div className="w-full relative flex items-end" style={{ height: '72px' }}>
+                <div
+                  className={`w-full rounded-t-md transition-all duration-500 ${
+                    isBest  ? 'bg-emerald-400 dark:bg-emerald-500' :
+                    isWorst ? 'bg-red-300 dark:bg-red-600/60' :
+                              'bg-indigo-300 dark:bg-indigo-600/70'
+                  }`}
+                  style={{ height: `${Math.max(pct, val > 0 ? 4 : 0)}%` }}
+                />
+              </div>
+              <span className={`text-micro font-medium ${
+                isBest  ? 'text-emerald-600 dark:text-emerald-400' :
+                isWorst ? 'text-red-500 dark:text-red-400' :
+                          'text-gray-500 dark:text-zinc-500'
+              }`}>{label}</span>
+            </div>
+          )
+        })}
+      </div>
+      {total > 0 && (
+        <div className="flex gap-4 mt-3 text-xs text-gray-400 dark:text-zinc-500 border-t border-gray-100 dark:border-zinc-800 pt-3">
+          <span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{ORDER[bestIdx]}</span>
+            {' '}es el mejor día
+          </span>
+          <span className="text-gray-300 dark:text-zinc-700">·</span>
+          <span>Promedio diario: {(() => { const avg = total / 7; return avg >= 1_000_000 ? `$${(avg/1_000_000).toFixed(1)}M` : avg >= 1_000 ? `$${Math.round(avg/1000)}K` : `$${Math.round(avg)}` })()} </span>
+        </div>
+      )}
     </div>
   )
 }

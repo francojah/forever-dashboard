@@ -3,14 +3,17 @@ import SettingsClient from '@/components/Settings/SettingsClient'
 export const dynamic = 'force-dynamic'
 
 const DEFAULTS = {
-  breakeven_cpa:     17500,
-  roas_min:          2.86,
-  roas_scale:        6,
-  tn_commission_pct: 1.2,
-  shipping_pct:      10,
-  cuotas_cost_pct:   0,
-  card_sales_pct:    50,
-  iibb_rate_pct:     0,
+  breakeven_cpa:        17500,
+  roas_min:             2.86,
+  roas_scale:           6,
+  tn_commission_pct:    1.2,
+  shipping_pct:         10,
+  cuotas_cost_pct:      0,
+  card_sales_pct:       50,
+  iibb_rate_pct:        0,
+  unit_cost_default:    6500,
+  packaging_per_order:  350,
+  units_per_order:      3,
 }
 
 async function getSettings() {

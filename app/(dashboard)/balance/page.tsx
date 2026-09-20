@@ -33,14 +33,38 @@ async function getMonthlySummaries(year: number) {
   } catch { return [] }
 }
 
-export default async function BalancePage() {
-  const year = new Date().getFullYear()
+const SETTINGS_DEFAULTS = {
+  unit_cost_default:   6500,
+  packaging_per_order: 350,
+  units_per_order:     3,
+}
 
-  const [tnSnapshot, metaSnapshot, initialExpenses, initialSummaries] = await Promise.all([
+async function getCostSettings() {
+  try {
+    const { data } = await sb().from('app_settings').select('key, value')
+    const s = { ...SETTINGS_DEFAULTS }
+    ;(data || []).forEach(({ key, value }: { key: string; value: unknown }) => {
+      const k = key as keyof typeof SETTINGS_DEFAULTS
+      if (k in s) s[k] = typeof value === 'number' ? value : parseFloat(String(value))
+    })
+    return s
+  } catch { return SETTINGS_DEFAULTS }
+}
+
+export default async function BalancePage({
+  searchParams,
+}: {
+  searchParams?: { year?: string }
+}) {
+  const curYear = new Date().getFullYear()
+  const year    = Math.max(2020, Math.min(curYear + 1, parseInt(searchParams?.year ?? '') || curYear))
+
+  const [tnSnapshot, metaSnapshot, initialExpenses, initialSummaries, initialSettings] = await Promise.all([
     getLatestTNSnapshot().catch(() => null),
     getLatestSnapshot().catch(() => null),
     getExpenses(year),
     getMonthlySummaries(year),
+    getCostSettings(),
   ])
 
   return (
@@ -50,6 +74,8 @@ export default async function BalancePage() {
         metaSnapshot={metaSnapshot}
         initialExpenses={initialExpenses}
         initialSummaries={initialSummaries}
+        initialYear={year}
+        initialSettings={initialSettings}
       />
     </div>
   )

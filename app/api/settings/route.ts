@@ -5,14 +5,17 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const DEFAULTS: Record<string, number> = {
-  breakeven_cpa:     17500,
-  roas_min:          2.86,
-  roas_scale:        6,
-  tn_commission_pct: 1.2,  // comisión plan TN (no incluye procesadora MP — eso va en cuotas_cost_pct)
-  shipping_pct:      8,
-  cuotas_cost_pct:   0,    // % sobre ventas con tarjeta cobrado por el procesador
-  card_sales_pct:    50,   // % de ventas que son con tarjeta (fallback manual)
-  iibb_rate_pct:     0,    // alícuota IIBB sobre ventas (configurable por provincia)
+  breakeven_cpa:        17500,
+  roas_min:             2.86,
+  roas_scale:           6,
+  tn_commission_pct:    1.2,   // comisión plan TN (no incluye procesadora MP — eso va en cuotas_cost_pct)
+  shipping_pct:         8,
+  cuotas_cost_pct:      0,     // % sobre ventas con tarjeta cobrado por el procesador
+  card_sales_pct:       50,    // % de ventas que son con tarjeta (fallback manual)
+  iibb_rate_pct:        0,     // alícuota IIBB sobre ventas (configurable por provincia)
+  unit_cost_default:    6500,  // ARS por unidad (fallback cuando un producto no tiene costo cargado)
+  packaging_per_order:  350,   // ARS de packaging/insumos por orden
+  units_per_order:      3,     // unidades promedio por orden (fallback cuando TN no trae total_units_sold)
 }
 
 export async function GET() {

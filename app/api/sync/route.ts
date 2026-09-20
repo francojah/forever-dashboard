@@ -2,20 +2,19 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
-let META_TOKEN     = process.env.META_ACCESS_TOKEN || ''
-const ACCOUNT_ID   = process.env.META_ACCOUNT_ID || 'act_1614288152915913'
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const META_API     = 'https://graph.facebook.com/v21.0'
+let META_TOKEN                = process.env.META_ACCESS_TOKEN || ''
+const DEFAULT_ACCOUNT_ID      = process.env.META_ACCOUNT_ID || 'act_1614288152915913'
+const SUPABASE_URL            = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_KEY            = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const META_API                = 'https://graph.facebook.com/v21.0'
 
 const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase']
 const INSIGHT_FIELDS = 'spend,impressions,clicks,ctr,frequency,actions,purchase_roas,video_play_actions,video_p50_watched_actions'
 
 // Default thresholds — overridden by app_settings in Supabase
-// BREAKEVEN_CPA real Forever Basics: merch $19.5K + envío $5.75K + TN 2.5% $1.44K + packaging $350 = ~$27K/orden
-// AOV $57.5K → margen 53% → BE_CPA = $57.5K − $27K = $30.5K
-const DEFAULT_BREAKEVEN_CPA = 30462
-const DEFAULT_ROAS_MIN      = 1.77  // 1 / 0.53 margen
+// Estos son solo fallbacks: el valor real proviene de Configuración > Parámetros del negocio
+const DEFAULT_BREAKEVEN_CPA = 17500
+const DEFAULT_ROAS_MIN      = 2.86
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getThresholds(supabase: any) {
@@ -190,6 +189,14 @@ export async function POST() {
   if (!META_TOKEN) {
     return NextResponse.json({ error: 'Sin token de Meta' }, { status: 500 })
   }
+
+  // Cuenta activa de Meta: configurable desde Configuración (multi-cuenta)
+  let ACCOUNT_ID = DEFAULT_ACCOUNT_ID
+  try {
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_active_account').single()
+    const id = (data?.value as { account_id?: string } | null)?.account_id
+    if (id) ACCOUNT_ID = id
+  } catch { /* usa default */ }
 
   try {
     const today = new Date().toISOString().split('T')[0]

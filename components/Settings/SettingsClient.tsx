@@ -6,14 +6,17 @@ import HealthPanel from '@/components/Settings/HealthPanel'
 import ProductCostsCard from '@/components/Settings/ProductCostsCard'
 
 interface Settings {
-  breakeven_cpa:     number
-  roas_min:          number
-  roas_scale:        number
-  tn_commission_pct: number
-  shipping_pct:      number
-  cuotas_cost_pct:   number
-  card_sales_pct:    number   // % de ventas pagadas con tarjeta (fallback manual)
-  iibb_rate_pct:     number
+  breakeven_cpa:        number
+  roas_min:             number
+  roas_scale:           number
+  tn_commission_pct:    number
+  shipping_pct:         number
+  cuotas_cost_pct:      number
+  card_sales_pct:       number   // % de ventas pagadas con tarjeta (fallback manual)
+  iibb_rate_pct:        number
+  unit_cost_default:    number   // ARS por unidad (fallback sin costo cargado por producto)
+  packaging_per_order:  number   // ARS de packaging por orden
+  units_per_order:      number   // unidades promedio por orden (fallback)
 }
 
 interface RecurringExpense {
@@ -40,15 +43,121 @@ interface TNStatus {
 interface Props { initialSettings: Settings }
 
 const FIELDS: { key: keyof Settings; label: string; desc: string; prefix?: string; suffix?: string; step: number; section?: string }[] = [
-  { key: 'breakeven_cpa',     label: 'CPA de Breakeven',            desc: 'CPA máximo antes de perder dinero por orden.',                                                                        prefix: '$', suffix: 'ARS', step: 500  },
-  { key: 'roas_min',          label: 'ROAS Mínimo',                 desc: 'ROAS por debajo del cual un anuncio se considera no rentable.',                                                                   suffix: 'x',   step: 0.1  },
-  { key: 'roas_scale',        label: 'ROAS para Escalar',           desc: 'ROAS a partir del cual se recomienda duplicar budget.',                                                                          suffix: 'x',   step: 0.5  },
-  { key: 'tn_commission_pct', label: 'Comisión plan TN (%)',         desc: 'Comisión de la plataforma Tiendanube según tu plan (no incluye el costo de procesadora de pagos). Plan Evolución ~1.2%, Turbo 0%. Ver tu plan en TN > Configuración.',                                                    suffix: '%',   step: 0.1  },
-  { key: 'shipping_pct',      label: 'Gastos de Envío (% ventas)',  desc: 'Estimación del costo de envío como % del total de ventas (para Balance).',                            suffix: '%',   step: 0.5  },
-  { key: 'cuotas_cost_pct',   label: 'Costo financiero cuotas (%)', desc: 'Descuento que cobra el procesador por ventas con tarjeta. Ej: Mercado Pago ~8-12% en 6 cuotas s/interés. Se aplica solo sobre la fracción de ventas con tarjeta.', suffix: '%', step: 0.5, section: 'fiscal' },
-  { key: 'card_sales_pct',    label: '% ventas con tarjeta (fallback)', desc: 'Qué porcentaje de tus ventas son con tarjeta de crédito/débito. Si hay datos de TN disponibles se usa el valor automático; este número aplica para meses históricos sin datos de pago.', suffix: '%', step: 1, section: 'fiscal' },
-  { key: 'iibb_rate_pct',     label: 'IIBB sobre ventas (%)',       desc: 'Alícuota de Ingresos Brutos. CABA comercio e-commerce ~3%. Completar según tu provincia y régimen.',                suffix: '%', step: 0.1, section: 'fiscal' },
+  { key: 'breakeven_cpa',       label: 'CPA de Breakeven',               desc: 'CPA máximo antes de perder dinero por orden.', prefix: '$', suffix: 'ARS', step: 500 },
+  { key: 'roas_min',            label: 'ROAS Mínimo',                    desc: 'ROAS por debajo del cual un anuncio se considera no rentable.', suffix: 'x', step: 0.1 },
+  { key: 'roas_scale',          label: 'ROAS para Escalar',              desc: 'ROAS a partir del cual se recomienda duplicar budget.', suffix: 'x', step: 0.5 },
+  { key: 'tn_commission_pct',   label: 'Comisión plan TN (%)',           desc: 'Comisión de la plataforma Tiendanube según tu plan (no incluye procesadora). Plan Evolución ~1.2%, Turbo 0%.', suffix: '%', step: 0.1 },
+  { key: 'shipping_pct',        label: 'Gastos de Envío (% ventas)',     desc: 'Estimación del costo de envío como % del total de ventas para meses sin dato real de TN.', suffix: '%', step: 0.5 },
+  { key: 'unit_cost_default',   label: 'Costo unitario default',         desc: 'Costo en ARS por unidad cuando un producto no tiene costo cargado individualmente. Usá "Costos de producto" arriba para mayor precisión.', prefix: '$', suffix: 'ARS', step: 100, section: 'cogs' },
+  { key: 'packaging_per_order', label: 'Packaging por orden',            desc: 'Costo en ARS de packaging e insumos (bolsas, papel tissue, etc.) por cada orden enviada.', prefix: '$', suffix: 'ARS', step: 10, section: 'cogs' },
+  { key: 'units_per_order',     label: 'Unidades por orden (fallback)',  desc: 'Promedio de unidades por orden. Solo se usa cuando TN no informa total_units_sold en el período.', suffix: 'u', step: 0.5, section: 'cogs' },
+  { key: 'cuotas_cost_pct',     label: 'Costo financiero cuotas (%)',    desc: 'Descuento que cobra el procesador por ventas con tarjeta. Ej: Mercado Pago ~8-12% en 6 cuotas s/interés.', suffix: '%', step: 0.5, section: 'fiscal' },
+  { key: 'card_sales_pct',      label: '% ventas con tarjeta (fallback)',desc: 'Fallback manual para meses históricos sin datos de pago de TN. Se auto-detecta desde TN cuando hay datos.', suffix: '%', step: 1, section: 'fiscal' },
+  { key: 'iibb_rate_pct',       label: 'IIBB sobre ventas (%)',          desc: 'Alícuota de Ingresos Brutos. CABA comercio e-commerce ~3%. Completar según tu provincia y régimen.', suffix: '%', step: 0.1, section: 'fiscal' },
 ]
+
+// ── Meta Account Selector ─────────────────────────────────────────────────────
+interface MetaAccount { id: string; name: string; status: number; status_label: string; currency: string }
+
+function MetaAccountSelector() {
+  const [accounts, setAccounts] = useState<MetaAccount[]>([])
+  const [active,   setActive]   = useState<string>('')
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+
+  async function load() {
+    setLoading(true); setError('')
+    try {
+      const r = await fetch('/api/meta-accounts'); const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      setAccounts(d.accounts || [])
+      setActive(d.active || '')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error') }
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  async function save(id: string) {
+    setSaving(true); setError('')
+    try {
+      const r = await fetch('/api/meta-accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id: id }) })
+      const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      setActive(id)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error') }
+    setSaving(false)
+  }
+
+  const activeAcc = accounts.find(a => a.id === active)
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-zinc-800">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="currentColor">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800 dark:text-zinc-200">Cuenta de Meta Ads</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">Seleccioná qué cuenta usar para el sync</p>
+          </div>
+        </div>
+        <button onClick={load} disabled={loading} className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors disabled:opacity-40">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={'w-4 h-4 ' + (loading ? 'animate-spin' : '')}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+        </button>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        {loading && accounts.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-zinc-500">Cargando cuentas…</p>
+        ) : error ? (
+          <p className="text-sm text-red-500">{error}</p>
+        ) : accounts.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-zinc-500">No se encontraron cuentas publicitarias.</p>
+        ) : (
+          <>
+            {activeAcc && (
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Activa: {activeAcc.name}</span>
+                <span className="text-xs text-gray-400 dark:text-zinc-500">({activeAcc.currency})</span>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              {accounts.map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => save(a.id)}
+                  disabled={saving || a.id === active}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all
+                    ${a.id === active
+                      ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30'
+                      : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600 bg-white dark:bg-zinc-800'
+                    }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 dark:text-zinc-200">{a.name}</p>
+                    <p className="text-xs text-gray-400 dark:text-zinc-500">{a.id} · {a.currency} · {a.status_label}</p>
+                  </div>
+                  {a.id === active && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+            {saving && <p className="text-xs text-gray-400 dark:text-zinc-500">Guardando…</p>}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function TNConnectionCard() {
   const [status, setStatus] = useState<TNStatus | null>(null)
@@ -415,6 +524,12 @@ export default function SettingsClient({ initialSettings }: Props) {
         <p className="text-sm text-gray-500 dark:text-zinc-500 mt-0.5">Parámetros del negocio e integraciones.</p>
       </div>
 
+      {/* Meta account selector */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Cuenta de Meta Ads</p>
+        <MetaAccountSelector />
+      </div>
+
       {/* Tiendanube connection status */}
       <TNConnectionCard />
 
@@ -453,6 +568,37 @@ export default function SettingsClient({ initialSettings }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* COGS defaults */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Costos de mercadería (COGS)</p>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 divide-y divide-gray-100 dark:divide-zinc-800 shadow-sm">
+          {FIELDS.filter(f => f.section === 'cogs').map(({ key, label, desc, prefix, suffix, step }) => (
+            <div key={key} className="flex items-center justify-between gap-6 px-5 py-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-800 dark:text-zinc-200">{label}</p>
+                <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{desc}</p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {prefix && <span className="text-sm text-gray-400">{prefix}</span>}
+                <input
+                  type="number"
+                  step={step}
+                  value={settings[key]}
+                  onChange={e => handleChange(key, e.target.value)}
+                  className="w-24 text-right text-sm font-medium bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-zinc-500"
+                />
+                {suffix && <span className="text-sm text-gray-400">{suffix}</span>}
+              </div>
+            </div>
+          ))}
+          <div className="px-5 py-3 bg-gray-50/60 dark:bg-zinc-800/30">
+            <p className="text-mini text-gray-400 dark:text-zinc-500 leading-relaxed">
+              El costo real se calcula desde <strong className="text-gray-600 dark:text-zinc-400">Costos de producto</strong> (arriba). Estos valores son el fallback cuando un producto no tiene costo individual cargado.
+            </p>
+          </div>
         </div>
       </div>
 
