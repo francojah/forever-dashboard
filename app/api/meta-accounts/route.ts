@@ -14,7 +14,8 @@ const META_API     = 'https://graph.facebook.com/v21.0'
 async function getMetaToken(supabase: ReturnType<typeof createClient>) {
   let token = process.env.META_ACCESS_TOKEN || ''
   try {
-    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_access_token').single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_access_token').single() as any
     const t = (data?.value as { access_token?: string } | null)?.access_token
     if (t) token = t
   } catch { /* usa env */ }
@@ -51,7 +52,8 @@ export async function GET() {
     // Cuenta activa guardada
     let activeAccountId = process.env.META_ACCOUNT_ID || ''
     try {
-      const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_active_account').single()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await supabase.from('app_config').select('value').eq('key', 'meta_active_account').single() as any
       const id = (data?.value as { account_id?: string } | null)?.account_id
       if (id) activeAccountId = id
     } catch { /* usa env */ }
