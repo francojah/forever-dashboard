@@ -6,16 +6,19 @@ const TN_BASE = 'https://api.tiendanube.com/2021-10'
 const STORE_ID = process.env.TN_STORE_ID!
 const TOKEN    = process.env.TN_ACCESS_TOKEN!
 
+interface TNOrderProduct {
+  product_id: number | null
+  name: string
+  quantity: number
+  price: string
+  variant_id?: number | null
+}
+
 interface TNOrder {
   id: number
   payment_status: string
   created_at: string
-  products?: Array<{
-    product_id: number
-    name: string
-    quantity: number
-    price: string
-  }>
+  products?: TNOrderProduct[]
 }
 
 interface ProductEntry {
@@ -25,22 +28,31 @@ interface ProductEntry {
   revenue: number
 }
 
-async function fetchOrders(month: string): Promise<TNOrder[]> {
+async function fetchOrdersWithProducts(month: string): Promise<TNOrder[]> {
   // month = "2026-05"
   const [year, m] = month.split('-').map(Number)
-  const from = new Date(year, m - 1, 1).toISOString()
-  const to   = new Date(year, m, 0, 23, 59, 59).toISOString()
+  // TN timestamps are in store timezone — use date-only range to be safe
+  const from = `${year}-${String(m).padStart(2, '0')}-01T00:00:00-03:00`
+  const lastDay = new Date(year, m, 0).getDate()
+  const to   = `${year}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59-03:00`
 
   const orders: TNOrder[] = []
   let page = 1
   while (true) {
-    const url = `${TN_BASE}/${STORE_ID}/orders?payment_status=paid&created_at_min=${from}&created_at_max=${to}&per_page=200&page=${page}`
+    const url = `${TN_BASE}/${STORE_ID}/orders?payment_status=paid&created_at_min=${encodeURIComponent(from)}&created_at_max=${encodeURIComponent(to)}&per_page=200&page=${page}`
     const res = await fetch(url, {
-      headers: { 'Authentication': `bearer ${TOKEN}`, 'User-Agent': 'ForeverApp/1.0 (francojah@gmail.com)' },
+      headers: {
+        'Authentication': `bearer ${TOKEN}`,
+        'User-Agent': 'ForeverApp/1.0 (francojah@gmail.com)',
+      },
+      next: { revalidate: 0 },
     })
-    if (!res.ok) break
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      throw new Error(`TN API error ${res.status}: ${errText.slice(0, 200)}`)
+    }
     const batch: TNOrder[] = await res.json()
-    if (!batch.length) break
+    if (!batch || !batch.length) break
     orders.push(...batch)
     if (batch.length < 200) break
     page++
@@ -55,17 +67,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Parámetro month requerido (YYYY-MM)' }, { status: 400 })
     }
 
-    const orders = await fetchOrders(month)
+    const orders = await fetchOrdersWithProducts(month)
 
-    // Aggregate by product
+    // Aggregate by product_id — skip items without product_id (deleted products or custom items)
     const map: Record<number, ProductEntry> = {}
     for (const o of orders) {
-      for (const p of o.products ?? []) {
-        if (!map[p.product_id]) {
-          map[p.product_id] = { product_id: p.product_id, name: p.name, units_sold: 0, revenue: 0 }
+      const items = o.products ?? []
+      for (const p of items) {
+        // Skip line items with no product_id (custom/deleted products)
+        if (!p.product_id) continue
+        const pid = Number(p.product_id)
+        if (!map[pid]) {
+          map[pid] = { product_id: pid, name: p.name, units_sold: 0, revenue: 0 }
         }
-        map[p.product_id].units_sold += p.quantity
-        map[p.product_id].revenue   += p.quantity * parseFloat(p.price || '0')
+        map[pid].units_sold += Number(p.quantity) || 0
+        map[pid].revenue   += (Number(p.quantity) || 0) * (parseFloat(p.price || '0') || 0)
       }
     }
 
@@ -75,6 +91,10 @@ export async function GET(req: NextRequest) {
       month,
       total_orders: orders.length,
       products,
+      debug: {
+        orders_fetched: orders.length,
+        sample_has_products: orders.length > 0 ? (orders[0].products?.length ?? 0) : 0,
+      },
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error'

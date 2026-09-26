@@ -8,7 +8,7 @@ import type { TNSnapshot, Snapshot } from '@/lib/supabase'
 // Estos son los valores DEFAULT del módulo. Se sobreescriben con lo guardado en
 // Settings (app_settings en Supabase) — tanto server-side (initialSettings prop)
 // como vía el useEffect que llama a /api/settings en el cliente.
-const UNIT_COST_DEFAULT_FALLBACK = 6500    // ARS por unidad (si settings no carga)
+const UNIT_COST_DEFAULT_FALLBACK = 0       // Sin costo default — debe cargarse manualmente por producto
 const UNITS_PER_ORDER_FALLBACK   = 3       // unidades promedio por orden
 const SHIPPING_PCT_DEFAULT       = 0.10   // fallback: 10% cuando no hay dato real
 const PLATFORM_PCT_DEFAULT       = 0.012  // fallback: ~1.2% (comisión plan TN típica)
@@ -987,7 +987,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               </button>
             </div>
 
-            {monthProducts ? (
+            {monthProducts && monthProducts.length === 0 && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg px-3 py-2 mb-2">
+                No se encontraron pedidos pagados para este mes en Tiendanube. Ingresá el CMV total manualmente abajo.
+              </div>
+            )}
+            {monthProducts && monthProducts.length > 0 ? (
               <div className="border border-violet-200 dark:border-violet-900/50 rounded-lg overflow-hidden">
                 {/* Header */}
                 <div className="grid gap-0 text-micro font-medium text-gray-400 dark:text-zinc-600 bg-gray-50 dark:bg-zinc-800/60 px-3 py-1.5"
@@ -1029,10 +1034,10 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             ) : (
               <div>
                 <input type="text" value={manMerch} onChange={e => setManMerch(e.target.value)}
-                  placeholder={`ej: ${Math.round(unitCostDefault * unitsPerOrder * (parseInt(manOrders) || 50)).toLocaleString('es-AR')} — o cargá los productos arriba`}
+                  placeholder="ej: 480000 — total pagado a proveedores este mes"
                   className="w-full text-sm bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/50 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder:text-gray-400 dark:placeholder:text-zinc-600" />
                 <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-1">
-                  Ingresá el total real pagado a proveedores ese mes, o usá &ldquo;Cargar productos&rdquo; para calcularlo por producto. Si lo dejás vacío: unidades × ${unitCostDefault.toLocaleString('es-AR')}.
+                  Ingresá el total real pagado a proveedores ese mes, o usá &ldquo;Cargar productos&rdquo; para calcularlo por producto. Si lo dejás vacío, CMV queda en 0.
                 </p>
               </div>
             )}
@@ -1346,12 +1351,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
             <thead>
               <tr className="text-mini text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
                 <th className="text-left px-4 py-2.5 font-medium sticky left-0 bg-gray-50 dark:bg-zinc-800/50">Mes</th>
-                <th className="text-right px-4 py-2.5 font-medium">Ventas</th>
-                <th className="text-right px-4 py-2.5 font-medium text-blue-500 dark:text-blue-400">CMV</th>
-                <th className="text-right px-4 py-2.5 font-medium text-sky-500 dark:text-sky-400">Envíos</th>
-                <th className="text-right px-4 py-2.5 font-medium text-violet-500 dark:text-violet-400">TN + pack</th>
-                <th className="text-right px-4 py-2.5 font-medium text-orange-500 dark:text-orange-400">Publicidad</th>
-                <th className="text-right px-4 py-2.5 font-medium text-gray-400 dark:text-zinc-500">Fijos</th>
+                <th className="text-right px-4 py-2.5 font-medium text-emerald-600 dark:text-emerald-400">Ventas</th>
+                <th className="text-right px-4 py-2.5 font-medium text-red-500 dark:text-red-400">CMV</th>
+                <th className="text-right px-4 py-2.5 font-medium text-red-500 dark:text-red-400">Envíos</th>
+                <th className="text-right px-4 py-2.5 font-medium text-red-500 dark:text-red-400">TN + pack</th>
+                <th className="text-right px-4 py-2.5 font-medium text-red-500 dark:text-red-400">Publicidad</th>
+                <th className="text-right px-4 py-2.5 font-medium text-red-400 dark:text-red-500">Fijos</th>
                 <th className="text-right px-4 py-2.5 font-medium">Resultado</th>
                 <th className="text-right px-4 py-2.5 font-medium">Margen</th>
               </tr>
@@ -1381,12 +1386,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                         {isCur && <span className="text-micro bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">vivo</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{isEmpty ? '—' : fmt(mp.merch)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{isEmpty ? '—' : fmt(mp.shipping)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{isEmpty ? '—' : fmt(tnPack)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty || fijos === 0 ? '—' : fmt(fijos)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{isEmpty ? '—' : fmt(mp.merch)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-500 dark:text-red-400">{isEmpty ? '—' : fmt(mp.shipping)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-500 dark:text-red-400">{isEmpty ? '—' : fmt(tnPack)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-400 dark:text-red-500">{isEmpty || fijos === 0 ? '—' : fmt(fijos)}</td>
                     <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${isEmpty ? 'text-gray-300 dark:text-zinc-700' : mp.net_result >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {isEmpty ? '—' : fmt(mp.net_result)}
                     </td>
@@ -1410,12 +1415,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                 return (
                   <tr className="bg-gray-50 dark:bg-zinc-800/40 border-t-2 border-gray-200 dark:border-zinc-700">
                     <td className="px-4 py-3 font-semibold text-gray-700 dark:text-zinc-300 sticky left-0 bg-gray-50 dark:bg-zinc-800/40">Total {year}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-700 dark:text-zinc-300">{fmt(totRev)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">{fmt(totMerch)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{fmt(totShip)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-violet-600 dark:text-violet-400">{fmt(totTnPack)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">{fmt(totMeta)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totFijos > 0 ? fmt(totFijos) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{fmt(totRev)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-600 dark:text-red-400">{fmt(totMerch)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-500 dark:text-red-400">{fmt(totShip)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-500 dark:text-red-400">{fmt(totTnPack)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-600 dark:text-red-400">{fmt(totMeta)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-400 dark:text-red-500">{totFijos > 0 ? fmt(totFijos) : '—'}</td>
                     <td className={`px-4 py-3 text-right tabular-nums font-bold ${totNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {fmt(totNet)}
                     </td>
