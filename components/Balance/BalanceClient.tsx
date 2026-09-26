@@ -1235,11 +1235,13 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           <table className="w-full text-xs">
             <thead>
               <tr className="text-mini text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-100 dark:border-zinc-800">
-                <th className="text-left px-4 py-2.5 font-medium">Mes</th>
+                <th className="text-left px-4 py-2.5 font-medium sticky left-0 bg-gray-50 dark:bg-zinc-800/50">Mes</th>
                 <th className="text-right px-4 py-2.5 font-medium">Ventas</th>
-                <th className="text-right px-4 py-2.5 font-medium">G. Bruta</th>
-                <th className="text-right px-4 py-2.5 font-medium">Meta</th>
-                <th className="text-right px-4 py-2.5 font-medium">Gastos Var.</th>
+                <th className="text-right px-4 py-2.5 font-medium text-blue-500 dark:text-blue-400">CMV</th>
+                <th className="text-right px-4 py-2.5 font-medium text-sky-500 dark:text-sky-400">Envíos</th>
+                <th className="text-right px-4 py-2.5 font-medium text-violet-500 dark:text-violet-400">TN + pack</th>
+                <th className="text-right px-4 py-2.5 font-medium text-orange-500 dark:text-orange-400">Publicidad</th>
+                <th className="text-right px-4 py-2.5 font-medium text-gray-400 dark:text-zinc-500">Fijos</th>
                 <th className="text-right px-4 py-2.5 font-medium">Resultado</th>
                 <th className="text-right px-4 py-2.5 font-medium">Margen</th>
               </tr>
@@ -1250,7 +1252,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                 const isSel = mode === 'month' && selMonth === m && year === curYear || mode === 'month' && selMonth === m
                 const isEmpty = data.source === 'empty'
                 const isFut = key > curKey
-                const varTotal = expenses.filter(e => e.month === key).reduce((s, e) => s + e.amount_ars, 0)
+                const tnPack = mp.platform + mp.packaging + mp.cuotas_cost
+                const fijos  = mp.recurring_total + mp.var_total + mp.iibb_cost
 
                 return (
                   <tr key={m}
@@ -1260,7 +1263,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                       : isFut ? 'opacity-30 cursor-not-allowed'
                       : 'hover:bg-gray-50 dark:hover:bg-zinc-800/30'
                     }`}>
-                    <td className="px-4 py-2.5">
+                    <td className={`px-4 py-2.5 sticky left-0 ${isSel && mode === 'month' ? 'bg-violet-50 dark:bg-violet-950/20' : isFut ? '' : 'bg-white dark:bg-zinc-900 group-hover:bg-gray-50'}`}>
                       <div className="flex items-center gap-2">
                         <span className={`font-medium ${isCur ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-zinc-300'}`}>
                           {MONTH_SHORT[m-1]}
@@ -1268,10 +1271,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                         {isCur && <span className="text-micro bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">vivo</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-600 dark:text-zinc-400">{isEmpty ? '—' : fmt(mp.gross_profit)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{varTotal > 0 ? fmt(-varTotal) : '—'}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{isEmpty ? '—' : fmt(-mp.merch)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{isEmpty ? '—' : fmt(-mp.shipping)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{isEmpty ? '—' : fmt(-tnPack)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400">{isEmpty ? '—' : fmt(-mp.meta_spend)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty || fijos === 0 ? '—' : fmt(-fijos)}</td>
                     <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${isEmpty ? 'text-gray-300 dark:text-zinc-700' : mp.net_result >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {isEmpty ? '—' : fmt(mp.net_result)}
                     </td>
@@ -1285,18 +1290,22 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               {(() => {
                 const allData = annualRows.filter(r => r.data.source !== 'empty').map(r => r.pnl)
                 if (allData.length === 0) return null
-                const totRev = allData.reduce((s, p) => s + p.tn_revenue, 0)
-                const totGross = allData.reduce((s, p) => s + p.gross_profit, 0)
-                const totMeta  = allData.reduce((s, p) => s + p.meta_spend, 0)
-                const totVar   = annualRows.reduce((s, r) => s + expenses.filter(e => e.month === r.key).reduce((x, e) => x + e.amount_ars, 0), 0)
-                const totNet   = allData.reduce((s, p) => s + p.net_result, 0) - (totVar - allData.reduce((s, p) => s + p.var_total, 0))
+                const totRev    = allData.reduce((s, p) => s + p.tn_revenue, 0)
+                const totMerch  = allData.reduce((s, p) => s + p.merch, 0)
+                const totShip   = allData.reduce((s, p) => s + p.shipping, 0)
+                const totTnPack = allData.reduce((s, p) => s + p.platform + p.packaging + p.cuotas_cost, 0)
+                const totMeta   = allData.reduce((s, p) => s + p.meta_spend, 0)
+                const totFijos  = allData.reduce((s, p) => s + p.recurring_total + p.var_total + p.iibb_cost, 0)
+                const totNet    = allData.reduce((s, p) => s + p.net_result, 0)
                 return (
                   <tr className="bg-gray-50 dark:bg-zinc-800/40 border-t-2 border-gray-200 dark:border-zinc-700">
-                    <td className="px-4 py-3 font-semibold text-gray-700 dark:text-zinc-300">Total {year}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 dark:text-zinc-300 sticky left-0 bg-gray-50 dark:bg-zinc-800/40">Total {year}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-700 dark:text-zinc-300">{fmt(totRev)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-600 dark:text-zinc-400">{fmt(totGross)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{fmt(totMeta)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totVar > 0 ? fmt(-totVar) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">{fmt(-totMerch)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{fmt(-totShip)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-violet-600 dark:text-violet-400">{fmt(-totTnPack)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">{fmt(-totMeta)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totFijos > 0 ? fmt(-totFijos) : '—'}</td>
                     <td className={`px-4 py-3 text-right tabular-nums font-bold ${totNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {fmt(totNet)}
                     </td>
