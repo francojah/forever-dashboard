@@ -621,7 +621,8 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   }
 
   async function handleSaveManual() {
-    if (!manRev && !manSpend) return
+    const hasProductCosts = monthProducts && monthProducts.length > 0 && Object.keys(mpCosts).length > 0
+    if (!manRev && !manSpend && !hasProductCosts && !manMerch) return
     setSavingMan(true)
     try {
       const parse = (s: string) => s ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : null
@@ -650,16 +651,18 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
         if (totalMpCmv > 0) finalMerchCost = Math.round(totalMpCmv)
       }
 
+      // Keep existing values for any field left empty (so saving only CMV doesn't wipe revenue)
+      const existing = summaries.find(s => s.month === selectedMonthKey)
       const res = await fetch('/api/monthly', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           month:      selectedMonthKey,
-          tn_revenue: parse(manRev),
-          meta_spend: parse(manSpend),
-          tn_orders:  parse(manOrders),
-          tn_units:   parse(manUnits),
-          merch_cost: finalMerchCost,
+          tn_revenue: parse(manRev)    ?? existing?.tn_revenue  ?? null,
+          meta_spend: parse(manSpend)  ?? existing?.meta_spend  ?? null,
+          tn_orders:  parse(manOrders) ?? existing?.tn_orders   ?? null,
+          tn_units:   parse(manUnits)  ?? existing?.tn_units    ?? null,
+          merch_cost: finalMerchCost   ?? existing?.merch_cost  ?? null,
         }),
       })
       const saved = await res.json()
@@ -1132,7 +1135,17 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                 {syncingMonth ? 'Sincronizando…' : 'Re-sincronizar'}
               </button>
               <span className="text-gray-200 dark:text-zinc-700">·</span>
-              <button onClick={() => setShowManual(true)}
+              <button onClick={() => {
+                  const s = summaries.find(x => x.month === selectedMonthKey)
+                  if (s) {
+                    setManRev(s.tn_revenue != null ? String(Math.round(s.tn_revenue)) : '')
+                    setManSpend(s.meta_spend != null ? String(Math.round(s.meta_spend)) : '')
+                    setManOrders(s.tn_orders != null ? String(s.tn_orders) : '')
+                    setManUnits(s.tn_units != null ? String(s.tn_units) : '')
+                    setManMerch(s.merch_cost != null ? String(Math.round(s.merch_cost)) : '')
+                  }
+                  setShowManual(true)
+                }}
                 className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
                 Editar datos
               </button>
