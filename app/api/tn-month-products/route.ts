@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const TN_BASE = 'https://api.tiendanube.com/2021-10'
+const TN_BASE = 'https://api.tiendanube.com/v1'
 const STORE_ID = process.env.TN_STORE_ID!
 const TOKEN    = process.env.TN_ACCESS_TOKEN!
 
