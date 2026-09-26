@@ -648,63 +648,12 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         </div>
       </div>
 
-      {/* AI SUMMARY */}
-      <div className="bg-gradient-to-r from-indigo-950/60 to-violet-950/60 rounded-xl border border-indigo-800/40 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-indigo-400"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
-            </div>
-            <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Resumen IA del día</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {!aiSummary && !aiLoading && (
-              <button onClick={fetchAiSummary}
-                className="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-all">
-                Generar
-              </button>
-            )}
-            {aiSummary && (
-              <button onClick={() => setAiExpanded(e => !e)} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 transition-transform ${aiExpanded ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
-              </button>
-            )}
-            {aiSummary && (
-              <button onClick={fetchAiSummary} title="Regenerar" className="text-indigo-500 hover:text-indigo-400">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-              </button>
-            )}
-          </div>
-        </div>
-        {aiLoading && (
-          <div className="px-4 pb-4 flex items-center gap-2">
-            <div className="flex gap-1">
-              {[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: i * 0.15 + 's' }} />)}
-            </div>
-            <span className="text-xs text-indigo-400">Claude está analizando tus datos...</span>
-          </div>
-        )}
-        {aiSummary && aiExpanded && (
-          <div className="px-4 pb-4">
-            <p className="text-sm text-indigo-100 leading-relaxed">{aiSummary}</p>
-          </div>
-        )}
-        {!aiSummary && !aiLoading && (
-          <div className="px-4 pb-3">
-            <p className="text-xs text-indigo-600">Presá &ldquo;Generar&rdquo; para que Claude analice el estado actual de tus campañas.</p>
-          </div>
-        )}
-      </div>
-
       {/* HERO ROW */}
       <div className="flex gap-3 overflow-x-auto pb-1">
         <HeroKpi label="ROAS Real" value={realRoas ? realRoas.toFixed(2) + 'x' : '—'} sub="TN ÷ gasto Meta" status={roasStatus} accent="bg-emerald-400"
           delta={calcDelta(realRoas, prevSnapshot?.summary?.blended_roas)} />
         <HeroKpi label={`Ventas TN ${pLabel}`} value={fmtM(tnRevenue)} sub="todas las fuentes" accent="bg-violet-400" />
-        <HeroKpi label={`Gasto Meta ${pLabel}`} value={fmtM(metaSpend)} sub="ARS invertido" accent="bg-blue-400"
-          delta={calcDelta(metaSpend, prevSummary?.total_spend_7d)} loading={period === 'today' && todayLoading} />
         <HeroKpi label="CPA blended" value={summary.blended_cpa ? fmtM(summary.blended_cpa) : '—'} sub={`bk ${fmtM(dynBreakevenCpa)}`} status={cpaStatus} invertDelta accent="bg-amber-400" delta={calcDelta(summary.blended_cpa, prevSummary?.blended_cpa)} />
-        <HeroKpi label="Compras pixel" value={String(metaPurchases)} sub={metaPurchases > 0 && periodDays > 1 ? `~${(metaPurchases / periodDays).toFixed(1)}/día` : undefined} accent="bg-blue-400" loading={period === 'today' && todayLoading} />
       </div>
 
       {/* Custom date picker */}
@@ -881,41 +830,17 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
         )
       })()}
 
-      {/* 1. TIENDANUBE */}
+      {/* 1. TIENDANUBE — resumen compacto */}
       <div>
-        <SectionLabel title={`Tiendanube · ${PERIOD_LABELS[period]}`} sub="Ventas reales de la tienda — todas las fuentes de tráfico"
+        <SectionLabel title={`Tiendanube · ${PERIOD_LABELS[period]}`} sub="Ventas reales de la tienda · detalle completo en la página Tiendanube"
           color="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>} />
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <KpiCard label="Ventas totales" value={fmtM(tnRevenue)} sub={tnRevenue && periodDays > 1 ? fmtM(tnRevenue / periodDays) + '/día' : undefined} accent="bg-violet-400" tooltip="Total facturado en Tiendanube." />
           <KpiCard label="Órdenes" value={tnData?.total_orders != null ? String(tnData.total_orders) : '—'} sub={tnData?.total_orders && periodDays > 1 ? `~${(tnData.total_orders / periodDays).toFixed(1)}/día` : undefined} accent="bg-violet-400" tooltip="Órdenes pagadas en el período." />
           <KpiCard label="Ticket promedio" value={fmtM(tnData?.aov)} sub="por orden" accent="bg-violet-400" tooltip="Valor promedio por orden (AOV)." />
-          <KpiCard label="Clientes únicos" value={tnData?.unique_customers != null ? String(tnData.unique_customers) : '—'} sub="compradores" accent="bg-violet-400" tooltip="Clientes con al menos una compra." />
           <KpiCard label="Unidades vendidas" value={tnData?.total_units_sold != null ? String(tnData.total_units_sold) : '—'} sub="artículos" accent="bg-violet-400" tooltip="Total de artículos vendidos." />
-          <KpiCard
-            label="Órd./cliente"
-            value={tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
-              ? (tnData.total_orders / tnData.unique_customers).toFixed(2) : '—'}
-            sub="ratio recompra"
-            accent="bg-violet-400"
-            status={tnData?.total_orders && tnData?.unique_customers && tnData.unique_customers > 0
-              ? (tnData.total_orders / tnData.unique_customers) >= 1.2 ? 'ok' : (tnData.total_orders / tnData.unique_customers) >= 1.05 ? 'warn' : 'neutral'
-              : 'neutral'}
-            tooltip="Órdenes ÷ Clientes. >1.2 = buena recompra."
-          />
         </div>
-        {/* YTD Summary */}
-        {ytdRev != null && (
-          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 rounded-xl px-4 py-2.5 border border-gray-100 dark:border-zinc-800">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-violet-400 shrink-0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <span className="font-semibold text-gray-600 dark:text-zinc-400">Año en curso:</span>
-            <span>Ventas YTD: <strong className="text-violet-500">{fmtM(ytdRev)}</strong></span>
-            {ytdOrders != null && <span>Órdenes: <strong className="text-violet-500">{ytdOrders}</strong></span>}
-            {ytdRev != null && ytdOrders != null && ytdOrders > 0 && (
-              <span>AOV: <strong className="text-violet-500">{fmtM(Math.round(ytdRev / ytdOrders))}</strong></span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 2. META ADS */}
@@ -998,6 +923,54 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
             </div>
           )}
         </div>
+      </div>
+
+      {/* AI SUMMARY — al fondo, opcional */}
+      <div className="bg-gradient-to-r from-indigo-950/60 to-violet-950/60 rounded-xl border border-indigo-800/40 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-indigo-400"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+            </div>
+            <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Resumen IA del día</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!aiSummary && !aiLoading && (
+              <button onClick={fetchAiSummary}
+                className="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-all">
+                Generar
+              </button>
+            )}
+            {aiSummary && (
+              <button onClick={() => setAiExpanded(e => !e)} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 transition-transform ${aiExpanded ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+            )}
+            {aiSummary && (
+              <button onClick={fetchAiSummary} title="Regenerar" className="text-indigo-500 hover:text-indigo-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+              </button>
+            )}
+          </div>
+        </div>
+        {aiLoading && (
+          <div className="px-4 pb-4 flex items-center gap-2">
+            <div className="flex gap-1">
+              {[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: i * 0.15 + 's' }} />)}
+            </div>
+            <span className="text-xs text-indigo-400">Claude está analizando tus datos...</span>
+          </div>
+        )}
+        {aiSummary && aiExpanded && (
+          <div className="px-4 pb-4">
+            <p className="text-sm text-indigo-100 leading-relaxed">{aiSummary}</p>
+          </div>
+        )}
+        {!aiSummary && !aiLoading && (
+          <div className="px-4 pb-3">
+            <p className="text-xs text-indigo-600">Presá &ldquo;Generar&rdquo; para que Claude analice el estado actual de tus campañas.</p>
+          </div>
+        )}
       </div>
 
       {/* CTA */}
