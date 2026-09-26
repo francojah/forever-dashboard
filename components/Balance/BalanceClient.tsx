@@ -1123,6 +1123,12 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               })()}
             </p>
           </div>
+          {mode === 'month' && selectedMonthKey === curKey && (
+            <button onClick={() => { setManRev(''); setManSpend(''); setManOrders(''); setManUnits(''); setManMerch(''); setShowManual(true) }}
+              className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
+              Cargar CMV
+            </button>
+          )}
           {mode === 'month' && isPastMonth && getMonthData(selectedMonthKey).source === 'saved' && (
             <div className="flex items-center gap-2">
               <button onClick={() => handleSyncMonth(selectedMonthKey)} disabled={syncingMonth}
@@ -1165,13 +1171,13 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               note={`${pnl.tn_orders} órdenes · ${pnl.tn_units} unidades · AOV ${fmt(pnl.aov)}`} />
             <PnLRow
               label={pnl.merch_is_real
-                ? `Mercadería (costo real del mes)`
-                : `Mercadería (${pnl.tn_units} un · prom $${pnl.tn_units > 0 ? Math.round(pnl.merch / pnl.tn_units).toLocaleString('es-AR') : 0})`}
-              value={-pnl.merch}
-              pctVal={pnl.tn_revenue > 0 ? pnl.merch / pnl.tn_revenue : 0}
+                ? `Mercadería · ${pnl.tn_units} un · prom $${pnl.tn_units > 0 ? Math.round(pnl.merch / pnl.tn_units).toLocaleString('es-AR') : 0}/un`
+                : `Mercadería (sin CMV real · ${pnl.tn_units} un)`}
+              value={pnl.merch_is_real ? -pnl.merch : (pnl.merch > 0 ? -pnl.merch : null)}
+              pctVal={pnl.merch_is_real && pnl.tn_revenue > 0 ? pnl.merch / pnl.tn_revenue : undefined}
               note={pnl.merch_is_real
-                ? `COGS ingresado manualmente · prom $${pnl.tn_units > 0 ? Math.round(pnl.merch / pnl.tn_units).toLocaleString('es-AR') : '—'}/un`
-                : `Estimado: ${pnl.tn_units} un × $${unitCostDefault.toLocaleString('es-AR')} costo default — podés cargar el costo real en el ingreso manual del mes`}
+                ? `COGS ingresado por producto este mes`
+                : `Sin costo real — usá "Cargar CMV" para ingresar el costo por producto`}
               indent />
             <PnLRow
               label={pnl.shipping_is_real
@@ -1400,7 +1406,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{isEmpty ? '—' : fmt(mp.merch)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{isEmpty ? '—' : mp.merch_is_real ? fmt(mp.merch) : <span className="text-gray-300 dark:text-zinc-700">—</span>}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-red-500 dark:text-red-400">{isEmpty ? '—' : fmt(mp.shipping)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-red-500 dark:text-red-400">{isEmpty ? '—' : fmt(tnPack)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
