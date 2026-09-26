@@ -427,9 +427,40 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
   const [manSpend,     setManSpend]     = useState('')
   const [manOrders,    setManOrders]    = useState('')
   const [manUnits,     setManUnits]     = useState('')
-  const [manMerch,     setManMerch]     = useState('')  // COGS real del mes
+  const [manMerch,     setManMerch]     = useState('')  // COGS total fallback
   const [savingMan,    setSavingMan]    = useState(false)
   const [syncingMonth, setSyncingMonth] = useState(false)
+
+  // CMV por producto
+  interface MonthProduct { product_id: number; name: string; units_sold: number; revenue: number }
+  const [monthProducts, setMonthProducts] = useState<MonthProduct[] | null>(null)
+  const [loadingMp,     setLoadingMp]     = useState(false)
+  const [mpCosts,       setMpCosts]       = useState<Record<number, number>>({}) // product_id → unit_cost
+
+  const totalMpCmv = monthProducts
+    ? monthProducts.reduce((s, p) => {
+        const cost = mpCosts[p.product_id] ?? productCosts[String(p.product_id)] ?? 0
+        return s + p.units_sold * cost
+      }, 0)
+    : 0
+
+  async function handleLoadMonthProducts() {
+    setLoadingMp(true)
+    try {
+      const r = await fetch(`/api/tn-month-products?month=${selectedMonthKey}`)
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? 'Error')
+      setMonthProducts(j.products ?? [])
+      // Pre-cargar costos existentes en mpCosts
+      const initial: Record<number, number> = {}
+      ;(j.products ?? []).forEach((p: MonthProduct) => {
+        const saved = productCosts[String(p.product_id)]
+        if (saved) initial[p.product_id] = saved
+      })
+      setMpCosts(initial)
+    } catch (e) { alert('Error al cargar productos: ' + e) }
+    finally { setLoadingMp(false) }
+  }
 
   // Gasto Meta ACUMULADO del mes calendario (this_month), en vivo.
   // Evita usar last_30d (ventana móvil) que sobre-cuenta a principio de mes.
@@ -594,6 +625,31 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
     setSavingMan(true)
     try {
       const parse = (s: string) => s ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : null
+
+      // Si se cargaron productos, guardar costos por producto Y calcular CMV total
+      let finalMerchCost: number | null = parse(manMerch)
+      if (monthProducts && monthProducts.length > 0) {
+        // Guardar costos unitarios actualizados en product_costs
+        const toSave = Object.entries(mpCosts)
+        if (toSave.length > 0) {
+          await Promise.all(toSave.map(([pid, cost]) => {
+            const prod = monthProducts.find(p => String(p.product_id) === pid)
+            return fetch('/api/product-costs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ product_id: pid, product_name: prod?.name ?? '', unit_cost: cost }),
+            })
+          }))
+          setProductCosts(prev => {
+            const updated = { ...prev }
+            toSave.forEach(([pid, cost]) => { updated[pid] = cost })
+            return updated
+          })
+        }
+        // CMV total = suma de (unidades × costo)
+        if (totalMpCmv > 0) finalMerchCost = Math.round(totalMpCmv)
+      }
+
       const res = await fetch('/api/monthly', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -603,7 +659,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
           meta_spend: parse(manSpend),
           tn_orders:  parse(manOrders),
           tn_units:   parse(manUnits),
-          merch_cost: parse(manMerch),
+          merch_cost: finalMerchCost,
         }),
       })
       const saved = await res.json()
@@ -615,6 +671,7 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
       })
       setShowManual(false)
       setManRev(''); setManSpend(''); setManOrders(''); setManUnits(''); setManMerch('')
+      setMonthProducts(null); setMpCosts({})
     } catch (e) { alert('Error al guardar: ' + e) }
     finally { setSavingMan(false) }
   }
@@ -915,17 +972,70 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
               </div>
             ))}
           </div>
-          {/* Costo de mercadería real del mes */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 dark:text-zinc-500 mb-1 block flex items-center gap-1.5">
-              Costo de mercadería real del mes (ARS)
-              <span className="text-micro font-normal text-violet-500 dark:text-violet-400">prioridad sobre costo unitario default</span>
-            </label>
-            <input type="text" value={manMerch} onChange={e => setManMerch(e.target.value)} placeholder={`ej: ${Math.round(unitCostDefault * unitsPerOrder * (parseInt(manOrders) || 50)).toLocaleString('es-AR')} — dejá vacío para calcular automáticamente`}
-              className="w-full text-sm bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/50 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder:text-gray-400 dark:placeholder:text-zinc-600" />
-            <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-1">
-              Ingresá el total real que pagaste a proveedores ese mes. Si lo dejás vacío, se calcula como unidades × costo unitario default (${unitCostDefault.toLocaleString('es-AR')}).
-            </p>
+          {/* CMV por producto */}
+          <div className="pt-1 border-t border-gray-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                Costo de mercadería (CMV)
+                <span className="text-micro font-normal text-violet-500 dark:text-violet-400">por producto</span>
+              </span>
+              <button onClick={handleLoadMonthProducts} disabled={loadingMp}
+                className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 font-medium disabled:opacity-50 flex items-center gap-1">
+                {loadingMp
+                  ? <><span className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin" /> Cargando...</>
+                  : monthProducts ? '↺ Recargar' : '📦 Cargar productos vendidos'}
+              </button>
+            </div>
+
+            {monthProducts ? (
+              <div className="border border-violet-200 dark:border-violet-900/50 rounded-lg overflow-hidden">
+                {/* Header */}
+                <div className="grid gap-0 text-micro font-medium text-gray-400 dark:text-zinc-600 bg-gray-50 dark:bg-zinc-800/60 px-3 py-1.5"
+                  style={{ gridTemplateColumns: '1fr 3rem 6rem 5rem' }}>
+                  <span>Producto</span>
+                  <span className="text-right">Uds.</span>
+                  <span className="text-right">$ / ud.</span>
+                  <span className="text-right">Subtotal</span>
+                </div>
+                {/* Product rows */}
+                {monthProducts.map(p => {
+                  const cost = mpCosts[p.product_id] ?? productCosts[String(p.product_id)] ?? 0
+                  const subtotal = p.units_sold * cost
+                  return (
+                    <div key={p.product_id}
+                      className="grid items-center px-3 py-2 border-t border-gray-100 dark:border-zinc-800"
+                      style={{ gridTemplateColumns: '1fr 3rem 6rem 5rem' }}>
+                      <span className="text-xs text-gray-700 dark:text-zinc-300 truncate pr-2" title={p.name}>{p.name}</span>
+                      <span className="text-xs tabular-nums text-gray-500 dark:text-zinc-500 text-right">{p.units_sold}</span>
+                      <input
+                        type="number" min="0" step="100"
+                        value={cost || ''}
+                        onChange={e => setMpCosts(prev => ({ ...prev, [p.product_id]: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0"
+                        className="text-xs text-right w-full bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/50 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+                      <span className="text-xs tabular-nums text-right text-violet-600 dark:text-violet-400">
+                        {subtotal > 0 ? fmt(subtotal) : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+                {/* Total */}
+                <div className="flex items-center justify-between px-3 py-2.5 bg-violet-50 dark:bg-violet-950/20 border-t border-violet-200 dark:border-violet-800/40">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-zinc-200">Total CMV del mes</span>
+                  <span className="text-sm font-bold text-violet-600 dark:text-violet-400">{totalMpCmv > 0 ? fmt(totalMpCmv) : '—'}</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <input type="text" value={manMerch} onChange={e => setManMerch(e.target.value)}
+                  placeholder={`ej: ${Math.round(unitCostDefault * unitsPerOrder * (parseInt(manOrders) || 50)).toLocaleString('es-AR')} — o cargá los productos arriba`}
+                  className="w-full text-sm bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/50 rounded-lg px-3 py-2 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder:text-gray-400 dark:placeholder:text-zinc-600" />
+                <p className="text-[11px] text-gray-400 dark:text-zinc-600 mt-1">
+                  Ingresá el total real pagado a proveedores ese mes, o usá &ldquo;Cargar productos&rdquo; para calcularlo por producto. Si lo dejás vacío: unidades × ${unitCostDefault.toLocaleString('es-AR')}.
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowManual(false)}
@@ -1272,11 +1382,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-700 dark:text-zinc-300">{isEmpty ? <span className="text-gray-300 dark:text-zinc-700">—</span> : fmt(mp.tn_revenue)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{isEmpty ? '—' : fmt(-mp.merch)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{isEmpty ? '—' : fmt(-mp.shipping)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{isEmpty ? '—' : fmt(-tnPack)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400">{isEmpty ? '—' : fmt(-mp.meta_spend)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty || fijos === 0 ? '—' : fmt(-fijos)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-blue-600 dark:text-blue-400">{isEmpty ? '—' : fmt(mp.merch)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{isEmpty ? '—' : fmt(mp.shipping)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-violet-600 dark:text-violet-400">{isEmpty ? '—' : fmt(tnPack)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-orange-600 dark:text-orange-400">{isEmpty ? '—' : fmt(mp.meta_spend)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-zinc-500">{isEmpty || fijos === 0 ? '—' : fmt(fijos)}</td>
                     <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${isEmpty ? 'text-gray-300 dark:text-zinc-700' : mp.net_result >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {isEmpty ? '—' : fmt(mp.net_result)}
                     </td>
@@ -1301,11 +1411,11 @@ export default function BalanceClient({ tnSnapshot, metaSnapshot, initialExpense
                   <tr className="bg-gray-50 dark:bg-zinc-800/40 border-t-2 border-gray-200 dark:border-zinc-700">
                     <td className="px-4 py-3 font-semibold text-gray-700 dark:text-zinc-300 sticky left-0 bg-gray-50 dark:bg-zinc-800/40">Total {year}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-700 dark:text-zinc-300">{fmt(totRev)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">{fmt(-totMerch)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{fmt(-totShip)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-violet-600 dark:text-violet-400">{fmt(-totTnPack)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">{fmt(-totMeta)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totFijos > 0 ? fmt(-totFijos) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">{fmt(totMerch)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{fmt(totShip)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-violet-600 dark:text-violet-400">{fmt(totTnPack)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">{fmt(totMeta)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-500 dark:text-zinc-500">{totFijos > 0 ? fmt(totFijos) : '—'}</td>
                     <td className={`px-4 py-3 text-right tabular-nums font-bold ${totNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {fmt(totNet)}
                     </td>
