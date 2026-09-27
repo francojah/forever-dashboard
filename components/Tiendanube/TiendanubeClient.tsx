@@ -57,12 +57,11 @@ function getMetaSummary(metaSnapshot: Snapshot | null, period: Period): any {
 }
 
 type ConvData = {
-  total_checkouts: number
   paid_count: number
-  abandoned_count: number
-  pending_count: number
+  abandoned_count: number | null   // null cuando el período > 30 días (TN no guarda más)
   checkout_conversion: number | null
   abandonment_rate: number | null
+  visits_available: boolean
 }
 
 export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
@@ -76,7 +75,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
     setConvData(null)
     fetch(`/api/tn-conversion?period=${period}`)
       .then(r => r.json())
-      .then((d: ConvData & { error?: string }) => { if (!d.error) setConvData(d) })
+      .then((d: (ConvData & { error?: string })) => { if (!d.error) setConvData(d) })
       .catch(() => {})
       .finally(() => setConvLoading(false))
   }, [period])
@@ -254,55 +253,61 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
                 ))}
               </div>
             ) : convData ? (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Checkouts iniciados */}
-                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Checkouts iniciados</p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-zinc-100">{convData.total_checkouts}</p>
-                  <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">órdenes creadas</p>
-                </div>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Órdenes pagadas */}
+                  <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Órdenes pagadas</p>
+                    <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{convData.paid_count}</p>
+                    <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">completadas en el período</p>
+                  </div>
 
-                {/* Pagados */}
-                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Pagados</p>
-                  <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{convData.paid_count}</p>
-                  <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
-                    {convData.total_checkouts > 0
-                      ? `${((convData.paid_count / convData.total_checkouts) * 100).toFixed(1)}% del total`
-                      : 'del total'}
-                  </p>
-                </div>
+                  {/* Carritos abandonados */}
+                  <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Carritos abandonados</p>
+                    {convData.abandoned_count != null ? (
+                      <>
+                        <p className={`text-2xl font-semibold ${convData.abandoned_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-zinc-500'}`}>
+                          {convData.abandoned_count}
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
+                          {convData.abandonment_rate != null ? `${convData.abandonment_rate}% de abandono` : 'llegaron al paso 2'}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-semibold text-gray-300 dark:text-zinc-600">—</p>
+                        <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">solo disponible últimos 30 días</p>
+                      </>
+                    )}
+                  </div>
 
-                {/* Abandonados */}
-                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Abandonados</p>
-                  <p className={`text-2xl font-semibold ${convData.abandoned_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-zinc-500'}`}>
-                    {convData.abandoned_count}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
-                    {convData.abandonment_rate != null ? `${convData.abandonment_rate}% abandono` : 'sin datos'}
-                  </p>
-                </div>
-
-                {/* Tasa de conversión checkout */}
-                <div className={`rounded-xl border p-4 shadow-sm ${
-                  convData.checkout_conversion != null && convData.checkout_conversion >= 40
-                    ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
-                    : convData.checkout_conversion != null && convData.checkout_conversion >= 20
-                    ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
-                    : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
-                }`}>
-                  <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Tasa de conversión</p>
-                  <p className={`text-2xl font-semibold ${
-                    convData.checkout_conversion != null && convData.checkout_conversion >= 40
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : convData.checkout_conversion != null && convData.checkout_conversion >= 20
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-red-500 dark:text-red-400'
+                  {/* Tasa de conversión checkout */}
+                  <div className={`rounded-xl border p-4 shadow-sm ${
+                    convData.checkout_conversion != null && convData.checkout_conversion >= 50
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                      : convData.checkout_conversion != null && convData.checkout_conversion >= 30
+                      ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                      : convData.checkout_conversion != null
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
+                      : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
                   }`}>
-                    {convData.checkout_conversion != null ? `${convData.checkout_conversion}%` : '—'}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">checkout → pago</p>
+                    <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wide mb-1">Conversión checkout</p>
+                    <p className={`text-2xl font-semibold ${
+                      convData.checkout_conversion != null && convData.checkout_conversion >= 50
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : convData.checkout_conversion != null && convData.checkout_conversion >= 30
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : convData.checkout_conversion != null
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-gray-300 dark:text-zinc-600'
+                    }`}>
+                      {convData.checkout_conversion != null ? `${convData.checkout_conversion}%` : '—'}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
+                      {convData.checkout_conversion != null ? 'carrito → pago' : 'sin datos de abandono'}
+                    </p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -313,7 +318,7 @@ export default function TiendanubeClient({ tnSnapshot, metaSnapshot }: Props) {
 
             {/* Nota sobre visitas */}
             <p className="text-xs text-gray-400 dark:text-zinc-500 mt-2">
-              💡 La tasa de conversión es checkout → pago. Para visitas → carrito, revisá el panel de Tiendanube o conectá Google Analytics.
+              💡 Conversión = carritos abandonados (paso 2) vs órdenes pagadas. Las visitas a la tienda solo están disponibles en el panel de estadísticas de Tiendanube (la API no las expone).
             </p>
           </div>
 
