@@ -247,6 +247,10 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const [aiLoading, setAiLoading]         = useState(false)
   const [aiExpanded, setAiExpanded]       = useState(true)
 
+  // Conversion metrics (on-demand from TN)
+  const [convConversion, setConvConversion] = useState<number | null>(null)
+  const [convLoading, setConvLoading]       = useState(false)
+
   // Live cost settings (override defaults)
   const [dynMargin, setDynMargin]         = useState(DEF_MARGIN)
   const [dynBreakevenCpa, setDynBkCpa]    = useState(DEF_BREAKEVEN_CPA)
@@ -279,6 +283,24 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
   const [customTnRevenue, setCustomTnRevenue] = useState<number | null>(null)
   const [customLoading, setCustomLoading] = useState(false)
   const [customError, setCustomError]     = useState<string | null>(null)
+
+  // ── Fetch conversion metrics when period changes ──────────────────
+  useEffect(() => {
+    const periodMap: Record<string, string> = {
+      today: 'today', yesterday: 'yesterday', last_7d: '7d', last_30d: '30d',
+    }
+    const tnPeriod = periodMap[period]
+    if (!tnPeriod) { setConvConversion(null); return }
+    setConvLoading(true)
+    setConvConversion(null)
+    fetch(`/api/tn-conversion?period=${tnPeriod}`)
+      .then(r => r.json())
+      .then((d: { checkout_conversion?: number | null; error?: string }) => {
+        if (!d.error && d.checkout_conversion != null) setConvConversion(d.checkout_conversion)
+      })
+      .catch(() => {})
+      .finally(() => setConvLoading(false))
+  }, [period])
 
   // ── Auto-polling every 3 min ──────────────────────────────────────
   useEffect(() => {
@@ -840,6 +862,13 @@ export default function DashboardClient({ snapshot, tnSnapshot, prevSnapshot, hi
           <KpiCard label="Órdenes" value={tnData?.total_orders != null ? String(tnData.total_orders) : '—'} sub={tnData?.total_orders && periodDays > 1 ? `~${(tnData.total_orders / periodDays).toFixed(1)}/día` : undefined} accent="bg-violet-400" tooltip="Órdenes pagadas en el período." />
           <KpiCard label="Ticket promedio" value={fmtM(tnData?.aov)} sub="por orden" accent="bg-violet-400" tooltip="Valor promedio por orden (AOV)." />
           <KpiCard label="Unidades vendidas" value={tnData?.total_units_sold != null ? String(tnData.total_units_sold) : '—'} sub="artículos" accent="bg-violet-400" tooltip="Total de artículos vendidos." />
+          <KpiCard
+            label="Conv. checkout"
+            value={convLoading ? '...' : convConversion != null ? `${convConversion}%` : '—'}
+            sub="checkout → pago"
+            accent={convConversion != null && convConversion >= 40 ? 'bg-emerald-400' : convConversion != null && convConversion >= 20 ? 'bg-amber-400' : 'bg-violet-400'}
+            tooltip="Tasa de conversión del checkout: % de órdenes iniciadas que terminaron en pago. Calculado en tiempo real desde Tiendanube."
+          />
         </div>
       </div>
 
