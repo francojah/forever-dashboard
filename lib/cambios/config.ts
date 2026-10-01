@@ -41,6 +41,8 @@ export const CAMBIOS = {
   /** Ropa interior y accesorios: no se cambian. Se filtra por nombre para cubrir productos nuevos. */
   excludedNamePattern: new RegExp(process.env.CAMBIOS_EXCLUDED_NAME_REGEX || 'boxer|colaless|bralette|iconic set|bolsa', 'i'),
   appUrl: (process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app').replace(/\/$/, ''),
+  /** Dominio público del portal (links que recibe el cliente). Ej: https://cambios.foreverbasics.com.ar */
+  publicUrl: (process.env.CAMBIOS_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app').replace(/\/$/, ''),
   /** Email (Resend). Sin RESEND_API_KEY no se envían mails y el panel ofrece WhatsApp. */
   resendKey: process.env.RESEND_API_KEY || '',
   fromEmail: process.env.CAMBIOS_FROM_EMAIL || 'Forever Basics <cambios@foreverbasics.com.ar>',

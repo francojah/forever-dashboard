@@ -1,7 +1,19 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const CAMBIOS_HOST_PREFIX = 'cambios.'
+
 export async function middleware(request: NextRequest) {
+  // Subdominio público de cambios (cambios.foreverbasics.com.ar): solo el portal, nada del dashboard
+  const host = (request.headers.get('host') || '').toLowerCase()
+  if (host.startsWith(CAMBIOS_HOST_PREFIX)) {
+    const p = request.nextUrl.pathname
+    if (p === '/') return NextResponse.rewrite(new URL('/cambios', request.url))
+    if (p.startsWith('/api/cambios/admin')) return NextResponse.json({ error: 'No disponible' }, { status: 404 })
+    if (p === '/cambios' || p.startsWith('/cambios/') || p.startsWith('/api/cambios/')) return NextResponse.next()
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(

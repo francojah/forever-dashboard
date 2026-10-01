@@ -162,7 +162,7 @@ export function randomToken(len = 24): string {
 }
 
 export function statusUrl(token: string) {
-  return `${CAMBIOS.appUrl}/cambios/estado/${token}`
+  return `${CAMBIOS.publicUrl}/cambios/estado/${token}`
 }
 
 export function money(n: number | null | undefined) {

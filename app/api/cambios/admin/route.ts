@@ -56,7 +56,7 @@ export async function GET() {
     }))
     return NextResponse.json({
       ok: true, rows: out, emailEnabled: !!CAMBIOS.resendKey,
-      reasons: REASONS, portalUrl: `${CAMBIOS.appUrl}/cambios`,
+      reasons: REASONS, portalUrl: CAMBIOS.publicUrl.includes('cambios.') ? CAMBIOS.publicUrl : `${CAMBIOS.publicUrl}/cambios`,
     })
   } catch (e) {
     console.error('[cambios/admin]', e)
