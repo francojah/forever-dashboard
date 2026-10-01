@@ -27,7 +27,7 @@ function buildSteps(e: Ex): Step[] {
   if (isMoto(e)) {
     return [
       { label: 'Pedido de cambio recibido', done: true },
-      { label: 'Pago del envío confirmado', detail: 'Transferí el envío y subí el comprobante acá abajo.', done: !!e.paid_at },
+      { label: 'Pago confirmado', detail: 'Transferí el total y subí el comprobante (arriba).', done: !!e.paid_at },
       {
         label: 'Coordinamos la moto',
         detail: e.moto_date
@@ -48,7 +48,7 @@ function buildSteps(e: Ex): Step[] {
   // Correo Argentino
   return [
     { label: 'Pedido de cambio recibido', done: true },
-    { label: 'Pago del envío confirmado', detail: 'Transferí el envío y subí el comprobante acá abajo.', done: !!e.paid_at },
+    { label: 'Pago confirmado', detail: 'Transferí el total y subí el comprobante (arriba).', done: !!e.paid_at },
     { label: 'Te enviamos la etiqueta', detail: 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda en cualquier sucursal.', done: !!e.label_sent_at },
     { label: 'Recibimos tu prenda', detail: 'Cuando llega a nuestro depósito la revisamos y preparamos la nueva.', done: !!e.received_at },
     { label: 'Te enviamos la nueva', detail: e.tracking_number ? `Seguimiento: ${e.tracking_number}` : `Despachamos los cambios los lunes.`, done: !!e.dispatched_at },
@@ -96,8 +96,8 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
     } catch { /* algunos webviews no permiten copiar */ }
   }
 
-  if (notFound) return <Card><p>No encontramos este cambio. Revisá el link o <a className="underline" href="/">iniciá uno nuevo</a>.</p></Card>
-  if (!data) return <p className="text-zinc-500 text-sm">Cargando…</p>
+  if (notFound) return <main className="mx-auto max-w-xl px-4 py-8"><Card><p>No encontramos este cambio. Revisá el link o <a className="underline font-semibold" href="/">iniciá uno nuevo</a>.</p></Card></main>
+  if (!data) return <main className="mx-auto max-w-xl px-4 py-8"><p className="text-neutral-500 text-sm">Cargando tu cambio…</p></main>
 
   const e = data.exchange
   const steps = buildSteps(e)
@@ -107,94 +107,130 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
   const total = e.shipping_amount == null ? null : e.shipping_amount + diff
   const correo = e.type === 'cambio' && (e.zone === 'correo' || e.zone === 'otro')
 
+  const cancelled = e.status === 'cancelado'
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-xs text-zinc-500">Orden #{e.order_number} · {e.zone_label}</p>
-        <h1 className="text-2xl font-semibold">Cambio {e.code}</h1>
-        <p className={`inline-block mt-2 text-sm px-2 py-1 rounded ${e.status === 'cancelado' ? 'bg-red-100 text-red-800' : 'bg-zinc-900 text-white'}`}>{e.status_label}</p>
-      </div>
+    <>
+      <section className="bg-black text-white">
+        <div className="mx-auto max-w-xl px-5 pt-6 pb-16">
+          <p className="text-neutral-400 text-sm">Orden #{e.order_number} · {e.zone_label}</p>
+          <h1 className="font-display text-[30px] leading-tight font-bold tracking-[-0.01em] mt-1">Cambio {e.code}</h1>
+          <p className={`inline-flex items-center gap-2 mt-3 text-[13px] font-semibold rounded-full px-3 py-1 ${cancelled ? 'bg-[#4A1414] text-[#F7C6C6]' : 'bg-[#2A2214] text-[#E9C77A]'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${cancelled ? 'bg-[#F27A7A]' : 'bg-[#E9C77A]'}`} />
+            {e.status_label}
+          </p>
+        </div>
+      </section>
 
-      {/* Acción pendiente del cliente: pagar */}
-      {e.type === 'cambio' && e.status === 'pendiente_pago' && (
-        <Card className="space-y-3 border-zinc-900">
-          {total == null ? (
-            <p className="text-[15px]">Estamos calculando el costo del envío. Te lo confirmamos por mail y WhatsApp.</p>
-          ) : (
-            <>
-              <p className="text-[15px]">Transferí <b>{money(total)}</b> por Mercado Pago al alias:</p>
-              {diff > 0 && <p className="text-xs text-zinc-500 -mt-2">Envío {money(e.shipping_amount)} + diferencia de precio {money(diff)}</p>}
-              <button type="button" onClick={() => copyAlias(data.alias)}
-                className="w-full h-12 rounded-lg bg-zinc-100 font-mono text-lg flex items-center justify-center gap-2">
-                {data.alias} <span className="text-xs text-zinc-500 font-sans">{copied ? 'copiado ✓' : 'tocar para copiar'}</span>
-              </button>
-              <p className="text-sm text-zinc-600">En el concepto poné <b>{e.code}</b>.</p>
-              <div className="pt-2 border-t border-zinc-200 space-y-2">
-                <p className="text-sm font-medium">{e.receipt_uploaded_at ? 'Comprobante recibido ✓ (podés subir otro si te equivocaste)' : 'Subí el comprobante'}</p>
-                <input type="file" accept="image/*,application/pdf" className="block w-full text-sm"
-                  onChange={(ev) => setFile(ev.target.files && ev.target.files[0] ? ev.target.files[0] : null)} />
-                {err && <ErrorBox>{err}</ErrorBox>}
-                {msg && <p className="text-sm text-green-700">{msg}</p>}
-                <Btn onClick={upload} disabled={!file || uploading}>{uploading ? 'Subiendo…' : 'Enviar comprobante'}</Btn>
-              </div>
-            </>
+      <main className="mx-auto max-w-xl px-4 -mt-10 pb-8 space-y-5">
+        {/* Acción pendiente del cliente: pagar */}
+        {e.type === 'cambio' && e.status === 'pendiente_pago' && (
+          <Card className="space-y-4 border-2 border-[#B8892B] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]">
+            {total == null ? (
+              <p className="text-[15px]">Estamos calculando el costo del envío. Te lo confirmamos por mail y WhatsApp.</p>
+            ) : (
+              <>
+                <div>
+                  <p className="text-[13px] font-semibold text-[#8B6914]">Tu próximo paso</p>
+                  <p className="text-[15px] mt-1">Transferí por Mercado Pago</p>
+                  <p className="font-display text-[32px] font-bold leading-tight">{money(total)}</p>
+                  {diff > 0 && <p className="text-[13px] text-neutral-500">Envío {money(e.shipping_amount)} + diferencia de precio {money(diff)}</p>}
+                </div>
+                <button type="button" onClick={() => copyAlias(data.alias)}
+                  className="w-full rounded-xl bg-[#F4F4F3] border border-[#E6E6E3] px-4 py-3 flex items-center justify-between">
+                  <span className="text-left">
+                    <span className="block text-[12px] text-neutral-500">Alias</span>
+                    <span className="block font-display text-[19px] font-bold">{data.alias}</span>
+                  </span>
+                  <span className={`text-[13px] font-semibold ${copied ? 'text-[#1F7A4D]' : 'text-[#8B6914]'}`}>{copied ? 'Copiado ✓' : 'Copiar'}</span>
+                </button>
+                <p className="text-[13.5px] text-neutral-600">En el concepto poné <b className="text-black">{e.code}</b>.</p>
+                <div className="pt-4 border-t border-[#EFEFEC] space-y-3">
+                  <p className="text-[14px] font-semibold">{e.receipt_uploaded_at ? 'Comprobante recibido ✓' : 'Subí el comprobante'}</p>
+                  {e.receipt_uploaded_at && <p className="text-[13px] text-neutral-500 -mt-2">Lo estamos revisando. Si te equivocaste, podés subir otro.</p>}
+                  <label className="flex items-center gap-3 rounded-xl border border-dashed border-[#CFCFCB] px-4 py-3 cursor-pointer">
+                    <span className="text-[#8B6914] text-[13px] font-semibold shrink-0">Elegir archivo</span>
+                    <span className="text-[13px] text-neutral-500 truncate">{file ? file.name : 'Foto o PDF del comprobante'}</span>
+                    <input type="file" accept="image/*,application/pdf" className="sr-only"
+                      onChange={(ev) => setFile(ev.target.files && ev.target.files[0] ? ev.target.files[0] : null)} />
+                  </label>
+                  {err && <ErrorBox>{err}</ErrorBox>}
+                  {msg && <p className="text-sm text-[#1F7A4D]">{msg}</p>}
+                  <Btn onClick={upload} disabled={!file || uploading}>{uploading ? 'Subiendo…' : 'Enviar comprobante'}</Btn>
+                </div>
+              </>
+            )}
+          </Card>
+        )}
+
+        {/* Correo: etiqueta */}
+        {correo && e.status === 'pago_confirmado' && (
+          <Card className="space-y-3 border-2 border-[#B8892B] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]">
+            <p className="text-[13px] font-semibold text-[#8B6914]">Tu próximo paso</p>
+            {e.label_url ? (
+              <>
+                <p className="font-display text-[20px] font-bold leading-tight">Tu etiqueta está lista</p>
+                <ol className="text-[14px] text-neutral-700 space-y-1.5 list-decimal pl-5">
+                  <li>Descargala e imprimila.</li>
+                  <li>Pegala en el paquete con la prenda.</li>
+                  <li>Despachalo en cualquier sucursal de Correo Argentino.</li>
+                </ol>
+                <a href={e.label_url} className="block w-full h-[52px] rounded-xl bg-black text-white text-[15px] font-semibold leading-[52px] text-center">Descargar etiqueta</a>
+              </>
+            ) : (
+              <p className="text-[15px] leading-relaxed">Pago confirmado. <b>En breve te enviamos la etiqueta de Correo Argentino</b> para que despaches la prenda. Te avisamos por mail y WhatsApp.</p>
+            )}
+          </Card>
+        )}
+
+        {/* Línea de tiempo */}
+        <Card className={e.status === 'pendiente_pago' || (correo && e.status === 'pago_confirmado') ? '' : 'shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]'}>
+          <h2 className="font-display text-[15px] font-bold mb-4">Seguimiento</h2>
+          <ol>
+            {steps.map((s, i) => {
+              const isCurrent = i === current && !cancelled
+              const last = i === steps.length - 1
+              return (
+                <li key={i} className="flex gap-3">
+                  <span className="flex flex-col items-center">
+                    <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold
+                      ${s.done ? 'bg-[#B8892B] text-white' : isCurrent ? 'border-2 border-black text-black bg-white' : 'border border-[#D9D9D6] text-neutral-400 bg-white'}`}>
+                      {s.done ? <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg> : i + 1}
+                    </span>
+                    {!last && <span className={`w-[2px] flex-1 min-h-[18px] ${s.done ? 'bg-[#B8892B]' : 'bg-[#E6E6E3]'}`} />}
+                  </span>
+                  <span className={`min-w-0 ${last ? '' : 'pb-5'}`}>
+                    <span className={`block text-[15px] leading-7 ${s.done || isCurrent ? 'text-black' : 'text-neutral-400'} ${isCurrent ? 'font-semibold' : ''}`}>{s.label}</span>
+                    {s.detail && (isCurrent || (s.done && last)) && <span className="block text-[13.5px] text-neutral-600 leading-relaxed">{s.detail}</span>}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+          {e.type === 'cambio' && !finished && !cancelled && (
+            <p className="mt-5 rounded-xl bg-[#FBF6EA] text-[#6B5110] text-[13.5px] px-3 py-2.5">
+              Despachamos los cambios todos los lunes. Próximo despacho: <b>{nextMondayLabel()}</b>.
+            </p>
           )}
         </Card>
-      )}
 
-      {/* Correo: etiqueta lista para descargar */}
-      {correo && e.status === 'pago_confirmado' && (
-        <Card className="space-y-3 border-zinc-900">
-          {e.label_url ? (
-            <>
-              <p className="text-[15px] font-medium">Tu etiqueta está lista</p>
-              <ol className="text-sm text-zinc-700 space-y-1 list-decimal pl-5">
-                <li>Descargala e imprimila.</li>
-                <li>Pegala en el paquete con la prenda.</li>
-                <li>Despachalo en cualquier sucursal de Correo Argentino.</li>
-              </ol>
-              <a href={e.label_url} className="block w-full h-12 rounded-lg bg-zinc-900 text-white text-[15px] font-medium leading-[48px] text-center">Descargar etiqueta</a>
-            </>
-          ) : (
-            <p className="text-[15px]">Pago confirmado. <b>En breve te enviamos la etiqueta de Correo Argentino</b> para que despaches la prenda. Te avisamos por mail y WhatsApp.</p>
-          )}
-        </Card>
-      )}
-
-      {/* Línea de tiempo */}
-      <Card>
-        <ol className="space-y-4">
-          {steps.map((s, i) => {
-            const isCurrent = i === current && e.status !== 'cancelado'
-            return (
-              <li key={i} className="flex gap-3">
-                <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs ${s.done ? 'bg-zinc-900 text-white' : isCurrent ? 'border-2 border-zinc-900 text-zinc-900' : 'border border-zinc-300 text-zinc-400'}`}>{s.done ? '✓' : i + 1}</span>
-                <span className="min-w-0">
-                  <span className={`block text-[15px] ${s.done || isCurrent ? 'text-zinc-900' : 'text-zinc-400'} ${isCurrent ? 'font-medium' : ''}`}>{s.label}</span>
-                  {s.detail && (isCurrent || (s.done && i === steps.length - 1)) && <span className="block text-sm text-zinc-600 mt-0.5">{s.detail}</span>}
-                </span>
+        <Card>
+          <h2 className="font-display text-[15px] font-bold mb-3">Tu cambio</h2>
+          <ul className="space-y-3">
+            {e.items.map((it, i) => (
+              <li key={i} className="text-[14px] leading-snug">
+                <span className="block text-neutral-500">{it.name} · {it.variant_label}{it.quantity > 1 ? ` · ${it.quantity} u.` : ''}</span>
+                {it.new_variant_label && (
+                  <span className="block font-semibold mt-0.5">→ {it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</span>
+                )}
               </li>
-            )
-          })}
-        </ol>
-      </Card>
+            ))}
+          </ul>
+        </Card>
 
-      {e.type === 'cambio' && !finished && e.status !== 'cancelado' && (
-        <p className="text-sm text-zinc-600 text-center">📦 Despachamos los cambios todos los lunes. Próximo despacho: <b>{nextMondayLabel()}</b>.</p>
-      )}
-
-      <Card>
-        <p className="text-sm font-medium mb-2">Prendas</p>
-        <ul className="space-y-1 text-[15px]">
-          {e.items.map((it, i) => (
-            <li key={i}>{it.name} — {it.variant_label}{it.new_variant_label ? <> → <b>{it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</b></> : null}{it.quantity > 1 ? ` (x${it.quantity})` : ''}</li>
-          ))}
-        </ul>
-      </Card>
-
-      <p className="text-xs text-zinc-500 text-center">
-        ¿Dudas? <a className="underline" href={waLink(data.whatsapp, `Hola! Consulta por el cambio ${e.code}`)}>Escribinos por WhatsApp</a>
-      </p>
-    </div>
+        <p className="text-xs text-neutral-500 text-center">
+          ¿Dudas? <a className="underline" href={waLink(data.whatsapp, `Hola! Consulta por el cambio ${e.code}`)}>Escribinos por WhatsApp</a>
+        </p>
+      </main>
+    </>
   )
 }

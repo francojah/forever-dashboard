@@ -59,7 +59,7 @@ export const REASONS = [
 ] as const
 
 export const STATUS_LABEL: Record<string, string> = {
-  pendiente_pago: 'Esperando la transferencia del envío',
+  pendiente_pago: 'Esperando tu transferencia',
   pago_confirmado: 'Pago confirmado',
   prenda_recibida: 'Recibimos tu prenda',
   despachado: 'Cambio enviado',
