@@ -15,9 +15,9 @@ describe('zona y monto del envío (nombres reales de envío de la tienda)', () =
     const o = base({ shipping_option: 'Moto Express a domicilio CABA', shipping_address: { province: 'Capital Federal' } })
     expect(classifyZone(o)).toBe('caba'); expect(shippingAmount('caba', o)).toBe(5000)
   })
-  it('Moto en provincia de Buenos Aires → moto_gba a confirmar', () => {
-    const o = base({ shipping_option: 'Moto Express a domicilio', shipping_address: { province: 'Buenos Aires' } })
-    expect(classifyZone(o)).toBe('moto_gba'); expect(shippingAmount('moto_gba', o)).toBeNull()
+  it('Moto en provincia de Buenos Aires → moto_gba con lo que pagó en la compra', () => {
+    const o = base({ shipping_option: 'Moto Express a domicilio', shipping_address: { province: 'Buenos Aires' }, shipping_cost_customer: '8500.00' })
+    expect(classifyZone(o)).toBe('moto_gba'); expect(shippingAmount('moto_gba', o)).toBe(8500)
   })
   it('Correo → usa lo que cobró el correo (owner)', () => {
     const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Córdoba' }, shipping_cost_owner: '9256.84', shipping_cost_customer: '0' })
@@ -27,8 +27,9 @@ describe('zona y monto del envío (nombres reales de envío de la tienda)', () =
     const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Jujuy' } })
     expect(shippingAmount('correo', o)).toBeNull()
   })
-  it('Punto de retiro → retiro', () => {
-    expect(classifyZone(base({ shipping_option: 'Punto de retiro', shipping_pickup_type: 'pickup' }))).toBe('retiro')
+  it('Punto de retiro → retiro sin costo', () => {
+    const o = base({ shipping_option: 'Punto de retiro', shipping_pickup_type: 'pickup', shipping_cost_customer: '6200.00' })
+    expect(classifyZone(o)).toBe('retiro'); expect(shippingAmount('retiro', o)).toBe(0)
   })
 })
 

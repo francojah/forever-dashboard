@@ -19,6 +19,7 @@ function itemsHtml(r: ExchangeRow) {
 }
 
 function payBlock(r: ExchangeRow) {
+  if (r.zone === 'retiro' || r.shipping_amount === 0) return `<p>El cambio no tiene costo: lo hacemos en el mismo punto de retiro de tu compra. Te confirmamos día y horario para que te acerques con la prenda.</p>`
   if (r.shipping_amount == null) return `<p>En breve te confirmamos el costo del envío por este medio.</p>`
   return `<p>Para avanzar, transferí <b>${money(r.shipping_amount)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (Mercado Pago) y poné <b>${esc(r.code)}</b> en el concepto. Después subí el comprobante desde el link de abajo.</p>`
 }
@@ -53,8 +54,10 @@ export function buildEmail(kind: EmailKind, r: ExchangeRow): { subject: string; 
       body = `<p>Ya recibimos la prenda que nos mandaste. Estamos preparando el envío de la nueva.</p>`
       break
     case 'despachado':
-      subject = r.zone === 'correo' ? `Tu cambio ${r.code} está en camino` : `La moto pasa por tu cambio ${r.code}`
-      body = r.zone === 'correo'
+      subject = r.zone === 'correo' ? `Tu cambio ${r.code} está en camino` : r.zone === 'retiro' ? `Tu cambio ${r.code} está coordinado` : `La moto pasa por tu cambio ${r.code}`
+      body = r.zone === 'retiro'
+        ? `<p>Te esperamos en el punto de retiro <b>${esc(r.moto_date || '')}</b> con la prenda a cambiar. Ahí mismo te damos la nueva.</p>`
+        : r.zone === 'correo'
         ? `<p>Tu cambio salió por Correo Argentino.</p>${r.tracking_number ? `<p>Número de seguimiento: <b>${esc(r.tracking_number)}</b><br/>Podés seguirlo en <a href="https://www.correoargentino.com.ar">correoargentino.com.ar</a></p>` : ''}`
         : `<p>La moto pasa <b>${esc(r.moto_date || 'en los próximos días')}</b>. Tené lista la prenda para entregar: te dejamos la nueva en el mismo momento.</p>`
       break
@@ -97,7 +100,9 @@ export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
   const first = (r.customer_name || '').split(' ')[0] || 'Hola'
   const base: Record<EmailKind, string> = {
     creado: r.type === 'cambio'
-      ? (r.shipping_amount == null
+      ? (r.zone === 'retiro' || r.shipping_amount === 0
+        ? `${first}! Recibimos tu cambio ${r.code}. No tiene costo: te confirmamos día y horario para acercarte al punto de retiro con la prenda.`
+        : r.shipping_amount == null
         ? `${first}! Recibimos tu cambio ${r.code}. En breve te confirmamos el costo del envío.`
         : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(r.shipping_amount)} al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`)
       : `${first}! Recibimos tu solicitud ${r.code}, lo vemos por acá.`,
@@ -106,7 +111,9 @@ export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
       ? `${first}! Confirmamos tu pago. Mandá la prenda por Correo Argentino a ${CAMBIOS.returnAddress}, con ${r.code} escrito en el paquete.`
       : `${first}! Confirmamos tu pago. Te avisamos qué día pasa la moto.`,
     prenda_recibida: `${first}! Recibimos tu prenda, preparamos el envío de la nueva.`,
-    despachado: r.zone === 'correo'
+    despachado: r.zone === 'retiro'
+      ? `${first}! Te esperamos en el punto de retiro ${r.moto_date || ''} con la prenda para hacer el cambio.`
+      : r.zone === 'correo'
       ? `${first}! Tu cambio salió por Correo Argentino${r.tracking_number ? `, seguimiento ${r.tracking_number}` : ''}.`
       : `${first}! La moto pasa ${r.moto_date || 'en los próximos días'} a retirar la prenda y dejarte la nueva.`,
     resuelto: `${first}! Tu solicitud ${r.code} quedó resuelta.`,

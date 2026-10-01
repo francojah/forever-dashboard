@@ -203,7 +203,7 @@ function ExchangeCard({ r, busy, act, reasons }: {
           {r.customer_note && <p className="mt-2 text-xs italic text-gray-500">“{r.customer_note}”</p>}
         </div>
         <div className="space-y-1 text-xs">
-          {r.type === 'cambio' && <p>Envío: <b className="text-gray-900 dark:text-white">{fmt(r.shipping_amount)}</b></p>}
+          {r.type === 'cambio' && <p>Envío: <b className="text-gray-900 dark:text-white">{r.shipping_amount === 0 ? 'sin costo' : fmt(r.shipping_amount)}</b></p>}
           {r.receipt_url
             ? <p>Comprobante: <a href={r.receipt_url} target="_blank" rel="noreferrer" className="underline text-blue-600">ver ({date(r.receipt_uploaded_at)})</a></p>
             : r.type === 'cambio' && r.status === 'pendiente_pago' && <p className="text-gray-500">Sin comprobante todavía</p>}
@@ -228,15 +228,15 @@ function ExchangeCard({ r, busy, act, reasons }: {
         )}
         {r.type === 'cambio' && isMoto && (r.status === 'pago_confirmado' || (r.status === 'despachado' && !r.received_at)) && (
           <>
-            <input className={input + ' w-48'} placeholder="Ej: jueves 14 a 20 hs" value={moto} onChange={(e) => setMoto(e.target.value)} />
+            <input className={input + ' w-48'} placeholder={r.zone === 'retiro' ? 'Ej: sábado 10 a 13 hs' : 'Ej: jueves 14 a 20 hs'} value={moto} onChange={(e) => setMoto(e.target.value)} />
             <button className={r.status === 'pago_confirmado' ? btnPrimary : btn} disabled={dis || !moto} onClick={() => act(r, 'set_moto', { date: moto })}>
-              {r.status === 'pago_confirmado' ? 'Moto coordinada' : 'Actualizar día'}
+              {r.status === 'pago_confirmado' ? (r.zone === 'retiro' ? 'Día coordinado' : 'Moto coordinada') : 'Actualizar día'}
             </button>
           </>
         )}
         {r.type === 'cambio' && ((!isMoto && r.status === 'pago_confirmado') || (isMoto && r.status === 'despachado' && !r.received_at)) && (
           <>
-            <button className={btnPrimary} disabled={dis} onClick={() => act(r, 'mark_received', { condition: 'ok' })}>Prenda recibida OK</button>
+            <button className={btnPrimary} disabled={dis} onClick={() => act(r, 'mark_received', { condition: 'ok' })}>{r.zone === 'retiro' ? 'Cambio hecho, prenda OK' : 'Prenda recibida OK'}</button>
             <button className={btn} disabled={dis} onClick={() => act(r, 'mark_received', { condition: 'fallada' })}>Recibida fallada</button>
           </>
         )}

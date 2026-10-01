@@ -139,7 +139,7 @@ export default function CambiosPage() {
         <p className="text-sm font-medium">{data.items.length > 1 ? 'Elegí las prendas' : 'Tu prenda'}</p>
         {data.items.map((it) => {
           const s = sel[it.key]
-          const disabled = kind === 'cambio' && !it.exchangeable
+          const disabled = kind !== 'reembolso' && !it.exchangeable
           return (
             <div key={it.key} className={`rounded-lg border p-3 ${s?.checked ? 'border-zinc-900' : 'border-zinc-200'} ${disabled ? 'opacity-50' : ''}`}>
               <label className="flex items-center gap-3">
@@ -148,7 +148,7 @@ export default function CambiosPage() {
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] leading-tight">{it.name}</span>
                   <span className="block text-xs text-zinc-500">{it.variant_label}{it.quantity > 1 ? ` · x${it.quantity}` : ''}</span>
-                  {disabled && <span className="block text-xs text-zinc-500">No admite cambio online</span>}
+                  {disabled && <span className="block text-xs text-zinc-500">Por higiene, esta prenda no tiene cambio</span>}
                 </span>
               </label>
               {s?.checked && (
@@ -188,9 +188,11 @@ export default function CambiosPage() {
       {kind === 'cambio' && (
         <Card className="space-y-1">
           <div className="flex justify-between text-[15px]"><span>Envío</span><span>{o.zoneLabel}</span></div>
-          <div className="flex justify-between text-[15px] font-semibold"><span>A transferir</span><span>{money(o.shippingAmount)}</span></div>
+          <div className="flex justify-between text-[15px] font-semibold"><span>{o.shippingAmount === 0 ? 'Costo' : 'A transferir'}</span><span>{o.shippingAmount === 0 ? 'Sin costo' : money(o.shippingAmount)}</span></div>
           <p className="text-xs text-zinc-500 pt-1">
-            {o.shippingAmount == null
+            {o.shippingAmount === 0
+              ? 'Hacés el cambio en el mismo punto de retiro de tu compra. Te confirmamos día y horario.'
+              : o.shippingAmount == null
               ? 'Te confirmamos el monto por mail y WhatsApp.'
               : `Después te mostramos el alias para transferir y dónde subir el comprobante.`}
           </p>

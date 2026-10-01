@@ -29,6 +29,13 @@ function steps(e: Ex) {
       { label: 'Te enviamos la nueva', done: !!e.dispatched_at },
     ]
   }
+  if (e.zone === 'retiro') {
+    return [
+      { label: 'Pedido de cambio recibido', done: true },
+      { label: 'Día coordinado en el punto de retiro', done: !!e.dispatched_at },
+      { label: 'Cambio realizado', done: !!e.received_at },
+    ]
+  }
   return [
     { label: 'Pedido de cambio recibido', done: true },
     { label: 'Pago del envío confirmado', done: paid },
@@ -123,7 +130,11 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
         </Card>
       )}
 
-      {e.moto_date && <Card><p className="text-[15px]">La moto pasa: <b>{e.moto_date}</b>. Tené lista la prenda para entregar.</p></Card>}
+      {e.moto_date && (
+        <Card><p className="text-[15px]">{e.zone === 'retiro'
+          ? <>Te esperamos en el punto de retiro: <b>{e.moto_date}</b>. Llevá la prenda a cambiar.</>
+          : <>La moto pasa: <b>{e.moto_date}</b>. Tené lista la prenda para entregar.</>}</p></Card>
+      )}
       {e.tracking_number && <Card><p className="text-[15px]">Seguimiento Correo Argentino: <b>{e.tracking_number}</b></p></Card>}
 
       <Card>

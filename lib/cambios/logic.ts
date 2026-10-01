@@ -19,8 +19,13 @@ export function classifyZone(o: TNOrder): Zone {
 /** Monto del envío del cambio. null = lo confirma el equipo. */
 export function shippingAmount(zone: Zone, o: TNOrder): number | null {
   if (zone === 'caba') return CAMBIOS.cabaFee
-  if (zone === 'moto_gba') return CAMBIOS.motoGbaFee
   if (zone === 'retiro') return CAMBIOS.retiroFee
+  if (zone === 'moto_gba') {
+    if (CAMBIOS.motoGbaFee != null) return CAMBIOS.motoGbaFee
+    // Lo que pagó de moto en la compra original
+    const v = Number(o.shipping_cost_customer) || Number(o.shipping_cost_owner) || 0
+    return v > 0 ? Math.round(v) : null
+  }
   if (zone === 'correo') {
     // Lo que cobró Correo Argentino por ese envío (owner), si no lo que pagó el cliente
     const owner = Number(o.shipping_cost_owner) || 0
@@ -105,7 +110,8 @@ export async function buildItems(o: TNOrder): Promise<LookupItem[]> {
     const p = o.products[i]
     if (!productCache.has(p.product_id)) productCache.set(p.product_id, await getProduct(p.product_id))
     const prod = productCache.get(p.product_id)
-    const excluded = CAMBIOS.excludedProductIds.includes(String(p.product_id))
+    const pname = prod ? productName(prod) : p.name
+    const excluded = CAMBIOS.excludedProductIds.includes(String(p.product_id)) || CAMBIOS.excludedNamePattern.test(pname)
     const options = (prod?.variants ?? [])
       .map((v) => {
         const stock = v.stock === null ? 999 : Number(v.stock) || 0 // null = stock infinito en TN

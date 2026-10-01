@@ -24,20 +24,22 @@ export const CAMBIOS = {
   } as Record<string, number>,
   /** Costo fijo de la moto en CABA (retira y entrega en un viaje) */
   cabaFee: num(process.env.CAMBIOS_CABA_FEE, 5000),
-  /** Moto en GBA: null = a confirmar por el equipo */
+  /** Moto en GBA: si se define, pisa el valor; por defecto se usa lo que pagó de envío en la orden original */
   motoGbaFee: num(process.env.CAMBIOS_MOTO_GBA_FEE, null),
-  /** Punto de retiro: null = a confirmar */
-  retiroFee: num(process.env.CAMBIOS_RETIRO_FEE, null),
+  /** Punto de retiro: el cliente se acerca al mismo punto, sin costo */
+  retiroFee: num(process.env.CAMBIOS_RETIRO_FEE, 0),
   /** Una solicitud sin pago reserva stock durante estas horas */
   pendingHoldHours: num(process.env.CAMBIOS_PENDING_HOLD_HOURS, 48) as number,
   /** Dirección a donde mandan la prenda por correo */
   returnAddress:
     process.env.CAMBIOS_RETURN_ADDRESS ||
-    'Forever Basics — Av. Francisco Beiro 4916, CABA',
+    'DANIELA LOMBARDI - FOREVER — Av. Patricias Argentinas 4301, Lote 120, Garín, Buenos Aires (CP 1619)',
   whatsapp: process.env.CAMBIOS_WHATSAPP || '5491144799068',
-  /** IDs de producto que NO admiten cambio (ej. ropa interior), separados por coma */
+  /** IDs de producto que NO admiten cambio, separados por coma (además del filtro por nombre) */
   excludedProductIds: (process.env.CAMBIOS_EXCLUDED_PRODUCT_IDS || '')
     .split(',').map((s) => s.trim()).filter(Boolean),
+  /** Ropa interior y accesorios: no se cambian. Se filtra por nombre para cubrir productos nuevos. */
+  excludedNamePattern: new RegExp(process.env.CAMBIOS_EXCLUDED_NAME_REGEX || 'boxer|colaless|bralette|iconic set|bolsa', 'i'),
   appUrl: (process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app').replace(/\/$/, ''),
   /** Email (Resend). Sin RESEND_API_KEY no se envían mails y el panel ofrece WhatsApp. */
   resendKey: process.env.RESEND_API_KEY || '',

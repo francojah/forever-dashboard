@@ -28,8 +28,8 @@ export async function POST(req: Request) {
     for (const s of sels) {
       const it = r.items.find((x) => x.key === s.key)
       if (!it) return NextResponse.json({ ok: false, reason: 'Hay una prenda que no pertenece a la orden.' })
-      if (type === 'cambio' && !it.exchangeable) {
-        return NextResponse.json({ ok: false, reason: `${it.name} no admite cambio online. Escribinos por WhatsApp.` })
+      if (type !== 'reembolso' && !it.exchangeable) {
+        return NextResponse.json({ ok: false, reason: `${it.name} no admite cambio.` })
       }
       let newLabel: string | null = null
       if (type === 'cambio') {
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
     const row = {
       status_token: randomToken(),
       type,
-      status: type === 'cambio' ? 'pendiente_pago' : 'revision',
+      // Sin costo (punto de retiro): no hay pago, queda listo para coordinar
+      status: type !== 'cambio' ? 'revision' : r.amount === 0 ? 'pago_confirmado' : 'pendiente_pago',
       tn_order_id: String(r.order.id),
       order_number: String(r.order.number),
       customer_name: c.name,
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
       shipping_amount: type === 'cambio' ? r.amount : null,
       items,
       customer_note: String(body.note ?? '').slice(0, 1000) || null,
-      events: pushEvent([], 'creado'),
+      events: pushEvent([], 'creado', type === 'cambio' && r.amount === 0 ? 'sin costo' : undefined),
     }
     const { data, error } = await supabaseAdmin().from('exchanges').insert(row).select('*').single()
     if (error || !data) throw new Error(error?.message || 'insert failed')

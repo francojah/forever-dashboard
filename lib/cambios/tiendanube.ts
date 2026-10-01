@@ -9,6 +9,8 @@ const TN_API = 'https://api.tiendanube.com/v1'
 export function supabaseAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false },
+    // Evita que Next cachee las lecturas (si no, el estado/panel muestra datos viejos)
+    global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: 'no-store' }) },
   })
 }
 
