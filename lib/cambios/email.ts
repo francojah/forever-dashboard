@@ -8,9 +8,11 @@ export type ExchangeRow = {
   moto_date?: string | null; tracking_number?: string | null; item_condition?: string | null
 }
 
-export type EmailKind = 'creado' | 'monto' | 'pago_confirmado' | 'prenda_recibida' | 'despachado' | 'resuelto' | 'cancelado'
+export type EmailKind = 'creado' | 'monto' | 'pago_confirmado' | 'etiqueta' | 'prenda_recibida' | 'despachado' | 'resuelto' | 'cancelado'
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+const isMoto = (r: ExchangeRow) => r.zone === 'caba' || r.zone === 'moto_gba'
+const DISPATCH = 'Despachamos los cambios todos los lunes.'
 
 function itemsHtml(r: ExchangeRow) {
   return r.items.map((i) =>
@@ -19,9 +21,15 @@ function itemsHtml(r: ExchangeRow) {
 }
 
 function payBlock(r: ExchangeRow) {
-  if (r.zone === 'retiro' || r.shipping_amount === 0) return `<p>El cambio no tiene costo: lo hacemos en el mismo punto de retiro de tu compra. Te confirmamos día y horario para que te acerques con la prenda.</p>`
+  if (r.zone === 'retiro' || r.shipping_amount === 0) return `<p>El cambio no tiene costo. Te confirmamos día y horario para acercarte con la prenda.</p>`
   if (r.shipping_amount == null) return `<p>En breve te confirmamos el costo del envío por este medio.</p>`
   return `<p>Para avanzar, transferí <b>${money(r.shipping_amount)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (Mercado Pago) y poné <b>${esc(r.code)}</b> en el concepto. Después subí el comprobante desde el link de abajo.</p>`
+}
+
+function nextStepAfterPay(r: ExchangeRow) {
+  return isMoto(r)
+    ? `<p>Coordinamos la moto: pasa por tu domicilio, <b>retira la prenda y te entrega la nueva en el mismo viaje</b>. ${DISPATCH} Te avisamos el día.</p>`
+    : `<p>Te vamos a enviar la <b>etiqueta de Correo Argentino</b> para que despaches la prenda en cualquier sucursal. Cuando la recibamos, te mandamos la nueva. ${DISPATCH}</p>`
 }
 
 export function buildEmail(kind: EmailKind, r: ExchangeRow): { subject: string; html: string } {
@@ -45,21 +53,25 @@ export function buildEmail(kind: EmailKind, r: ExchangeRow): { subject: string; 
       break
     case 'pago_confirmado':
       subject = `Pago confirmado — cambio ${r.code}`
-      body = r.zone === 'correo'
-        ? `<p>Confirmamos tu transferencia. Ahora mandá la prenda por Correo Argentino a:</p><p><b>${esc(CAMBIOS.returnAddress)}</b></p><p>Escribí <b>${esc(r.code)}</b> en el paquete. Cuando la recibamos te mandamos la nueva.</p>`
-        : `<p>Confirmamos tu transferencia. En breve te avisamos qué día pasa la moto a retirar la prenda y entregarte la nueva.</p>`
+      body = `<p>Confirmamos tu transferencia.</p>${nextStepAfterPay(r)}`
+      break
+    case 'etiqueta':
+      subject = `Tu etiqueta para despachar el cambio ${r.code}`
+      body = `<p>Ya tenés tu etiqueta de Correo Argentino. Descargala desde el link de abajo, imprimila, pegala en el paquete con la prenda y despachalo en cualquier sucursal.</p><p>Cuando la recibamos te mandamos la nueva. ${DISPATCH}</p>`
       break
     case 'prenda_recibida':
       subject = `Recibimos tu prenda — cambio ${r.code}`
-      body = `<p>Ya recibimos la prenda que nos mandaste. Estamos preparando el envío de la nueva.</p>`
+      body = isMoto(r)
+        ? `<p>¡Listo! Ya hicimos el cambio. Gracias por elegirnos.</p>`
+        : `<p>Ya recibimos la prenda que nos mandaste. Tu cambio sale el próximo lunes por Correo Argentino.</p>`
       break
     case 'despachado':
-      subject = r.zone === 'correo' ? `Tu cambio ${r.code} está en camino` : r.zone === 'retiro' ? `Tu cambio ${r.code} está coordinado` : `La moto pasa por tu cambio ${r.code}`
+      subject = isMoto(r) ? `La moto pasa por tu cambio ${r.code}` : r.zone === 'retiro' ? `Tu cambio ${r.code} está coordinado` : `Tu cambio ${r.code} está en camino`
       body = r.zone === 'retiro'
-        ? `<p>Te esperamos en el punto de retiro <b>${esc(r.moto_date || '')}</b> con la prenda a cambiar. Ahí mismo te damos la nueva.</p>`
-        : r.zone === 'correo'
-        ? `<p>Tu cambio salió por Correo Argentino.</p>${r.tracking_number ? `<p>Número de seguimiento: <b>${esc(r.tracking_number)}</b><br/>Podés seguirlo en <a href="https://www.correoargentino.com.ar">correoargentino.com.ar</a></p>` : ''}`
-        : `<p>La moto pasa <b>${esc(r.moto_date || 'en los próximos días')}</b>. Tené lista la prenda para entregar: te dejamos la nueva en el mismo momento.</p>`
+        ? `<p>Te esperamos <b>${esc(r.moto_date || '')}</b> con la prenda a cambiar. Ahí mismo te damos la nueva.</p>`
+        : isMoto(r)
+        ? `<p>La moto pasa <b>${esc(r.moto_date || 'el lunes')}</b>. Tené lista la prenda: la retira y te entrega la nueva en el mismo momento.</p>`
+        : `<p>Tu cambio salió por Correo Argentino.</p>${r.tracking_number ? `<p>Número de seguimiento: <b>${esc(r.tracking_number)}</b><br/>Podés seguirlo en <a href="https://www.correoargentino.com.ar">correoargentino.com.ar</a></p>` : ''}`
       break
     case 'resuelto':
       subject = `Tu solicitud ${r.code} fue resuelta`
@@ -98,24 +110,28 @@ export async function sendExchangeEmail(kind: EmailKind, r: ExchangeRow): Promis
 export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
   const link = statusUrl(r.status_token)
   const first = (r.customer_name || '').split(' ')[0] || 'Hola'
+  const moto = isMoto(r)
   const base: Record<EmailKind, string> = {
     creado: r.type === 'cambio'
       ? (r.zone === 'retiro' || r.shipping_amount === 0
-        ? `${first}! Recibimos tu cambio ${r.code}. No tiene costo: te confirmamos día y horario para acercarte al punto de retiro con la prenda.`
+        ? `${first}! Recibimos tu cambio ${r.code}. No tiene costo: te confirmamos día y horario para acercarte con la prenda.`
         : r.shipping_amount == null
         ? `${first}! Recibimos tu cambio ${r.code}. En breve te confirmamos el costo del envío.`
         : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(r.shipping_amount)} al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`)
       : `${first}! Recibimos tu solicitud ${r.code}, lo vemos por acá.`,
     monto: `${first}! El envío de tu cambio ${r.code} es ${money(r.shipping_amount)}. Transferí al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`,
-    pago_confirmado: r.zone === 'correo'
-      ? `${first}! Confirmamos tu pago. Mandá la prenda por Correo Argentino a ${CAMBIOS.returnAddress}, con ${r.code} escrito en el paquete.`
-      : `${first}! Confirmamos tu pago. Te avisamos qué día pasa la moto.`,
-    prenda_recibida: `${first}! Recibimos tu prenda, preparamos el envío de la nueva.`,
+    pago_confirmado: moto
+      ? `${first}! Confirmamos tu pago. La moto retira tu prenda y te entrega la nueva en el mismo viaje. Despachamos los lunes, te avisamos el día.`
+      : `${first}! Confirmamos tu pago. En breve te mandamos la etiqueta de Correo Argentino para que despaches la prenda.`,
+    etiqueta: `${first}! Ya tenés la etiqueta para despachar tu cambio ${r.code}: descargala acá, imprimila, pegala en el paquete y despachalo en cualquier sucursal de Correo Argentino.`,
+    prenda_recibida: moto
+      ? `${first}! Listo, cambio hecho. ¡Gracias!`
+      : `${first}! Recibimos tu prenda. Tu cambio sale el próximo lunes por Correo Argentino.`,
     despachado: r.zone === 'retiro'
-      ? `${first}! Te esperamos en el punto de retiro ${r.moto_date || ''} con la prenda para hacer el cambio.`
-      : r.zone === 'correo'
-      ? `${first}! Tu cambio salió por Correo Argentino${r.tracking_number ? `, seguimiento ${r.tracking_number}` : ''}.`
-      : `${first}! La moto pasa ${r.moto_date || 'en los próximos días'} a retirar la prenda y dejarte la nueva.`,
+      ? `${first}! Te esperamos ${r.moto_date || ''} con la prenda para hacer el cambio.`
+      : moto
+      ? `${first}! La moto pasa ${r.moto_date || 'el lunes'}: retira tu prenda y te entrega la nueva.`
+      : `${first}! Tu cambio salió por Correo Argentino${r.tracking_number ? `, seguimiento ${r.tracking_number}` : ''}.`,
     resuelto: `${first}! Tu solicitud ${r.code} quedó resuelta.`,
     cancelado: `${first}! Cancelamos la solicitud ${r.code}.`,
   }

@@ -15,6 +15,7 @@ type Row = {
   paid_at: string | null; received_at: string | null; item_condition: string | null
   moto_date: string | null; tracking_number: string | null; dispatched_at: string | null
   stock_out_done: boolean; stock_in_done: boolean; internal_note: string | null
+  label_url: string | null; label_sent_at: string | null
   whatsapp_text: string; created_at: string; events: { at: string; type: string; detail: string | null }[]
 }
 type Data = { ok: boolean; rows: Row[]; emailEnabled: boolean; reasons: { id: string; label: string }[]; portalUrl: string }
@@ -156,16 +157,32 @@ export default function GestionCambiosPage() {
       {(tab === 'activos' || tab === 'historial') && (
         <div className="space-y-3">
           {(tab === 'activos' ? active : history).length === 0 && data && <p className="text-sm text-gray-500">Nada por acá.</p>}
-          {(tab === 'activos' ? active : history).map((r) => <ExchangeCard key={r.id} r={r} busy={busy} act={act} reasons={data?.reasons ?? []} />)}
+          {(tab === 'activos' ? active : history).map((r) => <ExchangeCard key={r.id} r={r} busy={busy} act={act} reasons={data?.reasons ?? []} reload={load} notify={alertMsg} />)}
         </div>
       )}
     </div>
   )
 }
 
-function ExchangeCard({ r, busy, act, reasons }: {
+function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
   r: Row; busy: string | null; act: (r: Row, a: string, e?: Record<string, unknown>) => void; reasons: { id: string; label: string }[]
+  reload: () => Promise<void>; notify: (m: string) => void
 }) {
+  const [labelFile, setLabelFile] = useState<File | null>(null)
+  const [uploadingLabel, setUploadingLabel] = useState(false)
+  async function uploadLabel() {
+    if (!labelFile) return
+    setUploadingLabel(true)
+    try {
+      const fd = new FormData(); fd.append('file', labelFile)
+      const res = await fetch(`/api/cambios/admin/${r.id}/label`, { method: 'POST', body: fd })
+      const j = await res.json()
+      if (!j.ok) notify(j.error || 'Error al subir')
+      else notify(j.emailSent ? `${r.code}: etiqueta subida y mail enviado` : `${r.code}: etiqueta subida (avisale por WhatsApp)`)
+      setLabelFile(null); await reload()
+    } catch (e) { notify((e as Error).message) }
+    setUploadingLabel(false)
+  }
   const [amount, setAmount] = useState('')
   const [moto, setMoto] = useState(r.moto_date || '')
   const [tracking, setTracking] = useState(r.tracking_number || '')
@@ -209,6 +226,7 @@ function ExchangeCard({ r, busy, act, reasons }: {
             : r.type === 'cambio' && r.status === 'pendiente_pago' && <p className="text-gray-500">Sin comprobante todavía</p>}
           {r.moto_date && <p>Moto: {r.moto_date}</p>}
           {r.tracking_number && <p>Seguimiento: {r.tracking_number}</p>}
+          {r.label_url && <p>Etiqueta: <a href={r.label_url} target="_blank" rel="noreferrer" className="underline text-blue-600">ver ({date(r.label_sent_at)})</a></p>}
           {r.received_at && <p>Prenda recibida {date(r.received_at)} · {r.item_condition === 'fallada' ? 'fallada' : 'en buen estado'}</p>}
         </div>
       </div>
@@ -231,6 +249,14 @@ function ExchangeCard({ r, busy, act, reasons }: {
             <input className={input + ' w-48'} placeholder={r.zone === 'retiro' ? 'Ej: sábado 10 a 13 hs' : 'Ej: jueves 14 a 20 hs'} value={moto} onChange={(e) => setMoto(e.target.value)} />
             <button className={r.status === 'pago_confirmado' ? btnPrimary : btn} disabled={dis || !moto} onClick={() => act(r, 'set_moto', { date: moto })}>
               {r.status === 'pago_confirmado' ? (r.zone === 'retiro' ? 'Día coordinado' : 'Moto coordinada') : 'Actualizar día'}
+            </button>
+          </>
+        )}
+        {r.type === 'cambio' && !isMoto && r.status === 'pago_confirmado' && (
+          <>
+            <input type="file" accept="application/pdf,image/*" className="text-xs max-w-[190px]" onChange={(e) => setLabelFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+            <button className={r.label_url ? btn : btnPrimary} disabled={dis || !labelFile || uploadingLabel} onClick={uploadLabel}>
+              {uploadingLabel ? 'Subiendo…' : r.label_url ? 'Reemplazar etiqueta' : 'Subir etiqueta'}
             </button>
           </>
         )}

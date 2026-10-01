@@ -43,3 +43,14 @@ export const PUBLIC_FIELDS =
   'code, status_token, type, status, order_number, customer_name, zone, shipping_amount, items, receipt_uploaded_at, moto_date, tracking_number, created_at, paid_at, received_at, dispatched_at'
 
 export { CAMBIOS }
+
+type Ev = { at: string; type: string; detail: string | null }
+
+/** Última etiqueta subida (se guarda la ruta en el historial, sin columnas extra). */
+export function labelInfo(events: unknown): { path: string; at: string } | null {
+  const arr = (Array.isArray(events) ? events : []) as Ev[]
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].type === 'etiqueta' && arr[i].detail) return { path: arr[i].detail as string, at: arr[i].at }
+  }
+  return null
+}

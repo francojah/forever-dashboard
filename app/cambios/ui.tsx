@@ -29,3 +29,11 @@ export function ErrorBox({ children }: { children: ReactNode }) {
 export function waLink(phone: string, text?: string) {
   return `https://wa.me/${phone}${text ? `?text=${encodeURIComponent(text)}` : ''}`
 }
+
+/** Próximo lunes (estrictamente después de hoy) en formato "lunes 6/10". */
+export function nextMondayLabel(from: Date = new Date()) {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  const add = ((8 - d.getDay()) % 7) || 7
+  d.setDate(d.getDate() + add)
+  return `lunes ${d.getDate()}/${d.getMonth() + 1}`
+}

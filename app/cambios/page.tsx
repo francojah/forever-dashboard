@@ -86,11 +86,26 @@ export default function CambiosPage() {
   // ── Paso 1: buscar la orden ─────────────────────────────────────
   if (!data) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Cambiá tu prenda</h1>
-          <p className="text-zinc-600 mt-1 text-[15px]">Tenés 10 días desde que recibiste tu pedido. El envío del cambio lo abona el cliente.</p>
+      <div className="space-y-5">
+        <div className="pt-2">
+          <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Cambios</p>
+          <h1 className="text-[28px] leading-tight font-semibold mt-1">¿No te quedó como esperabas?</h1>
+          <p className="text-zinc-600 mt-2 text-[15px]">Cambiá el talle o el color en un par de minutos.</p>
         </div>
+
+        <ol className="grid grid-cols-3 gap-2">
+          {[
+            ['1', 'Buscá tu pedido'],
+            ['2', 'Elegí talle o color'],
+            ['3', 'Coordinamos el envío'],
+          ].map(([n, t]) => (
+            <li key={n} className="bg-white rounded-xl border border-zinc-200 px-2 py-3 text-center">
+              <span className="mx-auto mb-1.5 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs flex items-center justify-center">{n}</span>
+              <span className="block text-[13px] leading-tight">{t}</span>
+            </li>
+          ))}
+        </ol>
+
         <Card className="space-y-3">
           <label className="block">
             <span className="text-sm text-zinc-600">Número de orden</span>
@@ -104,8 +119,13 @@ export default function CambiosPage() {
           </label>
           {error && <ErrorBox>{error}</ErrorBox>}
           <Btn onClick={onLookup} disabled={loading || !orderNumber || !email}>{loading ? 'Buscando…' : 'Buscar mi pedido'}</Btn>
+          <p className="text-xs text-zinc-500 text-center">El número de orden está en el mail de confirmación de tu compra.</p>
         </Card>
-        <p className="text-xs text-zinc-500 text-center">El número de orden está en el mail de confirmación de tu compra.</p>
+
+        <ul className="text-[13px] text-zinc-600 space-y-1.5 px-1">
+          <li>• Tenés 10 días desde que recibiste tu pedido.</li>
+          <li>• Despachamos los cambios todos los lunes.</li>
+        </ul>
       </div>
     )
   }
@@ -201,10 +221,12 @@ export default function CambiosPage() {
           <div className="flex justify-between text-[15px] font-semibold"><span>{o.shippingAmount === 0 ? 'Costo' : 'A transferir'}</span><span>{o.shippingAmount === 0 ? 'Sin costo' : money(o.shippingAmount)}</span></div>
           <p className="text-xs text-zinc-500 pt-1">
             {o.shippingAmount === 0
-              ? 'Hacés el cambio en el mismo punto de retiro de tu compra. Te confirmamos día y horario.'
-              : o.shippingAmount == null
-              ? 'Te confirmamos el monto por mail y WhatsApp.'
-              : `Después te mostramos el alias para transferir y dónde subir el comprobante.`}
+              ? 'Te confirmamos día y horario para hacer el cambio.'
+              : o.zone === 'correo'
+              ? 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda, y cuando llega te enviamos la nueva.'
+              : 'Una moto retira tu prenda y te entrega la nueva en el mismo viaje.'}
+            {o.shippingAmount == null && ' Te confirmamos el monto por mail y WhatsApp.'}
+            {' '}Despachamos los cambios los lunes.
           </p>
         </Card>
       )}

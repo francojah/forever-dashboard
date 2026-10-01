@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin, getProduct } from '@/lib/cambios/tiendanube'
 import { reservedByVariant, type ExchangeItem } from '@/lib/cambios/logic'
 import { whatsappText, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
+import { labelInfo } from '@/lib/cambios/service'
 import { CAMBIOS, STATUS_LABEL, ZONE_LABEL, REASONS } from '@/lib/cambios/config'
 
 export const dynamic = 'force-dynamic'
@@ -40,6 +41,13 @@ export async function GET() {
         const s = await sb.storage.from('exchange-receipts').createSignedUrl(r.receipt_path, 3600)
         receipt_url = s.data?.signedUrl ?? null
       }
+      const label = labelInfo(r.events)
+      let label_url: string | null = null
+      if (label) {
+        const s = await sb.storage.from('exchange-receipts').createSignedUrl(label.path, 3600)
+        label_url = s.data?.signedUrl ?? null
+      }
+      const kind: EmailKind = r.status === 'pago_confirmado' && label ? 'etiqueta' : (KIND_BY_STATUS[r.status] ?? 'creado')
       const items = (r.items as ExchangeItem[]).map((it) => {
         const k = it.new_variant_id ? String(it.new_variant_id) : ''
         const stock = k ? tnStock.get(k) : undefined
@@ -48,10 +56,10 @@ export async function GET() {
         return { ...it, tn_stock: stock ?? null, stock_alert }
       })
       return {
-        ...r, items, receipt_url,
+        ...r, items, receipt_url, label_url, label_sent_at: label?.at ?? null,
         status_label: STATUS_LABEL[r.status] ?? r.status,
         zone_label: ZONE_LABEL[r.zone] ?? r.zone,
-        whatsapp_text: whatsappText(KIND_BY_STATUS[r.status] ?? 'creado', r as ExchangeRow),
+        whatsapp_text: whatsappText(kind, r as ExchangeRow),
       }
     }))
     return NextResponse.json({
