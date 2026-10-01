@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin, getProduct } from '@/lib/cambios/tiendanube'
 import { reservedByVariant, type ExchangeItem } from '@/lib/cambios/logic'
 import { whatsappText, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
@@ -14,7 +14,7 @@ const KIND_BY_STATUS: Record<string, EmailKind> = {
 }
 
 export async function GET() {
-  const auth = await requireAuth()
+  const auth = await requireCambiosAdmin()
   if (auth instanceof NextResponse) return auth
   try {
     const sb = supabaseAdmin()

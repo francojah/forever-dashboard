@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import { pushEvent } from '@/lib/cambios/service'
 import { sendExchangeEmail, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 type Patch = Record<string, unknown>
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const auth = await requireAuth()
+  const auth = await requireCambiosAdmin()
   if (auth instanceof NextResponse) return auth
   try {
     const body = await req.json()
@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         return bad('Acción desconocida')
     }
 
-    let events = pushEvent(ex.events, action, typeof body.detail === 'string' ? body.detail : undefined)
+    let events = pushEvent(ex.events, action, [auth.user, typeof body.detail === 'string' ? body.detail : ''].filter(Boolean).join(': '))
     const { data: updated, error } = await sb.from('exchanges')
       .update({ ...patch, events, updated_at: now }).eq('id', ex.id).select('*').single()
     if (error || !updated) throw new Error(error?.message || 'update failed')

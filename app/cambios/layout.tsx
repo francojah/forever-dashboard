@@ -17,6 +17,8 @@ export default function CambiosLayout({ children }: { children: React.ReactNode 
       className={`fb min-h-screen bg-[#F4F4F3] text-black antialiased`}
       style={{ colorScheme: 'light', fontFamily: 'var(--fb-text), system-ui, sans-serif' }}
     >
+      {/* El dashboard arranca en modo oscuro; el portal de cambios siempre es claro */}
+      <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('dark')" }} />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
       <link rel="stylesheet" href={FONTS_HREF} />

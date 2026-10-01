@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import { pushEvent } from '@/lib/cambios/service'
 import { sendExchangeEmail, type ExchangeRow } from '@/lib/cambios/email'
@@ -10,7 +10,7 @@ const TYPES: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': '
 
 /** Sube la etiqueta de Correo para que el cliente la descargue desde su página de estado. */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const auth = await requireAuth()
+  const auth = await requireCambiosAdmin()
   if (auth instanceof NextResponse) return auth
   try {
     const form = await req.formData()

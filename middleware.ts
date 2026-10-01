@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
   if (host.startsWith(CAMBIOS_HOST_PREFIX)) {
     const p = request.nextUrl.pathname
     if (p === '/') return NextResponse.rewrite(new URL('/cambios', request.url))
-    if (p.startsWith('/api/cambios/admin')) return NextResponse.json({ error: 'No disponible' }, { status: 404 })
+    if (p === '/admin') return NextResponse.rewrite(new URL('/cambios/admin', request.url))
     if (p === '/cambios' || p.startsWith('/cambios/') || p.startsWith('/api/cambios/')) return NextResponse.next()
     return NextResponse.redirect(new URL('/', request.url))
   }
