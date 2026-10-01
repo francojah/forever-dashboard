@@ -11,6 +11,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark')
 
   useEffect(() => {
+    // El portal de cambios (cambios.foreverbasics.com.ar y /cambios) es siempre claro
+    if (location.hostname.startsWith('cambios.') || location.pathname.startsWith('/cambios')) {
+      document.documentElement.classList.remove('dark')
+      setTheme('light')
+      return
+    }
     const stored = (localStorage.getItem('forever-theme') as Theme) || 'dark'
     setTheme(stored)
     if (stored === 'dark') {

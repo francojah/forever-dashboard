@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" suppressHydrationWarning>
       <head>
         {/* Previene flash de pantalla blanca al cargar en dark mode */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('forever-theme');if(!t||t==='dark'){document.documentElement.classList.add('dark')}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){if(location.hostname.indexOf('cambios.')===0||location.pathname.indexOf('/cambios')===0)return;var t=localStorage.getItem('forever-theme');if(!t||t==='dark'){document.documentElement.classList.add('dark')}})();` }} />
         {/* PWA */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />

@@ -31,7 +31,20 @@ export default function AdminGate({ initialUser }: { initialUser: string | null 
 
   if (user) {
     const display = user.charAt(0).toUpperCase() + user.slice(1)
-    return <CambiosAdminPanel variant="standalone" userName={display} onLogout={logout} />
+    return (
+      <div className="cb-std">
+        {/* Legibilidad en el celu: textos chicos un poco más grandes y grises más oscuros */}
+        <style>{`
+          .cb-std .text-xs{font-size:13px;line-height:1.45}
+          .cb-std .text-\\[11px\\]{font-size:12px}
+          .cb-std .text-gray-400{color:#6b6b6b}
+          .cb-std .text-gray-500{color:#555}
+          .cb-std .text-gray-700{color:#2b2b2b}
+          .cb-std .h-8{height:36px}
+        `}</style>
+        <CambiosAdminPanel variant="standalone" userName={display} onLogout={logout} />
+      </div>
+    )
   }
 
   return (
