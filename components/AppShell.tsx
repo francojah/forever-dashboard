@@ -15,6 +15,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/resumen':    'Resumen IA',
   '/assistant':  'AI Assistant',
   '/settings':   'Configuración',
+  '/gestion-cambios': 'Cambios',
 }
 
 export default function AppShell({ children, userEmail }: { children: React.ReactNode; userEmail: string }) {

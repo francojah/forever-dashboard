@@ -30,8 +30,8 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  // Rutas públicas: landing estática de Faro + API (dejan pasar sin auth)
-  if (pathname === '/landing.html' || pathname.startsWith('/api')) {
+  // Rutas públicas: landing estática de Faro + API + portal de cambios (sin auth)
+  if (pathname === '/landing.html' || pathname.startsWith('/api') || pathname === '/cambios' || pathname.startsWith('/cambios/')) {
     return response
   }
 
