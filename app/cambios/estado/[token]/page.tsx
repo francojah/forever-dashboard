@@ -6,7 +6,7 @@ import { Card, Btn, ErrorBox, money, waLink, nextMondayLabel } from '../../ui'
 type Ex = {
   code: string; type: string; status: string; status_label: string; order_number: string; customer_name: string | null
   zone: string; zone_label: string; shipping_amount: number | null
-  items: { name: string; variant_label: string; new_variant_label?: string | null; quantity: number }[]
+  items: { name: string; variant_label: string; new_variant_label?: string | null; new_product_name?: string | null; price_diff?: number | null; quantity: number }[]
   receipt_uploaded_at: string | null; moto_date: string | null; tracking_number: string | null
   created_at: string; paid_at: string | null; received_at: string | null; dispatched_at: string | null
   label_url: string | null; label_sent_at: string | null
@@ -103,6 +103,8 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
   const steps = buildSteps(e)
   const current = steps.findIndex((s) => !s.done)
   const finished = current === -1
+  const diff = e.items.reduce((a, it) => a + (Number(it.price_diff) || 0), 0)
+  const total = e.shipping_amount == null ? null : e.shipping_amount + diff
   const correo = e.type === 'cambio' && (e.zone === 'correo' || e.zone === 'otro')
 
   return (
@@ -116,11 +118,12 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
       {/* Acción pendiente del cliente: pagar */}
       {e.type === 'cambio' && e.status === 'pendiente_pago' && (
         <Card className="space-y-3 border-zinc-900">
-          {e.shipping_amount == null ? (
+          {total == null ? (
             <p className="text-[15px]">Estamos calculando el costo del envío. Te lo confirmamos por mail y WhatsApp.</p>
           ) : (
             <>
-              <p className="text-[15px]">Transferí <b>{money(e.shipping_amount)}</b> por Mercado Pago al alias:</p>
+              <p className="text-[15px]">Transferí <b>{money(total)}</b> por Mercado Pago al alias:</p>
+              {diff > 0 && <p className="text-xs text-zinc-500 -mt-2">Envío {money(e.shipping_amount)} + diferencia de precio {money(diff)}</p>}
               <button type="button" onClick={() => copyAlias(data.alias)}
                 className="w-full h-12 rounded-lg bg-zinc-100 font-mono text-lg flex items-center justify-center gap-2">
                 {data.alias} <span className="text-xs text-zinc-500 font-sans">{copied ? 'copiado ✓' : 'tocar para copiar'}</span>
@@ -184,7 +187,7 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
         <p className="text-sm font-medium mb-2">Prendas</p>
         <ul className="space-y-1 text-[15px]">
           {e.items.map((it, i) => (
-            <li key={i}>{it.name} — {it.variant_label}{it.new_variant_label ? <> → <b>{it.new_variant_label}</b></> : null}{it.quantity > 1 ? ` (x${it.quantity})` : ''}</li>
+            <li key={i}>{it.name} — {it.variant_label}{it.new_variant_label ? <> → <b>{it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</b></> : null}{it.quantity > 1 ? ` (x${it.quantity})` : ''}</li>
           ))}
         </ul>
       </Card>

@@ -53,6 +53,7 @@ export const REASONS = [
   { id: 'grande', label: 'Me quedó grande' },
   { id: 'chica', label: 'Me quedó chica' },
   { id: 'color', label: 'Quiero otro color' },
+  { id: 'modelo', label: 'Quiero otro modelo' },
   { id: 'falla', label: 'Vino con una falla' },
   { id: 'otro', label: 'Otro motivo (te atendemos por WhatsApp)' },
 ] as const

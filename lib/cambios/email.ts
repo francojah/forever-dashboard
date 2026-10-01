@@ -1,10 +1,10 @@
 import { CAMBIOS, ZONE_LABEL } from './config'
-import { money, statusUrl } from './logic'
+import { amountDue, diffTotal, money, statusUrl } from './logic'
 
 export type ExchangeRow = {
   id: string; code: string; status_token: string; type: string; status: string
   order_number: string; customer_name: string | null; email: string; phone: string | null
-  zone: string; shipping_amount: number | null; items: { name: string; variant_label: string; new_variant_label?: string | null; quantity: number }[]
+  zone: string; shipping_amount: number | null; items: { name: string; variant_label: string; new_variant_label?: string | null; new_product_name?: string | null; price_diff?: number | null; quantity: number }[]
   moto_date?: string | null; tracking_number?: string | null; item_condition?: string | null
 }
 
@@ -16,14 +16,21 @@ const DISPATCH = 'Despachamos los cambios todos los lunes.'
 
 function itemsHtml(r: ExchangeRow) {
   return r.items.map((i) =>
-    `<li>${esc(i.name)} — ${esc(i.variant_label)}${i.new_variant_label ? ` → <b>${esc(i.new_variant_label)}</b>` : ''}${i.quantity > 1 ? ` (x${i.quantity})` : ''}</li>`
+    `<li>${esc(i.name)} — ${esc(i.variant_label)}${i.new_variant_label ? ` → <b>${i.new_product_name ? esc(i.new_product_name) + ' ' : ''}${esc(i.new_variant_label)}</b>` : ''}${i.quantity > 1 ? ` (x${i.quantity})` : ''}${i.price_diff ? ` (diferencia ${money(i.price_diff)})` : ''}</li>`
   ).join('')
 }
 
+function dueText(r: ExchangeRow) {
+  const diff = diffTotal(r.items)
+  const total = amountDue(r.shipping_amount, r.items)
+  return diff > 0 ? `${money(total)}</b> (envío ${money(r.shipping_amount)} + diferencia ${money(diff)})<b>` : money(total)
+}
+
 function payBlock(r: ExchangeRow) {
-  if (r.zone === 'retiro' || r.shipping_amount === 0) return `<p>El cambio no tiene costo. Te confirmamos día y horario para acercarte con la prenda.</p>`
-  if (r.shipping_amount == null) return `<p>En breve te confirmamos el costo del envío por este medio.</p>`
-  return `<p>Para avanzar, transferí <b>${money(r.shipping_amount)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (Mercado Pago) y poné <b>${esc(r.code)}</b> en el concepto. Después subí el comprobante desde el link de abajo.</p>`
+  const total = amountDue(r.shipping_amount, r.items)
+  if (total === 0) return `<p>El cambio no tiene costo. Te confirmamos día y horario para acercarte con la prenda.</p>`
+  if (total == null) return `<p>En breve te confirmamos el costo del envío por este medio.</p>`
+  return `<p>Para avanzar, transferí <b>${dueText(r)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (Mercado Pago) y poné <b>${esc(r.code)}</b> en el concepto. Después subí el comprobante desde el link de abajo.</p>`
 }
 
 function nextStepAfterPay(r: ExchangeRow) {
@@ -113,13 +120,13 @@ export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
   const moto = isMoto(r)
   const base: Record<EmailKind, string> = {
     creado: r.type === 'cambio'
-      ? (r.zone === 'retiro' || r.shipping_amount === 0
+      ? (amountDue(r.shipping_amount, r.items) === 0
         ? `${first}! Recibimos tu cambio ${r.code}. No tiene costo: te confirmamos día y horario para acercarte con la prenda.`
         : r.shipping_amount == null
         ? `${first}! Recibimos tu cambio ${r.code}. En breve te confirmamos el costo del envío.`
-        : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(r.shipping_amount)} al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`)
+        : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(amountDue(r.shipping_amount, r.items))}${diffTotal(r.items) > 0 ? ` (envío + diferencia de precio)` : ''} al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`)
       : `${first}! Recibimos tu solicitud ${r.code}, lo vemos por acá.`,
-    monto: `${first}! El envío de tu cambio ${r.code} es ${money(r.shipping_amount)}. Transferí al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`,
+    monto: `${first}! El total de tu cambio ${r.code} es ${money(amountDue(r.shipping_amount, r.items))}. Transferí al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`,
     pago_confirmado: moto
       ? `${first}! Confirmamos tu pago. La moto retira tu prenda y te entrega la nueva en el mismo viaje. Despachamos los lunes, te avisamos el día.`
       : `${first}! Confirmamos tu pago. En breve te mandamos la etiqueta de Correo Argentino para que despaches la prenda.`,

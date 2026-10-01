@@ -3,27 +3,27 @@
 import { useState } from 'react'
 import { Card, Btn, ErrorBox, inputCls, selectCls, money, waLink } from './ui'
 
-type Option = { variant_id: number; label: string; same: boolean; available: number }
 type Item = {
-  key: string; name: string; variant_label: string; quantity: number; image: string | null
-  exchangeable: boolean; options: Option[]
+  key: string; product_id: number; variant_id: number | null; name: string; variant_label: string; quantity: number
+  image: string | null; exchangeable: boolean; base_price: number
 }
+type CatVariant = { variant_id: number; label: string; price: number; available: number }
+type CatProduct = { product_id: number; name: string; image: string | null; is_pack: boolean; variants: CatVariant[] }
 type Lookup = {
   ok: true
   order: { number: number; customerName: string; hasPhone: boolean; zone: string; zoneLabel: string; shippingAmount: number | null; deadline: string }
   items: Item[]
+  catalog: CatProduct[]
   active: { code: string; token: string; type: string; status: string }[]
   reasons: { id: string; label: string }[]
   alias: string
   whatsapp: string
 }
-type Sel = { checked: boolean; reason: string; newVariant: string }
-type Kind = 'cambio' | 'otro_modelo'
+type Sel = { checked: boolean; reason: string; productId: string; newVariant: string }
 
-const KINDS: { id: Kind; label: string; hint: string }[] = [
-  { id: 'cambio', label: 'Cambiar talle o color', hint: 'Mismo modelo, otro talle o color.' },
-  { id: 'otro_modelo', label: 'Quiero otro modelo', hint: 'Lo coordinamos por WhatsApp.' },
-]
+const targetsFor = (it: Item, catalog: CatProduct[]) =>
+  catalog.filter((c) => c.product_id === it.product_id || !c.is_pack)
+const diffFor = (it: Item, v: CatVariant | undefined) => (v ? Math.max(0, Math.round((v.price - it.base_price) * it.quantity)) : 0)
 
 export default function CambiosPage() {
   const [orderNumber, setOrderNumber] = useState('')
@@ -31,7 +31,6 @@ export default function CambiosPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<Lookup | null>(null)
-  const [kind, setKind] = useState<Kind>('cambio')
   const [sel, setSel] = useState<Record<string, Sel>>({})
   const [phone, setPhone] = useState('')
   const [note, setNote] = useState('')
@@ -47,7 +46,7 @@ export default function CambiosPage() {
       const r = await post('/api/cambios/lookup', { orderNumber, email })
       if (!r.ok) { setError(r.reason || 'No encontramos la orden.'); setLoading(false); return }
       const init: Record<string, Sel> = {}
-      for (const it of r.items as Item[]) init[it.key] = { checked: r.items.length === 1, reason: '', newVariant: '' }
+      for (const it of r.items as Item[]) init[it.key] = { checked: r.items.length === 1, reason: '', productId: String(it.product_id), newVariant: '' }
       setSel(init); setData(r)
     } catch {
       setError('No pudimos conectarnos. Revisá tu conexión y probá de nuevo.')
@@ -61,19 +60,30 @@ export default function CambiosPage() {
 
   const chosen = data ? data.items.filter((it) => sel[it.key]?.checked) : []
   const otherReason = chosen.some((it) => sel[it.key].reason === 'otro')
-  const missing = chosen.some((it) => !sel[it.key].reason || (kind === 'cambio' && !sel[it.key].newVariant))
+  const missing = chosen.some((it) => !sel[it.key].reason || !sel[it.key].newVariant)
+  const needPhone = data ? !data.order.hasPhone : false
+  const variantOf = (it: Item) => {
+    const s = sel[it.key]
+    const prod = data?.catalog.find((c) => String(c.product_id) === s?.productId)
+    return prod?.variants.find((v) => String(v.variant_id) === s?.newVariant)
+  }
+  const diff = chosen.reduce((a, it) => a + diffFor(it, variantOf(it)), 0)
+  const shipping = data ? data.order.shippingAmount : null
+  const total = shipping == null ? null : shipping + diff
   const waText = data
     ? `Hola! Quiero hacer una consulta por la orden #${data.order.number}: ` + chosen.map((it) => `${it.name} ${it.variant_label}`).join(', ')
     : ''
-  const needPhone = data ? !data.order.hasPhone : false
 
   async function onSubmit() {
     if (!data) return
     setError(''); setLoading(true)
     try {
       const r = await post('/api/cambios/submit', {
-        orderNumber, email, phone, note, type: kind,
-        items: chosen.map((it) => ({ key: it.key, reason: sel[it.key].reason, new_variant_id: sel[it.key].newVariant ? Number(sel[it.key].newVariant) : null })),
+        orderNumber, email, phone, note, type: 'cambio',
+        items: chosen.map((it) => ({
+          key: it.key, reason: sel[it.key].reason,
+          new_product_id: Number(sel[it.key].productId), new_variant_id: Number(sel[it.key].newVariant),
+        })),
       })
       if (!r.ok) { setError(r.reason || 'No pudimos registrar el pedido.'); setLoading(false); return }
       window.location.href = `/cambios/estado/${r.token}`
@@ -148,21 +158,15 @@ export default function CambiosPage() {
         </Card>
       )}
 
-      <Card className="space-y-2">
-        <p className="text-sm font-medium">¿Qué necesitás?</p>
-        {KINDS.map((k) => (
-          <label key={k.id} className={`flex items-start gap-3 rounded-lg border p-3 ${kind === k.id ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200'}`}>
-            <input type="radio" name="kind" className="mt-1" checked={kind === k.id} onChange={() => setKind(k.id)} />
-            <span><span className="block text-[15px]">{k.label}</span><span className="block text-xs text-zinc-500">{k.hint}</span></span>
-          </label>
-        ))}
-      </Card>
-
       <Card className="space-y-3">
-        <p className="text-sm font-medium">{data.items.length > 1 ? 'Elegí las prendas' : 'Tu prenda'}</p>
+        <p className="text-sm font-medium">{data.items.length > 1 ? '¿Qué prendas querés cambiar?' : 'Tu prenda'}</p>
         {data.items.map((it) => {
           const s = sel[it.key]
           const disabled = !it.exchangeable
+          const targets = targetsFor(it, data.catalog)
+          const prod = targets.find((c) => String(c.product_id) === s?.productId)
+          const v = variantOf(it)
+          const d = diffFor(it, v)
           return (
             <div key={it.key} className={`rounded-lg border p-3 ${s?.checked ? 'border-zinc-900' : 'border-zinc-200'} ${disabled ? 'opacity-50' : ''}`}>
               <label className="flex items-center gap-3">
@@ -180,61 +184,81 @@ export default function CambiosPage() {
                     <option value="">Motivo…</option>
                     {data.reasons.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
-                  {kind === 'cambio' && s.reason !== 'otro' && (
-                    <select className={selectCls} value={s.newVariant} onChange={(e) => upd(it.key, { newVariant: e.target.value })}>
-                      <option value="">Cambiar por…</option>
-                      {it.options.map((op) => (
-                        <option key={op.variant_id} value={op.variant_id} disabled={op.available < it.quantity}>
-                          {op.label}{op.same ? ' (el mismo)' : ''}{op.available < it.quantity ? ' — sin stock' : ''}
-                        </option>
-                      ))}
-                    </select>
+                  {s.reason && s.reason !== 'otro' && (
+                    <>
+                      <select className={selectCls} value={s.productId} onChange={(e) => upd(it.key, { productId: e.target.value, newVariant: '' })}>
+                        {targets.map((c) => (
+                          <option key={c.product_id} value={c.product_id}>
+                            {c.product_id === it.product_id ? `${c.name} (mismo modelo)` : c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select className={selectCls} value={s.newVariant} onChange={(e) => upd(it.key, { newVariant: e.target.value })}>
+                        <option value="">Talle / color…</option>
+                        {(prod?.variants ?? []).map((op) => {
+                          const sinStock = op.available < it.quantity
+                          const dd = diffFor(it, op)
+                          return (
+                            <option key={op.variant_id} value={op.variant_id} disabled={sinStock}>
+                              {op.label}{op.variant_id === it.variant_id ? ' (el mismo)' : ''}{sinStock ? ' — sin stock' : dd > 0 ? ` (+${money(dd)})` : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                      {v && (
+                        <p className="text-xs text-zinc-600">
+                          {d > 0 ? <>Diferencia a abonar: <b>{money(d)}</b></> : 'Sin diferencia de precio'}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
             </div>
           )
         })}
+        <p className="text-xs text-zinc-500">Podés cambiar por otro producto. Si cuesta más, abonás la diferencia; si cuesta menos, no se reintegra la diferencia.</p>
       </Card>
 
-      <Card className="space-y-3">
-        <label className="block">
-          <span className="text-sm text-zinc-600">WhatsApp de contacto{needPhone ? '' : ' (opcional)'}</span>
-          <input className={inputCls} type="tel" placeholder="11 1234 5678" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-zinc-600">Comentario (opcional)</span>
-          <textarea className={`${inputCls} h-20 py-2`} value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-      </Card>
-
-      {otherReason && (
+      {otherReason ? (
         <Card className="space-y-3 bg-amber-50 border-amber-200">
           <p className="text-[15px]">Para otros motivos, escribinos por WhatsApp y lo resolvemos ahí.</p>
           <a href={waLink(data.whatsapp, waText)} className="block w-full h-12 rounded-lg bg-[#25D366] text-white text-[15px] font-medium leading-[48px] text-center">Escribir por WhatsApp</a>
         </Card>
-      )}
+      ) : (
+        <>
+          <Card className="space-y-3">
+            <label className="block">
+              <span className="text-sm text-zinc-600">WhatsApp de contacto{needPhone ? '' : ' (opcional)'}</span>
+              <input className={inputCls} type="tel" placeholder="11 1234 5678" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="text-sm text-zinc-600">Comentario (opcional)</span>
+              <textarea className={`${inputCls} h-20 py-2`} value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          </Card>
 
-      {kind === 'cambio' && !otherReason && (
-        <Card className="space-y-1">
-          <div className="flex justify-between text-[15px]"><span>Envío</span><span>{o.zoneLabel}</span></div>
-          <div className="flex justify-between text-[15px] font-semibold"><span>{o.shippingAmount === 0 ? 'Costo' : 'A transferir'}</span><span>{o.shippingAmount === 0 ? 'Sin costo' : money(o.shippingAmount)}</span></div>
-          <p className="text-xs text-zinc-500 pt-1">
-            {o.shippingAmount === 0
-              ? 'Te confirmamos día y horario para hacer el cambio.'
-              : o.zone === 'correo'
-              ? 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda, y cuando llega te enviamos la nueva.'
-              : 'Una moto retira tu prenda y te entrega la nueva en el mismo viaje.'}
-            {o.shippingAmount == null && ' Te confirmamos el monto por mail y WhatsApp.'}
-            {' '}Despachamos los cambios los lunes.
-          </p>
-        </Card>
-      )}
+          <Card className="space-y-1">
+            <div className="flex justify-between text-[15px]"><span>Envío · {o.zoneLabel}</span><span>{shipping === 0 ? 'Sin costo' : money(shipping)}</span></div>
+            {diff > 0 && <div className="flex justify-between text-[15px]"><span>Diferencia de precio</span><span>{money(diff)}</span></div>}
+            <div className="flex justify-between text-[15px] font-semibold pt-1 border-t border-zinc-100"><span>Total a transferir</span><span>{total === 0 ? 'Sin costo' : money(total)}</span></div>
+            <p className="text-xs text-zinc-500 pt-1">
+              {o.zone === 'correo'
+                ? 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda, y cuando llega te enviamos la nueva.'
+                : o.zone === 'retiro'
+                ? 'Te confirmamos día y horario para hacer el cambio.'
+                : 'Una moto retira tu prenda y te entrega la nueva en el mismo viaje.'}
+              {shipping == null && ' Te confirmamos el costo del envío por mail y WhatsApp.'}
+              {' '}Despachamos los cambios los lunes.
+            </p>
+          </Card>
 
-      {error && <ErrorBox>{error}</ErrorBox>}
-      {!otherReason && <Btn onClick={onSubmit} disabled={loading || !chosen.length || missing || (needPhone && phone.trim().length < 8)}>
-        {loading ? 'Enviando…' : kind === 'cambio' ? 'Confirmar cambio' : 'Enviar solicitud'}
-      </Btn>}
+          {error && <ErrorBox>{error}</ErrorBox>}
+          <Btn onClick={onSubmit} disabled={loading || !chosen.length || missing || (needPhone && phone.trim().length < 8)}>
+            {loading ? 'Enviando…' : 'Confirmar cambio'}
+          </Btn>
+        </>
+      )}
       <Btn variant="light" onClick={() => { setData(null); setError('') }}>Volver</Btn>
       <p className="text-xs text-zinc-500 text-center">
         ¿Dudas? <a className="underline" href={waLink(data.whatsapp)}>Escribinos por WhatsApp</a>

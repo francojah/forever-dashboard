@@ -87,10 +87,25 @@ export async function findOrderByNumber(orderNumber: string): Promise<TNOrder | 
 }
 
 export type TNVariant = { id: number; price: string; stock: number | null; values?: { es?: string }[] }
-export type TNProduct = { id: number; name: { es?: string } | string; published?: boolean; variants: TNVariant[] }
+export type TNProduct = { id: number; name: { es?: string } | string; published?: boolean; variants: TNVariant[]; images?: { src?: string }[] }
 
 export async function getProduct(productId: number | string): Promise<TNProduct | null> {
   return tnGet<TNProduct>(`products/${productId}`)
+}
+
+export async function getAllProducts(): Promise<TNProduct[]> {
+  const out: TNProduct[] = []
+  for (let page = 1; page <= 10; page++) {
+    const list = await tnGet<TNProduct[]>(`products?per_page=200&page=${page}`)
+    if (!Array.isArray(list) || !list.length) break
+    out.push(...list)
+    if (list.length < 200) break
+  }
+  return out
+}
+
+export function productImage(p: TNProduct): string | null {
+  return p.images?.[0]?.src ?? null
 }
 
 export function variantLabel(v: { values?: { es?: string }[] }): string {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 type Item = {
   product_id: number; variant_id: number | null; name: string; variant_label: string; quantity: number; reason?: string
-  new_variant_id?: number | null; new_variant_label?: string | null; tn_stock: number | null; stock_alert: boolean
+  new_variant_id?: number | null; new_variant_label?: string | null; new_product_name?: string | null; price_diff?: number | null; tn_stock: number | null; stock_alert: boolean
 }
 type Row = {
   id: string; code: string; status_token: string; type: string; status: string; status_label: string
@@ -86,7 +86,7 @@ export default function GestionCambiosPage() {
     for (const r of rows) {
       if (r.type !== 'cambio' || r.status === 'cancelado') continue
       if (r.dispatched_at && !r.stock_out_done) {
-        for (const it of r.items) out.push({ row: r, kind: 'out', text: `Restar ${it.quantity} × ${it.name} ${it.new_variant_label}` })
+        for (const it of r.items) out.push({ row: r, kind: 'out', text: `Restar ${it.quantity} × ${it.new_product_name || it.name} ${it.new_variant_label}` })
       }
       if (r.received_at && r.item_condition === 'ok' && !r.stock_in_done) {
         for (const it of r.items) out.push({ row: r, kind: 'in', text: `Sumar ${it.quantity} × ${it.name} ${it.variant_label}` })
@@ -211,7 +211,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
           <ul className="mt-2 space-y-1">
             {r.items.map((it, i) => (
               <li key={i} className="text-xs text-gray-700 dark:text-zinc-300">
-                {it.name} <b>{it.variant_label}</b>{it.new_variant_label ? <> → <b>{it.new_variant_label}</b></> : null}{it.quantity > 1 ? ` x${it.quantity}` : ''}
+                {it.name} <b>{it.variant_label}</b>{it.new_variant_label ? <> → <b>{it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</b></> : null}{it.price_diff ? <span className="text-amber-600"> (+{fmt(it.price_diff)})</span> : null}{it.quantity > 1 ? ` x${it.quantity}` : ''}
                 <span className="text-gray-400"> · {reasonLabel(it.reason)}</span>
                 {it.stock_alert && <span className="ml-1 text-red-600 font-medium">· sin stock en TN ({it.tn_stock})</span>}
               </li>
@@ -220,7 +220,11 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
           {r.customer_note && <p className="mt-2 text-xs italic text-gray-500">“{r.customer_note}”</p>}
         </div>
         <div className="space-y-1 text-xs">
-          {r.type === 'cambio' && <p>Envío: <b className="text-gray-900 dark:text-white">{r.shipping_amount === 0 ? 'sin costo' : fmt(r.shipping_amount)}</b></p>}
+          {r.type === 'cambio' && (() => {
+            const diff = r.items.reduce((a, it) => a + (Number(it.price_diff) || 0), 0)
+            const total = r.shipping_amount == null ? null : r.shipping_amount + diff
+            return <p>Total: <b className="text-gray-900 dark:text-white">{total === 0 ? 'sin costo' : fmt(total)}</b>{diff > 0 && <span className="text-gray-500"> (envío {fmt(r.shipping_amount)} + dif. {fmt(diff)})</span>}</p>
+          })()}
           {r.receipt_url
             ? <p>Comprobante: <a href={r.receipt_url} target="_blank" rel="noreferrer" className="underline text-blue-600">ver ({date(r.receipt_uploaded_at)})</a></p>
             : r.type === 'cambio' && r.status === 'pendiente_pago' && <p className="text-gray-500">Sin comprobante todavía</p>}

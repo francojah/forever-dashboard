@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { lookupOrder, pushEvent } from '@/lib/cambios/service'
-import { customerInfo, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
+import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import { sendExchangeEmail, type ExchangeRow } from '@/lib/cambios/email'
 
 export const dynamic = 'force-dynamic'
 
-type Sel = { key: string; reason?: string; new_variant_id?: number | null }
+type Sel = { key: string; reason?: string; new_product_id?: number | null; new_variant_id?: number | null }
 
 export async function POST(req: Request) {
   try {
@@ -34,19 +34,24 @@ export async function POST(req: Request) {
       if (!it.exchangeable) {
         return NextResponse.json({ ok: false, reason: `${it.name} no admite cambio.` })
       }
-      let newLabel: string | null = null
+      let target: { product_id: number; name: string; variant_id: number; label: string; diff: number } | null = null
       if (type === 'cambio') {
-        const opt = it.options.find((o) => o.variant_id === Number(s.new_variant_id))
-        if (!opt) return NextResponse.json({ ok: false, reason: `Elegí el talle/color nuevo para ${it.name}.` })
-        if (opt.available < it.quantity) {
-          return NextResponse.json({ ok: false, reason: `Se agotó ${it.name} ${opt.label}. Elegí otra opción.` })
-        }
-        newLabel = opt.label
+        const pid = Number(s.new_product_id) || it.product_id
+        const prod = r.catalog.find((c) => c.product_id === pid)
+        if (!prod || !canTarget(it, prod)) return NextResponse.json({ ok: false, reason: `Elegí un producto válido para ${it.name}.` })
+        const v = prod.variants.find((x) => x.variant_id === Number(s.new_variant_id))
+        if (!v) return NextResponse.json({ ok: false, reason: `Elegí el talle/color nuevo para ${it.name}.` })
+        if (v.available < it.quantity) return NextResponse.json({ ok: false, reason: `Se agotó ${prod.name} ${v.label}. Elegí otra opción.` })
+        target = { product_id: prod.product_id, name: prod.name, variant_id: v.variant_id, label: v.label, diff: priceDiff(it, v.price) }
       }
       items.push({
         product_id: it.product_id, variant_id: it.variant_id, name: it.name, variant_label: it.variant_label,
         quantity: it.quantity, reason: validReasons.includes(String(s.reason)) ? String(s.reason) : 'otro',
-        new_variant_id: type === 'cambio' ? Number(s.new_variant_id) : null, new_variant_label: newLabel,
+        new_product_id: target ? target.product_id : null,
+        new_product_name: target && target.product_id !== it.product_id ? target.name : null,
+        new_variant_id: target ? target.variant_id : null,
+        new_variant_label: target ? target.label : null,
+        price_diff: target ? target.diff : 0,
       })
     }
 
@@ -55,8 +60,8 @@ export async function POST(req: Request) {
     const row = {
       status_token: randomToken(),
       type,
-      // Sin costo (punto de retiro): no hay pago, queda listo para coordinar
-      status: type !== 'cambio' ? 'revision' : r.amount === 0 ? 'pago_confirmado' : 'pendiente_pago',
+      // Sin nada que pagar (envío sin costo y sin diferencia): queda listo para coordinar
+      status: type !== 'cambio' ? 'revision' : amountDue(r.amount, items) === 0 ? 'pago_confirmado' : 'pendiente_pago',
       tn_order_id: String(r.order.id),
       order_number: String(r.order.number),
       customer_name: c.name,
@@ -68,7 +73,7 @@ export async function POST(req: Request) {
       shipping_amount: type === 'cambio' ? r.amount : null,
       items,
       customer_note: String(body.note ?? '').slice(0, 1000) || null,
-      events: pushEvent([], 'creado', type === 'cambio' && r.amount === 0 ? 'sin costo' : undefined),
+      events: pushEvent([], 'creado', type === 'cambio' && amountDue(r.amount, items) === 0 ? 'sin costo' : undefined),
     }
     const { data, error } = await supabaseAdmin().from('exchanges').insert(row).select('*').single()
     if (error || !data) throw new Error(error?.message || 'insert failed')

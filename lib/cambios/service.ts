@@ -1,6 +1,7 @@
 import { CAMBIOS } from './config'
 import {
-  buildItems, checkEligibility, classifyZone, emailMatches, shippingAmount, type LookupItem, type Zone,
+  buildCatalog, buildItems, checkEligibility, classifyZone, emailMatches, shippingAmount,
+  type CatalogProduct, type LookupItem, type Zone,
 } from './logic'
 import { findOrderByNumber, supabaseAdmin, type TNOrder } from './tiendanube'
 
@@ -13,6 +14,7 @@ export type LookupResult =
       amount: number | null
       deadline: string
       items: LookupItem[]
+      catalog: CatalogProduct[]
       active: { code: string; status_token: string; type: string; status: string }[]
     }
 
@@ -28,9 +30,10 @@ export async function lookupOrder(orderNumber: string, email: string): Promise<L
   const { data: active } = await supabaseAdmin()
     .from('exchanges').select('code, status_token, type, status')
     .eq('tn_order_id', String(order.id)).neq('status', 'cancelado')
+  const catalog = await buildCatalog()
   return {
     ok: true, order, zone, amount: shippingAmount(zone, order), deadline: elig.deadline,
-    items: await buildItems(order), active: active ?? [],
+    items: buildItems(order, catalog), catalog, active: active ?? [],
   }
 }
 

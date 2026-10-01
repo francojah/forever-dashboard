@@ -1,6 +1,6 @@
 import { CAMBIOS } from './config'
 import {
-  type TNOrder, getProduct, productName, supabaseAdmin, variantLabel,
+  type TNOrder, getAllProducts, productImage, productName, supabaseAdmin, variantLabel,
 } from './tiendanube'
 
 export type Zone = 'caba' | 'moto_gba' | 'correo' | 'retiro' | 'otro'
@@ -88,8 +88,11 @@ export type ExchangeItem = {
   variant_label: string
   quantity: number
   reason?: string
+  new_product_id?: number | null
+  new_product_name?: string | null
   new_variant_id?: number | null
   new_variant_label?: string | null
+  price_diff?: number | null
 }
 
 export type LookupItem = {
@@ -101,38 +104,81 @@ export type LookupItem = {
   quantity: number
   image: string | null
   exchangeable: boolean
-  options: { variant_id: number; label: string; same: boolean; available: number }[]
+  /** Precio ACTUAL de la variante original (base para calcular diferencias, neutral a aumentos) */
+  base_price: number
 }
 
-/** Arma los ítems de la orden con las variantes disponibles para cambio. */
-export async function buildItems(o: TNOrder): Promise<LookupItem[]> {
-  const reserved = await reservedByVariant()
-  const productCache = new Map<number, Awaited<ReturnType<typeof getProduct>>>()
-  const out: LookupItem[] = []
-  for (let i = 0; i < o.products.length; i++) {
-    const p = o.products[i]
-    if (!productCache.has(p.product_id)) productCache.set(p.product_id, await getProduct(p.product_id))
-    const prod = productCache.get(p.product_id)
-    const pname = prod ? productName(prod) : p.name
-    const excluded = CAMBIOS.excludedProductIds.includes(String(p.product_id)) || CAMBIOS.excludedNamePattern.test(pname)
-    const options = (prod?.variants ?? [])
-      .map((v) => {
+export type CatalogProduct = {
+  product_id: number
+  name: string
+  image: string | null
+  is_pack: boolean
+  variants: { variant_id: number; label: string; price: number; available: number }[]
+}
+
+const PACK_RE = /\bpack\b/i
+
+function isExcluded(id: number | string, name: string) {
+  return CAMBIOS.excludedProductIds.includes(String(id)) || CAMBIOS.excludedNamePattern.test(name)
+}
+
+/** Catálogo elegible para cambio: publicado, sin ropa interior ni accesorios, con stock disponible real. */
+export async function buildCatalog(): Promise<CatalogProduct[]> {
+  const [reserved, products] = await Promise.all([reservedByVariant(), getAllProducts()])
+  return products
+    .filter((p) => p.published !== false && !isExcluded(p.id, productName(p)))
+    .map((p) => ({
+      product_id: p.id,
+      name: productName(p),
+      image: productImage(p),
+      is_pack: PACK_RE.test(productName(p)),
+      variants: (p.variants ?? []).map((v) => {
         const stock = v.stock === null ? 999 : Number(v.stock) || 0 // null = stock infinito en TN
-        return { variant_id: v.id, label: variantLabel(v), same: v.id === p.variant_id, available: Math.max(0, stock - (reserved.get(String(v.id)) ?? 0)) }
-      })
-    out.push({
+        return { variant_id: v.id, label: variantLabel(v), price: Number(v.price) || 0, available: Math.max(0, stock - (reserved.get(String(v.id)) ?? 0)) }
+      }),
+    }))
+}
+
+/** Ítems de la orden, con el precio actual de su variante (para calcular diferencias). */
+export function buildItems(o: TNOrder, catalog: CatalogProduct[]): LookupItem[] {
+  return o.products.map((p, i) => {
+    const prod = catalog.find((c) => c.product_id === p.product_id)
+    const v = prod?.variants.find((x) => x.variant_id === p.variant_id)
+    const name = prod?.name || p.name_without_variants || p.name
+    return {
       key: `${i}-${p.variant_id ?? p.product_id}`,
       product_id: p.product_id,
       variant_id: p.variant_id,
-      name: prod ? productName(prod) : p.name_without_variants || p.name,
+      name,
       variant_label: (p.variant_values ?? []).join(' / ') || 'Único',
       quantity: p.quantity,
       image: p.image?.src ?? null,
-      exchangeable: !!prod && !excluded,
-      options,
-    })
-  }
-  return out
+      exchangeable: !!prod && !isExcluded(p.product_id, name),
+      base_price: v?.price ?? (Number(p.price) || 0),
+    }
+  })
+}
+
+/** Destinos válidos para un ítem: cualquier producto elegible; los packs solo dentro del mismo pack. */
+export function canTarget(item: LookupItem, target: CatalogProduct) {
+  if (target.product_id === item.product_id) return true
+  return !target.is_pack
+}
+
+/** Diferencia a abonar por un cambio (nunca negativa: si vale menos no se reintegra). */
+export function priceDiff(item: LookupItem, newPrice: number) {
+  return Math.max(0, Math.round((newPrice - item.base_price) * item.quantity))
+}
+
+/** Total a transferir = envío + diferencias. null si el envío está a confirmar. */
+export function amountDue(shipping: number | null | undefined, items: { price_diff?: number | null }[]) {
+  const diff = items.reduce((a, it) => a + (Number(it.price_diff) || 0), 0)
+  if (shipping == null) return null
+  return shipping + diff
+}
+
+export function diffTotal(items: { price_diff?: number | null }[]) {
+  return items.reduce((a, it) => a + (Number(it.price_diff) || 0), 0)
 }
 
 export function emailMatches(o: TNOrder, email: string): boolean {

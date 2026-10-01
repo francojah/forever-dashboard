@@ -23,6 +23,7 @@ export async function POST(req: Request) {
         deadline: r.deadline,
       },
       items: r.items,
+      catalog: r.catalog,
       active: r.active.map((a) => ({ code: a.code, token: a.status_token, type: a.type, status: a.status })),
       reasons: REASONS,
       alias: CAMBIOS.alias,
