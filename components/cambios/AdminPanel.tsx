@@ -214,7 +214,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
           <ul className="mt-2 space-y-1">
             {r.items.map((it, i) => (
               <li key={i} className="text-xs text-gray-700 dark:text-zinc-300">
-                {it.name} <b>{it.variant_label}</b>{it.new_variant_label ? <> → <b>{it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</b></> : null}{it.price_diff ? <span className="text-amber-600"> (+{fmt(it.price_diff)})</span> : null}{it.quantity > 1 ? ` x${it.quantity}` : ''}
+                {it.name} <b>{it.variant_label}</b>{it.new_variant_label ? <> → <b>{it.new_product_name ? `${it.new_product_name} ` : ''}{it.new_variant_label}</b></> : null}{it.price_diff ? <span className="text-[#8B6914] font-medium"> (+{fmt(it.price_diff)})</span> : null}{it.quantity > 1 ? ` x${it.quantity}` : ''}
                 <span className="text-gray-400"> · {reasonLabel(it.reason)}</span>
                 {it.stock_alert && <span className="ml-1 text-red-600 font-medium">· sin stock en TN ({it.tn_stock})</span>}
               </li>
