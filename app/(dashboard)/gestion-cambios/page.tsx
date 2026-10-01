@@ -10,7 +10,7 @@ type Row = {
   id: string; code: string; status_token: string; type: string; status: string; status_label: string
   order_number: string; customer_name: string | null; email: string; phone: string | null
   zone: string; zone_label: string; shipping_option: string | null; shipping_amount: number | null
-  address: { name?: string; street?: string; floor?: string; locality?: string; city?: string; province?: string; zipcode?: string }
+  address: { branch?: string; name?: string; street?: string; floor?: string; locality?: string; city?: string; province?: string; zipcode?: string }
   items: Item[]; customer_note: string | null; receipt_url: string | null; receipt_uploaded_at: string | null
   paid_at: string | null; received_at: string | null; item_condition: string | null
   moto_date: string | null; tracking_number: string | null; dispatched_at: string | null
@@ -174,7 +174,7 @@ function ExchangeCard({ r, busy, act, reasons }: {
   const reasonLabel = (id?: string) => reasons.find((x) => x.id === id)?.label || id || ''
   const isMoto = r.zone === 'caba' || r.zone === 'moto_gba' || r.zone === 'retiro'
   const a = r.address || {}
-  const labelText = [a.name || r.customer_name, a.street + (a.floor ? ` ${a.floor}` : ''), [a.locality, a.city].filter(Boolean).join(', '), `${a.province || ''} (${a.zipcode || ''})`, r.phone ? `Tel: ${r.phone}` : ''].filter(Boolean).join('\n')
+  const labelText = [a.branch ? `Punto de retiro: ${a.branch}` : '', a.name || r.customer_name, a.street + (a.floor ? ` ${a.floor}` : ''), [a.locality, a.city].filter(Boolean).join(', '), `${a.province || ''} (${a.zipcode || ''})`, r.phone ? `Tel: ${r.phone}` : ''].filter(Boolean).join('\n')
   const phone = waPhone(r.phone)
   const dis = busy !== null
 

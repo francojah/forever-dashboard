@@ -18,12 +18,11 @@ type Lookup = {
   whatsapp: string
 }
 type Sel = { checked: boolean; reason: string; newVariant: string }
-type Kind = 'cambio' | 'otro_modelo' | 'reembolso'
+type Kind = 'cambio' | 'otro_modelo'
 
 const KINDS: { id: Kind; label: string; hint: string }[] = [
   { id: 'cambio', label: 'Cambiar talle o color', hint: 'Mismo modelo, otro talle o color.' },
   { id: 'otro_modelo', label: 'Quiero otro modelo', hint: 'Lo coordinamos por WhatsApp.' },
-  { id: 'reembolso', label: 'Devolverla y que me reintegren', hint: 'Lo coordinamos por WhatsApp.' },
 ]
 
 export default function CambiosPage() {
@@ -61,7 +60,11 @@ export default function CambiosPage() {
   }
 
   const chosen = data ? data.items.filter((it) => sel[it.key]?.checked) : []
+  const otherReason = chosen.some((it) => sel[it.key].reason === 'otro')
   const missing = chosen.some((it) => !sel[it.key].reason || (kind === 'cambio' && !sel[it.key].newVariant))
+  const waText = data
+    ? `Hola! Quiero hacer una consulta por la orden #${data.order.number}: ` + chosen.map((it) => `${it.name} ${it.variant_label}`).join(', ')
+    : ''
   const needPhone = data ? !data.order.hasPhone : false
 
   async function onSubmit() {
@@ -139,7 +142,7 @@ export default function CambiosPage() {
         <p className="text-sm font-medium">{data.items.length > 1 ? 'Elegí las prendas' : 'Tu prenda'}</p>
         {data.items.map((it) => {
           const s = sel[it.key]
-          const disabled = kind !== 'reembolso' && !it.exchangeable
+          const disabled = !it.exchangeable
           return (
             <div key={it.key} className={`rounded-lg border p-3 ${s?.checked ? 'border-zinc-900' : 'border-zinc-200'} ${disabled ? 'opacity-50' : ''}`}>
               <label className="flex items-center gap-3">
@@ -157,7 +160,7 @@ export default function CambiosPage() {
                     <option value="">Motivo…</option>
                     {data.reasons.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
-                  {kind === 'cambio' && (
+                  {kind === 'cambio' && s.reason !== 'otro' && (
                     <select className={selectCls} value={s.newVariant} onChange={(e) => upd(it.key, { newVariant: e.target.value })}>
                       <option value="">Cambiar por…</option>
                       {it.options.map((op) => (
@@ -185,7 +188,14 @@ export default function CambiosPage() {
         </label>
       </Card>
 
-      {kind === 'cambio' && (
+      {otherReason && (
+        <Card className="space-y-3 bg-amber-50 border-amber-200">
+          <p className="text-[15px]">Para otros motivos, escribinos por WhatsApp y lo resolvemos ahí.</p>
+          <a href={waLink(data.whatsapp, waText)} className="block w-full h-12 rounded-lg bg-[#25D366] text-white text-[15px] font-medium leading-[48px] text-center">Escribir por WhatsApp</a>
+        </Card>
+      )}
+
+      {kind === 'cambio' && !otherReason && (
         <Card className="space-y-1">
           <div className="flex justify-between text-[15px]"><span>Envío</span><span>{o.zoneLabel}</span></div>
           <div className="flex justify-between text-[15px] font-semibold"><span>{o.shippingAmount === 0 ? 'Costo' : 'A transferir'}</span><span>{o.shippingAmount === 0 ? 'Sin costo' : money(o.shippingAmount)}</span></div>
@@ -200,9 +210,9 @@ export default function CambiosPage() {
       )}
 
       {error && <ErrorBox>{error}</ErrorBox>}
-      <Btn onClick={onSubmit} disabled={loading || !chosen.length || missing || (needPhone && phone.trim().length < 8)}>
+      {!otherReason && <Btn onClick={onSubmit} disabled={loading || !chosen.length || missing || (needPhone && phone.trim().length < 8)}>
         {loading ? 'Enviando…' : kind === 'cambio' ? 'Confirmar cambio' : 'Enviar solicitud'}
-      </Btn>
+      </Btn>}
       <Btn variant="light" onClick={() => { setData(null); setError('') }}>Volver</Btn>
       <p className="text-xs text-zinc-500 text-center">
         ¿Dudas? <a className="underline" href={waLink(data.whatsapp)}>Escribinos por WhatsApp</a>

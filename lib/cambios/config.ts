@@ -52,7 +52,7 @@ export const REASONS = [
   { id: 'chica', label: 'Me quedó chica' },
   { id: 'color', label: 'Quiero otro color' },
   { id: 'falla', label: 'Vino con una falla' },
-  { id: 'otro', label: 'Otro motivo' },
+  { id: 'otro', label: 'Otro motivo (te atendemos por WhatsApp)' },
 ] as const
 
 export const STATUS_LABEL: Record<string, string> = {

@@ -12,7 +12,7 @@ type Sel = { key: string; reason?: string; new_variant_id?: number | null }
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const type = ['cambio', 'reembolso', 'otro_modelo'].includes(body.type) ? body.type : 'cambio'
+    const type = ['cambio', 'otro_modelo'].includes(body.type) ? body.type : 'cambio'
     const sels: Sel[] = Array.isArray(body.items) ? body.items : []
     if (!sels.length) return NextResponse.json({ ok: false, reason: 'Elegí al menos una prenda.' })
 
@@ -28,7 +28,10 @@ export async function POST(req: Request) {
     for (const s of sels) {
       const it = r.items.find((x) => x.key === s.key)
       if (!it) return NextResponse.json({ ok: false, reason: 'Hay una prenda que no pertenece a la orden.' })
-      if (type !== 'reembolso' && !it.exchangeable) {
+      if (String(s.reason) === 'otro') {
+        return NextResponse.json({ ok: false, reason: 'Para otros motivos escribinos por WhatsApp.' })
+      }
+      if (!it.exchangeable) {
         return NextResponse.json({ ok: false, reason: `${it.name} no admite cambio.` })
       }
       let newLabel: string | null = null

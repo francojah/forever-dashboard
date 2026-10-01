@@ -19,17 +19,21 @@ describe('zona y monto del envío (nombres reales de envío de la tienda)', () =
     const o = base({ shipping_option: 'Moto Express a domicilio', shipping_address: { province: 'Buenos Aires' }, shipping_cost_customer: '8500.00' })
     expect(classifyZone(o)).toBe('moto_gba'); expect(shippingAmount('moto_gba', o)).toBe(8500)
   })
-  it('Correo → usa lo que cobró el correo (owner)', () => {
-    const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Córdoba' }, shipping_cost_owner: '9256.84', shipping_cost_customer: '0' })
-    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(9257)
+  it('Correo → usa lo que pagó el cliente de envío', () => {
+    const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Córdoba' }, shipping_cost_owner: '9256.84', shipping_cost_customer: '7593.40' })
+    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(7593)
+  })
+  it('Correo con envío gratis → lo que cobró el correo', () => {
+    const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_cost_owner: '9256.84', shipping_cost_customer: '0' })
+    expect(shippingAmount('correo', o)).toBe(9257)
   })
   it('Correo con envío gratis y sin costo → a confirmar', () => {
     const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Jujuy' } })
     expect(shippingAmount('correo', o)).toBeNull()
   })
-  it('Punto de retiro → retiro sin costo', () => {
-    const o = base({ shipping_option: 'Punto de retiro', shipping_pickup_type: 'pickup', shipping_cost_customer: '6200.00' })
-    expect(classifyZone(o)).toBe('retiro'); expect(shippingAmount('retiro', o)).toBe(0)
+  it('Punto de retiro de Envío Nube → correo con lo que pagó', () => {
+    const o = base({ shipping_option: 'Punto de retiro', shipping_pickup_type: 'pickup', shipping_carrier_name: 'Envío Nube', shipping_cost_customer: '6200.00' })
+    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(6200)
   })
 })
 

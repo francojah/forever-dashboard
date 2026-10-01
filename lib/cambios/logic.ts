@@ -9,9 +9,12 @@ export function classifyZone(o: TNOrder): Zone {
   const opt = (o.shipping_option || '').toLowerCase()
   const prov = (o.shipping_address?.province || '').toLowerCase()
   const isCaba = /capital federal|ciudad aut[oó]noma|caba/.test(prov) || /caba/.test(opt)
-  if (o.shipping_pickup_type === 'pickup' || /retiro/.test(opt)) return 'retiro'
+  // Envío Nube / Correo: tanto "a domicilio" como "Punto de retiro" (sucursal del correo) van por correo
+  const viaCarrier = /correo|andreani|\boca\b|env[ií]o nube/.test(opt) || /env[ií]o nube|correo/i.test(o.shipping_carrier_name || '')
+  if (viaCarrier) return 'correo'
   if (/moto/.test(opt)) return isCaba ? 'caba' : 'moto_gba'
-  if (/correo|andreani|oca|env[ií]o nube/.test(opt)) return 'correo'
+  // Retiro en el local propio (sin transportista)
+  if (o.shipping_pickup_type === 'pickup' || /retiro/.test(opt)) return 'retiro'
   if (isCaba) return 'caba'
   return 'otro'
 }
@@ -27,10 +30,10 @@ export function shippingAmount(zone: Zone, o: TNOrder): number | null {
     return v > 0 ? Math.round(v) : null
   }
   if (zone === 'correo') {
-    // Lo que cobró Correo Argentino por ese envío (owner), si no lo que pagó el cliente
+    // Lo que pagó el cliente de envío en la compra; si fue gratis, lo que cobró el correo
     const owner = Number(o.shipping_cost_owner) || 0
     const customer = Number(o.shipping_cost_customer) || 0
-    const v = owner || customer
+    const v = customer || owner
     return v > 0 ? Math.round(v) : null
   }
   return null
@@ -143,6 +146,7 @@ export function customerInfo(o: TNOrder) {
     name: o.contact_name || o.customer?.name || a.name || '',
     phone: o.contact_phone || a.phone || o.customer?.phone || '',
     address: {
+      branch: o.shipping_store_branch_name || '',
       name: a.name || '', street: [a.address, a.number].filter(Boolean).join(' '),
       floor: a.floor || '', locality: a.locality || '', city: a.city || '',
       province: a.province || '', zipcode: a.zipcode || '',

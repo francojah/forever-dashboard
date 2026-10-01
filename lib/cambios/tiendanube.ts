@@ -67,6 +67,8 @@ export type TNOrder = {
   customer?: { name?: string; email?: string; phone?: string } | null
   shipping_option: string | null
   shipping_pickup_type?: string | null
+  shipping_carrier_name?: string | null
+  shipping_store_branch_name?: string | null
   shipping_cost_customer: string | null
   shipping_cost_owner: string | null
   shipping_address?: {
