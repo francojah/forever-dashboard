@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { pushEvent } from '@/lib/cambios/service'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
+import { notifyTeam } from '@/lib/cambios/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
       receipt_path: path, receipt_uploaded_at: new Date().toISOString(),
       events: pushEvent(ex.events, 'comprobante'), updated_at: new Date().toISOString(),
     }).eq('id', ex.id)
+    await notifyTeam(`Comprobante subido · ${ex.code}`, 'El cliente subió el comprobante. Revisalo y confirmá la transferencia.')
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[cambios/receipt]', e)

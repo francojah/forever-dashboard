@@ -4,6 +4,8 @@ import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type Exchan
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import { sendExchangeEmail, type ExchangeRow } from '@/lib/cambios/email'
+import { notifyTeam } from '@/lib/cambios/notify'
+import { ZONE_LABEL } from '@/lib/cambios/config'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +79,14 @@ export async function POST(req: Request) {
     }
     const { data, error } = await supabaseAdmin().from('exchanges').insert(row).select('*').single()
     if (error || !data) throw new Error(error?.message || 'insert failed')
-    const sent = await sendExchangeEmail('creado', data as ExchangeRow)
+    const due = amountDue(data.shipping_amount, items)
+    const [sent] = await Promise.all([
+      sendExchangeEmail('creado', data as ExchangeRow),
+      notifyTeam(
+        `Nuevo cambio ${data.code}`,
+        `Orden #${data.order_number} · ${ZONE_LABEL[data.zone] ?? data.zone} · ${items.length} prenda${items.length > 1 ? 's' : ''} · ${due == null ? 'monto a confirmar' : due === 0 ? 'sin costo' : '$' + Math.round(due).toLocaleString('es-AR')}`,
+      ),
+    ])
     if (sent) {
       await supabaseAdmin().from('exchanges').update({ events: pushEvent(data.events, 'email', 'creado') }).eq('id', data.id)
     }

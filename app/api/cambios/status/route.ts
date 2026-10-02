@@ -23,6 +23,6 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     exchange: { ...pub, label_url, label_sent_at: label?.at ?? null, status_label: STATUS_LABEL[data.status] ?? data.status, zone_label: ZONE_LABEL[data.zone] ?? data.zone },
-    alias: CAMBIOS.alias, returnAddress: CAMBIOS.returnAddress, whatsapp: CAMBIOS.whatsapp,
+    alias: CAMBIOS.alias, cvu: CAMBIOS.cvu, returnAddress: CAMBIOS.returnAddress, whatsapp: CAMBIOS.whatsapp,
   })
 }

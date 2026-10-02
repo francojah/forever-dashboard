@@ -11,7 +11,7 @@ type Ex = {
   created_at: string; paid_at: string | null; received_at: string | null; dispatched_at: string | null
   label_url: string | null; label_sent_at: string | null
 }
-type Resp = { ok: boolean; exchange: Ex; alias: string; whatsapp: string }
+type Resp = { ok: boolean; exchange: Ex; alias: string; cvu?: string; whatsapp: string }
 type Step = { label: string; detail?: string; done: boolean }
 
 const isMoto = (e: Ex) => e.zone === 'caba' || e.zone === 'moto_gba'
@@ -62,7 +62,7 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState('')
 
   async function load() {
     try {
@@ -88,11 +88,11 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
     setUploading(false)
   }
 
-  function copyAlias(alias: string) {
+  function copyAlias(alias: string, which = 'alias') {
     try {
       const ta = document.createElement('textarea')
       ta.value = alias; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
-      setCopied(true); setTimeout(() => setCopied(false), 2000)
+      setCopied(which); setTimeout(() => setCopied(''), 2000)
     } catch { /* algunos webviews no permiten copiar */ }
   }
 
@@ -131,18 +131,29 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
               <>
                 <div>
                   <p className="text-[13px] font-semibold text-[#8B6914]">Tu próximo paso</p>
-                  <p className="text-[15px] mt-1">Transferí por Mercado Pago</p>
+                  <p className="text-[15px] mt-1">Transferí</p>
                   <p className="font-display text-[32px] font-bold leading-tight">{money(total)}</p>
                   {diff > 0 && <p className="text-[13px] text-neutral-500">Envío {money(e.shipping_amount)} + diferencia de precio {money(diff)}</p>}
                 </div>
-                <button type="button" onClick={() => copyAlias(data.alias)}
-                  className="w-full rounded-xl bg-[#F4F4F3] border border-[#E6E6E3] px-4 py-3 flex items-center justify-between">
-                  <span className="text-left">
-                    <span className="block text-[12px] text-neutral-500">Alias</span>
-                    <span className="block font-display text-[19px] font-bold">{data.alias}</span>
-                  </span>
-                  <span className={`text-[13px] font-semibold ${copied ? 'text-[#1F7A4D]' : 'text-[#8B6914]'}`}>{copied ? 'Copiado ✓' : 'Copiar'}</span>
-                </button>
+                <div className="rounded-xl bg-[#F4F4F3] border border-[#E6E6E3] divide-y divide-[#E6E6E3]">
+                  <button type="button" onClick={() => copyAlias(data.alias, 'alias')} className="w-full px-4 py-3 flex items-center justify-between gap-3">
+                    <span className="text-left min-w-0">
+                      <span className="block text-[12px] text-neutral-500">Alias</span>
+                      <span className="block font-display text-[19px] font-bold">{data.alias}</span>
+                    </span>
+                    <span className={`shrink-0 text-[13px] font-semibold ${copied === 'alias' ? 'text-[#1F7A4D]' : 'text-[#8B6914]'}`}>{copied === 'alias' ? 'Copiado ✓' : 'Copiar'}</span>
+                  </button>
+                  {data.cvu && (
+                    <button type="button" onClick={() => copyAlias(data.cvu as string, 'cvu')} className="w-full px-4 py-3 flex items-center justify-between gap-3">
+                      <span className="text-left min-w-0">
+                        <span className="block text-[12px] text-neutral-500">CVU</span>
+                        <span className="block font-display text-[15px] font-semibold tracking-wide break-all">{data.cvu}</span>
+                      </span>
+                      <span className={`shrink-0 text-[13px] font-semibold ${copied === 'cvu' ? 'text-[#1F7A4D]' : 'text-[#8B6914]'}`}>{copied === 'cvu' ? 'Copiado ✓' : 'Copiar'}</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-[13.5px] text-neutral-600">Es una cuenta de Mercado Pago: <b className="text-black">podés transferir desde cualquier banco o billetera</b>.</p>
                 <p className="text-[13.5px] text-neutral-600">En el concepto poné <b className="text-black">{e.code}</b>.</p>
                 <div className="pt-4 border-t border-[#EFEFEC] space-y-3">
                   <p className="text-[14px] font-semibold">{e.receipt_uploaded_at ? 'Comprobante recibido ✓' : 'Subí el comprobante'}</p>

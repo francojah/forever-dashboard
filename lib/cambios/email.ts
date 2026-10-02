@@ -30,7 +30,7 @@ function payBlock(r: ExchangeRow) {
   const total = amountDue(r.shipping_amount, r.items)
   if (total === 0) return `<p>El cambio no tiene costo. Te confirmamos día y horario para acercarte con la prenda.</p>`
   if (total == null) return `<p>En breve te confirmamos el costo del envío por este medio.</p>`
-  return `<p>Para avanzar, transferí <b>${dueText(r)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (Mercado Pago) y poné <b>${esc(r.code)}</b> en el concepto. Después subí el comprobante desde el link de abajo.</p>`
+  return `<p>Para avanzar, transferí <b>${dueText(r)}</b> al alias <b>${esc(CAMBIOS.alias)}</b> (CVU ${esc(CAMBIOS.cvu)}) y poné <b>${esc(r.code)}</b> en el concepto. Es una cuenta de Mercado Pago: podés transferir desde cualquier banco o billetera. Después subí el comprobante desde el link de abajo.</p>`
 }
 
 function nextStepAfterPay(r: ExchangeRow) {
@@ -124,9 +124,9 @@ export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
         ? `${first}! Recibimos tu cambio ${r.code}. No tiene costo: te confirmamos día y horario para acercarte con la prenda.`
         : r.shipping_amount == null
         ? `${first}! Recibimos tu cambio ${r.code}. En breve te confirmamos el costo del envío.`
-        : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(amountDue(r.shipping_amount, r.items))}${diffTotal(r.items) > 0 ? ` (envío + diferencia de precio)` : ''} al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`)
+        : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(amountDue(r.shipping_amount, r.items))}${diffTotal(r.items) > 0 ? ` (envío + diferencia de precio)` : ''} al alias ${CAMBIOS.alias} (CVU ${CAMBIOS.cvu}, podés transferir desde cualquier banco) con concepto ${r.code} y subí el comprobante acá:`)
       : `${first}! Recibimos tu solicitud ${r.code}, lo vemos por acá.`,
-    monto: `${first}! El total de tu cambio ${r.code} es ${money(amountDue(r.shipping_amount, r.items))}. Transferí al alias ${CAMBIOS.alias} con concepto ${r.code} y subí el comprobante acá:`,
+    monto: `${first}! El total de tu cambio ${r.code} es ${money(amountDue(r.shipping_amount, r.items))}. Transferí al alias ${CAMBIOS.alias} (CVU ${CAMBIOS.cvu}, podés transferir desde cualquier banco) con concepto ${r.code} y subí el comprobante acá:`,
     pago_confirmado: moto
       ? `${first}! Confirmamos tu pago. La moto retira tu prenda y te entrega la nueva en el mismo viaje. Despachamos los lunes, te avisamos el día.`
       : `${first}! Confirmamos tu pago. En breve te mandamos la etiqueta de Correo Argentino para que despaches la prenda.`,

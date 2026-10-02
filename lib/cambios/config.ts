@@ -12,6 +12,8 @@ export const CAMBIOS = {
   brandName: process.env.CAMBIOS_BRAND_NAME || 'Forever Basics',
   /** Alias de Mercado Pago donde transfieren el envío */
   alias: process.env.CAMBIOS_ALIAS || 'foreverbasics',
+  /** CVU de la cuenta de Mercado Pago (para transferir desde cualquier banco) */
+  cvu: process.env.CAMBIOS_CVU || '0000003100148013514201',
   /** Días desde que reciben el pedido para pedir el cambio */
   windowDays: num(process.env.CAMBIOS_WINDOW_DAYS, 10) as number,
   /** Margen de tránsito (días) sumado a shipped_at, porque TN no informa la fecha de entrega */
