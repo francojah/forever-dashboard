@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Card, Btn, Chip, ErrorBox, inputCls, money, waLink, splitLabel, sortSizes, nextMondayLabel } from './ui'
+import BranchPicker, { type Branch } from './BranchPicker'
 
 type Item = {
   key: string; product_id: number; variant_id: number | null; name: string; variant_label: string; quantity: number
@@ -11,13 +12,18 @@ type CatVariant = { variant_id: number; label: string; price: number; available:
 type CatProduct = { product_id: number; name: string; image: string | null; is_pack: boolean; variants: CatVariant[] }
 type Lookup = {
   ok: true
-  order: { number: number; customerName: string; hasPhone: boolean; zone: string; zoneLabel: string; shippingAmount: number | null; deadline: string }
+  order: {
+    number: number; customerName: string; hasPhone: boolean; zone: string; zoneLabel: string; shippingAmount: number | null; deadline: string
+    provinceCode?: string; needsAddress?: boolean; needsBranch?: boolean
+  }
   items: Item[]
   catalog: CatProduct[]
   active: { code: string; token: string; type: string; status: string }[]
   reasons: { id: string; label: string }[]
   alias: string
   whatsapp: string
+  provincias?: { code: string; name: string }[]
+  storeUrl?: string
 }
 type Sel = { checked: boolean; reason: string; productId: string; color: string; size: string }
 
@@ -45,6 +51,9 @@ export default function CambiosPage() {
   const [sel, setSel] = useState<Record<string, Sel>>({})
   const [phone, setPhone] = useState('')
   const [note, setNote] = useState('')
+  const [ship, setShip] = useState({ full_name: '', phone: '', street: '', floor: '', locality: '', notes: '' })
+  const [branch, setBranch] = useState<Branch | null>(null)
+  const setS = (k: keyof typeof ship, v: string) => setShip((x) => ({ ...x, [k]: v }))
 
   async function post(url: string, body: unknown) {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -85,7 +94,19 @@ export default function CambiosPage() {
   const diff = chosen.reduce((a, it) => a + diffFor(it, variantOf(it)), 0)
   const shipping = data ? data.order.shippingAmount : null
   const total = shipping == null ? null : shipping + diff
-  const canSubmit = !!chosen.length && !missing && !(needPhone && phone.trim().length < 8)
+  const needsAddress = !!data?.order.needsAddress
+  const needsBranch = !!data?.order.needsBranch
+  const addressOk = !needsAddress || (
+    ship.full_name.trim().split(/\s+/).length >= 2 && ship.phone.replace(/\D/g, '').length >= 8 &&
+    ship.street.trim().length >= 5 && /\d/.test(ship.street) && ship.locality.trim().length >= 2
+  )
+  const branchOk = !needsBranch || !!branch
+  const canSubmit = !!chosen.length && !missing && addressOk && branchOk && !(!needsAddress && needPhone && phone.trim().length < 8)
+  const pendingHint = !chosen.length ? 'Elegí la prenda que querés cambiar'
+    : missing ? 'Completá motivo, color y talle'
+    : !addressOk ? 'Completá los datos para la moto'
+    : !branchOk ? 'Elegí la sucursal de Correo Argentino'
+    : !canSubmit ? 'Completá tu WhatsApp' : ''
   const waText = data
     ? `Hola! Quiero hacer una consulta por la orden #${data.order.number}: ` + chosen.map((it) => `${it.name} ${it.variant_label}`).join(', ')
     : ''
@@ -95,7 +116,9 @@ export default function CambiosPage() {
     setError(''); setLoading(true)
     try {
       const r = await post('/api/cambios/submit', {
-        orderNumber, email, phone, note, type: 'cambio',
+        orderNumber, email, phone: needsAddress ? ship.phone : phone, note, type: 'cambio',
+        shipping: needsAddress ? ship : undefined,
+        branch: needsBranch ? branch : undefined,
         items: chosen.map((it) => ({
           key: it.key, reason: sel[it.key].reason,
           new_product_id: Number(sel[it.key].productId), new_variant_id: variantOf(it)?.variant_id,
@@ -299,16 +322,41 @@ export default function CambiosPage() {
           </Card>
         ) : (
           <>
+            {needsAddress ? (
+              <Card className="space-y-4">
+                <div>
+                  <h2 className="font-display text-[15px] font-bold">Datos para la moto</h2>
+                  <p className="text-[13px] text-neutral-600 mt-1">Ahí pasa a retirar tu prenda y te deja la nueva.</p>
+                </div>
+                <Field label="Nombre y apellido"><input className={inputCls} autoComplete="name" value={ship.full_name} onChange={(e) => setS('full_name', e.target.value)} /></Field>
+                <Field label="WhatsApp"><input className={inputCls} type="tel" autoComplete="tel" placeholder="11 1234 5678" value={ship.phone} onChange={(e) => setS('phone', e.target.value)} /></Field>
+                <Field label="Dirección (calle y altura)"><input className={inputCls} autoComplete="address-line1" placeholder="Ej: Av. Cabildo 2349" value={ship.street} onChange={(e) => setS('street', e.target.value)} /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Piso / depto (opcional)"><input className={inputCls} autoComplete="address-line2" value={ship.floor} onChange={(e) => setS('floor', e.target.value)} /></Field>
+                  <Field label="Localidad o barrio"><input className={inputCls} autoComplete="address-level2" value={ship.locality} onChange={(e) => setS('locality', e.target.value)} /></Field>
+                </div>
+                <Field label="Indicaciones para la moto (opcional)"><input className={inputCls} placeholder="Timbre, entre calles, horario…" value={ship.notes} onChange={(e) => setS('notes', e.target.value)} /></Field>
+              </Card>
+            ) : (
+              <>
+                {needsBranch && (
+                  <Card className="space-y-4">
+                    <div>
+                      <h2 className="font-display text-[15px] font-bold">¿Desde qué sucursal vas a despachar?</h2>
+                      <p className="text-[13px] text-neutral-600 mt-1">Elegí la sucursal de Correo Argentino que te quede cómoda. Te mandamos la etiqueta para llevar el paquete ahí.</p>
+                    </div>
+                    <BranchPicker provincias={data.provincias ?? []} initialProvince={o.provinceCode ?? ''} value={branch} onChange={setBranch} />
+                  </Card>
+                )}
+                <Card className="space-y-4">
+                  <h2 className="font-display text-[15px] font-bold">Tus datos de contacto</h2>
+                  <Field label={`WhatsApp${needPhone ? '' : ' (opcional)'}`}><input className={inputCls} type="tel" placeholder="11 1234 5678" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+                </Card>
+              </>
+            )}
+
             <Card className="space-y-4">
-              <h2 className="font-display text-[15px] font-bold">Tus datos de contacto</h2>
-              <label className="block">
-                <span className="block text-[13px] font-semibold mb-1.5">WhatsApp{needPhone ? '' : ' (opcional)'}</span>
-                <input className={inputCls} type="tel" placeholder="11 1234 5678" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </label>
-              <label className="block">
-                <span className="block text-[13px] font-semibold mb-1.5">Comentario (opcional)</span>
-                <textarea className={`${inputCls} h-24 py-3`} value={note} onChange={(e) => setNote(e.target.value)} />
-              </label>
+              <Field label="Comentario (opcional)"><textarea className={`${inputCls} h-24 py-3`} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
             </Card>
 
             <Card className="space-y-2">
@@ -321,7 +369,7 @@ export default function CambiosPage() {
               </div>
               <p className="text-[12.5px] text-neutral-600 pt-1 leading-relaxed">
                 {o.zone === 'correo'
-                  ? 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda. Cuando llega, te enviamos la nueva.'
+                  ? 'Te mandamos por mail la etiqueta de Correo Argentino para que despaches la prenda en la sucursal que elegiste. Cuando llega, te enviamos la nueva.'
                   : o.zone === 'retiro'
                   ? 'Te confirmamos día y horario para hacer el cambio.'
                   : 'Una moto retira tu prenda y te entrega la nueva en el mismo viaje.'}
@@ -334,14 +382,16 @@ export default function CambiosPage() {
           </>
         )}
 
-        <Btn variant="light" onClick={() => { setData(null); setError('') }}>Volver</Btn>
+        <Btn variant="light" onClick={() => { setData(null); setError('') }}>Buscar otro pedido</Btn>
         <p className="text-xs text-neutral-500 text-center">
           ¿Dudas? <a className="underline" href={waLink(data.whatsapp)}>Escribinos por WhatsApp</a>
         </p>
+        <p className="text-center"><a className="text-[13px] font-semibold text-[#8B6914]" href={data.storeUrl || 'https://www.foreverbasics.com.ar'}>Volver a la tienda</a></p>
       </main>
 
       {!otherReason && (
         <div className="fixed bottom-0 inset-x-0 z-20 bg-white/95 border-t border-[#E6E6E3]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {pendingHint && <p className="mx-auto max-w-xl px-4 pt-2 text-[12px] text-[#8B6914] font-medium">{pendingHint}</p>}
           <div className="mx-auto max-w-xl px-4 py-3 flex items-center gap-3">
             <div className="min-w-0">
               <p className="text-[11px] text-neutral-500 leading-none">Total a transferir</p>
@@ -354,6 +404,15 @@ export default function CambiosPage() {
         </div>
       )}
     </>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-[13px] font-semibold mb-1.5">{label}</span>
+      {children}
+    </label>
   )
 }
 

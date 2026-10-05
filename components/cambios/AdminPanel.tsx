@@ -10,12 +10,13 @@ type Row = {
   id: string; code: string; status_token: string; type: string; status: string; status_label: string
   order_number: string; customer_name: string | null; email: string; phone: string | null
   zone: string; zone_label: string; shipping_option: string | null; shipping_amount: number | null
-  address: { branch?: string; name?: string; street?: string; floor?: string; locality?: string; city?: string; province?: string; zipcode?: string }
+  address: { dispatch_branch?: { name?: string; address?: string; locality?: string; province?: string; hours?: string } | null; notes?: string; branch?: string; name?: string; street?: string; floor?: string; locality?: string; city?: string; province?: string; zipcode?: string }
   items: Item[]; customer_note: string | null; receipt_url: string | null; receipt_uploaded_at: string | null
   paid_at: string | null; received_at: string | null; item_condition: string | null
   moto_date: string | null; tracking_number: string | null; dispatched_at: string | null
   stock_out_done: boolean; stock_in_done: boolean; internal_note: string | null
   label_url: string | null; label_sent_at: string | null
+  email_ok: boolean | null; email_detail: string | null
   whatsapp_text: string; created_at: string; events: { at: string; type: string; detail: string | null }[]
 }
 type Data = { ok: boolean; rows: Row[]; emailEnabled: boolean; reasons: { id: string; label: string }[]; portalUrl: string }
@@ -25,7 +26,7 @@ const btn = 'h-8 px-3 rounded-md text-xs font-medium border border-gray-200 dark
 const btnPrimary = 'h-8 px-3 rounded-md text-xs font-medium bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 disabled:opacity-40'
 const input = 'h-8 px-2 rounded-md text-xs border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950'
 
-const ACTIVE = ['pendiente_pago', 'pago_confirmado', 'prenda_recibida', 'revision']
+const ACTIVE = ['pendiente_pago', 'pago_confirmado', 'etiqueta_enviada', 'prenda_recibida', 'revision']
 const fmt = (n: number | null) => (n == null ? 'a confirmar' : '$' + Math.round(n).toLocaleString('es-AR'))
 const date = (s: string | null) => (s ? new Date(s).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '')
 
@@ -40,7 +41,7 @@ function waPhone(p: string | null) {
 }
 
 function statusTone(s: string) {
-  if (s === 'pendiente_pago' || s === 'revision') return 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+  if (s === 'pendiente_pago' || s === 'revision' || s === 'pago_confirmado') return 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
   if (s === 'cancelado') return 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
   if (s === 'despachado' || s === 'resuelto') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
   return 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
@@ -70,13 +71,22 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       })
       const j = await r.json()
       if (!j.ok) alertMsg(j.error || 'Error')
-      else if (j.emailKind) alertMsg(j.emailSent ? `${row.code}: actualizado y mail enviado` : `${row.code}: actualizado (mail no enviado — avisale por WhatsApp)`)
+      else if (j.emailKind) alertMsg(j.emailSent ? `${row.code}: listo, mail enviado al cliente` : `${row.code}: guardado, pero el MAIL NO SALIÓ (${j.emailError || 'error'}). Reintentá desde el cambio.`)
       else alertMsg(`${row.code}: actualizado`)
       await load()
     } catch (e) { alertMsg((e as Error).message) }
     setBusy(null)
   }
-  function alertMsg(m: string) { setFlash(m); setTimeout(() => setFlash(''), 5000) }
+  function alertMsg(m: string) { setFlash(m); setTimeout(() => setFlash(''), 7000) }
+  async function testEmail() {
+    setBusy('test-email')
+    try {
+      const r = await fetch('/api/cambios/admin/test-email', { method: 'POST' })
+      const j = await r.json()
+      alertMsg(j.ok ? `Mail de prueba enviado a ${j.to}. Revisá la casilla.` : `El mail de prueba NO salió: ${j.error || 'error'}`)
+    } catch (e) { alertMsg((e as Error).message) }
+    setBusy(null)
+  }
 
   const rows = data?.rows ?? []
   const active = rows.filter((r) => ACTIVE.includes(r.status) || (r.status === 'despachado' && r.type === 'cambio' && (r.zone === 'caba' || r.zone === 'moto_gba') && !r.received_at))
@@ -119,8 +129,14 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       </div>
 
       {data && !data.emailEnabled && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs p-3">
-          Los mails automáticos están desactivados (falta configurar RESEND_API_KEY). Usá el botón WhatsApp de cada cambio para avisar al cliente.
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 text-red-900 dark:text-red-200 text-xs p-3">
+          <b>Los mails al cliente no están saliendo:</b> falta cargar la contraseña de aplicación de Zoho (ZOHO_SMTP_PASS) en Vercel. Hasta entonces avisá cada paso con el botón WhatsApp.
+        </div>
+      )}
+      {data && data.emailEnabled && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs p-3 text-gray-700 dark:text-zinc-300">
+          <span>El cliente recibe un mail en cada cambio de estado. Si alguno falla, el cambio queda marcado como «Mail no enviado».</span>
+          <button className={btn + ' shrink-0'} disabled={busy !== null} onClick={testEmail}>Probar mail</button>
         </div>
       )}
       {alerts.length > 0 && (
@@ -181,7 +197,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
       const res = await fetch(`/api/cambios/admin/${r.id}/label`, { method: 'POST', body: fd })
       const j = await res.json()
       if (!j.ok) notify(j.error || 'Error al subir')
-      else notify(j.emailSent ? `${r.code}: etiqueta subida y mail enviado` : `${r.code}: etiqueta subida (avisale por WhatsApp)`)
+      else notify(j.emailSent ? `${r.code}: etiqueta subida y mail enviado` : `${r.code}: etiqueta subida, pero el MAIL NO SALIÓ (${j.emailError || 'error'})`)
       setLabelFile(null); await reload()
     } catch (e) { notify((e as Error).message) }
     setUploadingLabel(false)
@@ -205,6 +221,9 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
         <span className={`text-[11px] px-2 py-0.5 rounded ${statusTone(r.status)}`}>{r.status_label}</span>
         {r.type !== 'cambio' && <span className="text-[11px] px-2 py-0.5 rounded bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300">{r.type === 'reembolso' ? 'Reembolso' : 'Otro modelo'}</span>}
         <span className="text-xs text-gray-500">{r.zone_label} · Orden #{r.order_number} · {date(r.created_at)}</span>
+        {r.email_ok === false && (
+          <span className="text-[11px] px-2 py-0.5 rounded bg-red-100 text-red-800 font-medium" title={r.email_detail || ''}>Mail no enviado</span>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3 text-sm">
@@ -220,6 +239,12 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
               </li>
             ))}
           </ul>
+          {r.address?.dispatch_branch?.name && (
+            <p className="mt-2 text-xs text-gray-700">Despacha desde: <b>{r.address.dispatch_branch.name}</b>{r.address.dispatch_branch.address ? ` · ${r.address.dispatch_branch.address}` : ''}{r.address.dispatch_branch.locality ? ` · ${r.address.dispatch_branch.locality}` : ''}{r.address.dispatch_branch.province ? ` (${r.address.dispatch_branch.province})` : ''}</p>
+          )}
+          {isMoto && r.address?.street && (
+            <p className="mt-2 text-xs text-gray-700">Dirección: <b>{r.address.street}{r.address.floor ? ` ${r.address.floor}` : ''}</b>{r.address.locality ? ` · ${r.address.locality}` : ''}{r.address.notes ? ` · ${r.address.notes}` : ''}</p>
+          )}
           {r.customer_note && <p className="mt-2 text-xs italic text-gray-500">“{r.customer_note}”</p>}
         </div>
         <div className="space-y-1 text-xs">
@@ -259,7 +284,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
             </button>
           </>
         )}
-        {r.type === 'cambio' && !isMoto && r.status === 'pago_confirmado' && (
+        {r.type === 'cambio' && !isMoto && (r.status === 'pago_confirmado' || r.status === 'etiqueta_enviada') && (
           <>
             <input type="file" accept="application/pdf,image/*" className="text-xs max-w-[190px]" onChange={(e) => setLabelFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
             <button className={r.label_url ? btn : btnPrimary} disabled={dis || !labelFile || uploadingLabel} onClick={uploadLabel}>
@@ -267,7 +292,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
             </button>
           </>
         )}
-        {r.type === 'cambio' && ((!isMoto && r.status === 'pago_confirmado') || (isMoto && r.status === 'despachado' && !r.received_at)) && (
+        {r.type === 'cambio' && ((!isMoto && (r.status === 'pago_confirmado' || r.status === 'etiqueta_enviada')) || (isMoto && r.status === 'despachado' && !r.received_at)) && (
           <>
             <button className={btnPrimary} disabled={dis} onClick={() => act(r, 'mark_received', { condition: 'ok' })}>{r.zone === 'retiro' ? 'Cambio hecho, prenda OK' : 'Prenda recibida OK'}</button>
             <button className={btn} disabled={dis} onClick={() => act(r, 'mark_received', { condition: 'fallada' })}>Recibida fallada</button>
@@ -287,8 +312,14 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
 
         <span className="flex-1" />
         {phone && <a className={btn + ' inline-flex items-center'} target="_blank" rel="noreferrer" href={`https://wa.me/${phone}?text=${encodeURIComponent(r.whatsapp_text)}`}>WhatsApp</a>}
+        {r.type === 'cambio' && (
+          <a className={(isMoto ? btnPrimary : btn) + ' inline-flex items-center'} href={`/api/cambios/admin/${r.id}/etiqueta-pdf`} target="_blank" rel="noreferrer">Etiqueta PDF</a>
+        )}
         {!isMoto && r.type === 'cambio' && (
-          <button className={btn} onClick={() => { navigator.clipboard?.writeText(labelText) }}>Copiar datos etiqueta</button>
+          <button className={btn} onClick={() => { navigator.clipboard?.writeText(labelText) }}>Copiar datos</button>
+        )}
+        {r.email_ok === false && (
+          <button className={btn + ' text-red-700 border-red-300'} disabled={dis} onClick={() => act(r, 'resend_email')}>Reenviar mail</button>
         )}
         <button className={btn} onClick={() => setOpen(!open)}>{open ? 'Menos' : 'Más'}</button>
       </div>
@@ -304,6 +335,7 @@ function ExchangeCard({ r, busy, act, reasons, reload, notify }: {
           <ul className="text-gray-400 space-y-0.5">
             {(r.events || []).map((ev, i) => <li key={i}>{new Date(ev.at).toLocaleString('es-AR')} — {ev.type}{ev.detail ? ` (${ev.detail})` : ''}</li>)}
           </ul>
+          <button className={btn} disabled={dis} onClick={() => act(r, 'resend_email')}>Reenviar el mail de este estado</button>
           {r.status !== 'cancelado' && (
             <button className={btn + ' text-red-600'} disabled={dis} onClick={() => { if (window.confirm(`¿Cancelar ${r.code}?`)) act(r, 'cancel') }}>Cancelar solicitud</button>
           )}

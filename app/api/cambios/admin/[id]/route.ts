@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
-import { pushEvent } from '@/lib/cambios/service'
-import { sendExchangeEmail, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
+import { pushEvent, emailAndLog, labelInfo } from '@/lib/cambios/service'
+import { kindForStatus, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       case 'mark_received': {
         const condition = body.condition === 'fallada' ? 'fallada' : 'ok'
         if (ex.zone === 'correo' || ex.zone === 'otro') {
-          if (ex.status !== 'pago_confirmado') return bad('Primero confirmá el pago')
+          if (ex.status !== 'pago_confirmado' && ex.status !== 'etiqueta_enviada') return bad('Primero confirmá el pago')
           patch = { status: 'prenda_recibida', received_at: now, item_condition: condition }
           email = 'prenda_recibida'
         } else {
@@ -66,6 +66,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         email = 'despachado'
         break
       }
+      case 'resend_email':
+        email = kindForStatus(ex, !!labelInfo(ex.events))
+        break
       case 'resolve':
         patch = { status: 'resuelto' }
         email = 'resuelto'
@@ -93,14 +96,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (error || !updated) throw new Error(error?.message || 'update failed')
 
     let emailSent = false
+    let emailError: string | null = null
     if (email) {
-      emailSent = await sendExchangeEmail(email, updated as ExchangeRow)
-      if (emailSent) {
-        events = pushEvent(updated.events, 'email', email)
-        await sb.from('exchanges').update({ events }).eq('id', ex.id)
-      }
+      const res = await emailAndLog(email, updated as ExchangeRow)
+      emailSent = res.ok
+      emailError = res.ok ? null : res.error || 'error'
     }
-    return NextResponse.json({ ok: true, emailSent, emailKind: email })
+    return NextResponse.json({ ok: true, emailSent, emailError, emailKind: email })
   } catch (e) {
     console.error('[cambios/admin/update]', e)
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
-import { pushEvent } from '@/lib/cambios/service'
-import { sendExchangeEmail, type ExchangeRow } from '@/lib/cambios/email'
+import { pushEvent, emailAndLog } from '@/lib/cambios/service'
+import type { ExchangeRow } from '@/lib/cambios/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,21 +23,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const sb = supabaseAdmin()
     const { data: ex } = await sb.from('exchanges').select('*').eq('id', params.id).single()
     if (!ex) return NextResponse.json({ ok: false, error: 'No existe' }, { status: 404 })
-    if (ex.status !== 'pago_confirmado') return NextResponse.json({ ok: false, error: 'Primero confirmá el pago' }, { status: 400 })
+    if (ex.status !== 'pago_confirmado' && ex.status !== 'etiqueta_enviada') return NextResponse.json({ ok: false, error: 'Primero confirmá el pago' }, { status: 400 })
 
     const path = `${ex.code}/etiqueta-${Date.now()}.${ext}`
     const up = await sb.storage.from('exchange-receipts').upload(path, Buffer.from(await file.arrayBuffer()), {
       contentType: file.type || 'application/pdf', upsert: false,
     })
     if (up.error) throw new Error(up.error.message)
-    let events = pushEvent(ex.events, 'etiqueta', path)
-    await sb.from('exchanges').update({ events, updated_at: new Date().toISOString() }).eq('id', ex.id)
-    const emailSent = await sendExchangeEmail('etiqueta', ex as ExchangeRow)
-    if (emailSent) {
-      events = pushEvent(events, 'email', 'etiqueta')
-      await sb.from('exchanges').update({ events }).eq('id', ex.id)
-    }
-    return NextResponse.json({ ok: true, emailSent, emailKind: 'etiqueta' })
+    const events = pushEvent(ex.events, 'etiqueta', `${auth.user}|${path}`)
+    // Subir la etiqueta pasa el cambio a "Etiqueta recibida" (estado propio que ve el cliente)
+    const { data: updated, error } = await sb.from('exchanges')
+      .update({ status: 'etiqueta_enviada', events, updated_at: new Date().toISOString() }).eq('id', ex.id).select('*').single()
+    if (error || !updated) throw new Error(error?.message || 'update failed')
+    const res = await emailAndLog('etiqueta', updated as ExchangeRow)
+    return NextResponse.json({ ok: true, emailSent: res.ok, emailError: res.ok ? null : res.error, emailKind: 'etiqueta' })
   } catch (e) {
     console.error('[cambios/admin/label]', e)
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })

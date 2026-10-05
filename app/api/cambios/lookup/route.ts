@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ZONE_LABEL, REASONS, CAMBIOS } from '@/lib/cambios/config'
+import { ZONE_LABEL, REASONS, CAMBIOS, PROVINCIAS, provinceCode } from '@/lib/cambios/config'
 import { lookupOrder } from '@/lib/cambios/service'
 import { customerInfo } from '@/lib/cambios/logic'
 
@@ -21,6 +21,9 @@ export async function POST(req: Request) {
         zoneLabel: ZONE_LABEL[r.zone],
         shippingAmount: r.amount,
         deadline: r.deadline,
+        provinceCode: provinceCode(r.order.shipping_address?.province),
+        needsAddress: r.zone === 'caba' || r.zone === 'moto_gba',
+        needsBranch: r.zone === 'correo',
       },
       items: r.items,
       catalog: r.catalog,
@@ -28,6 +31,8 @@ export async function POST(req: Request) {
       reasons: REASONS,
       alias: CAMBIOS.alias,
       whatsapp: CAMBIOS.whatsapp,
+      provincias: PROVINCIAS,
+      storeUrl: CAMBIOS.storeUrl,
     })
   } catch (e) {
     console.error('[cambios/lookup]', e)

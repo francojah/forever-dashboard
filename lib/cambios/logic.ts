@@ -29,13 +29,8 @@ export function shippingAmount(zone: Zone, o: TNOrder): number | null {
     const v = Number(o.shipping_cost_customer) || Number(o.shipping_cost_owner) || 0
     return v > 0 ? Math.round(v) : null
   }
-  if (zone === 'correo') {
-    // Lo que pagó el cliente de envío en la compra; si fue gratis, lo que cobró el correo
-    const owner = Number(o.shipping_cost_owner) || 0
-    const customer = Number(o.shipping_cost_customer) || 0
-    const v = customer || owner
-    return v > 0 ? Math.round(v) : null
-  }
+  // Correo Argentino: monto fijo, no depende del destino ni de lo que pagó en la compra
+  if (zone === 'correo') return CAMBIOS.correoFee
   return null
 }
 
@@ -65,7 +60,7 @@ export async function reservedByVariant(excludeId?: string): Promise<Map<string,
     .select('id, status, type, items, created_at, stock_out_done')
     .eq('type', 'cambio')
     .eq('stock_out_done', false)
-    .in('status', ['pendiente_pago', 'pago_confirmado', 'prenda_recibida', 'despachado'])
+    .in('status', ['pendiente_pago', 'pago_confirmado', 'etiqueta_enviada', 'prenda_recibida', 'despachado'])
   if (error) throw new Error(error.message)
   const holdMs = CAMBIOS.pendingHoldHours * 3600000
   const map = new Map<string, number>()

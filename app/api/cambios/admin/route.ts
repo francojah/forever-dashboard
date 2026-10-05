@@ -2,16 +2,11 @@ import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin, getProduct } from '@/lib/cambios/tiendanube'
 import { reservedByVariant, type ExchangeItem } from '@/lib/cambios/logic'
-import { whatsappText, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
-import { labelInfo } from '@/lib/cambios/service'
-import { CAMBIOS, STATUS_LABEL, ZONE_LABEL, REASONS } from '@/lib/cambios/config'
+import { whatsappText, kindForStatus, emailConfigured, type ExchangeRow } from '@/lib/cambios/email'
+import { labelInfo, lastEmail } from '@/lib/cambios/service'
+import { CAMBIOS, ZONE_LABEL, REASONS, statusLabel } from '@/lib/cambios/config'
 
 export const dynamic = 'force-dynamic'
-
-const KIND_BY_STATUS: Record<string, EmailKind> = {
-  pendiente_pago: 'creado', revision: 'creado', pago_confirmado: 'pago_confirmado',
-  prenda_recibida: 'prenda_recibida', despachado: 'despachado', resuelto: 'resuelto', cancelado: 'cancelado',
-}
 
 export async function GET() {
   const auth = await requireCambiosAdmin()
@@ -47,7 +42,8 @@ export async function GET() {
         const s = await sb.storage.from('exchange-receipts').createSignedUrl(label.path, 3600)
         label_url = s.data?.signedUrl ?? null
       }
-      const kind: EmailKind = r.status === 'pago_confirmado' && label ? 'etiqueta' : (KIND_BY_STATUS[r.status] ?? 'creado')
+      const kind = kindForStatus(r, !!label)
+      const mail = lastEmail(r.events)
       const items = (r.items as ExchangeItem[]).map((it) => {
         const k = it.new_variant_id ? String(it.new_variant_id) : ''
         const stock = k ? tnStock.get(k) : undefined
@@ -57,13 +53,14 @@ export async function GET() {
       })
       return {
         ...r, items, receipt_url, label_url, label_sent_at: label?.at ?? null,
-        status_label: STATUS_LABEL[r.status] ?? r.status,
+        status_label: r.type === 'cambio' ? statusLabel(r.status, r.zone) : statusLabel(r.status, ''),
+        email_ok: mail ? mail.ok : null, email_detail: mail?.detail ?? null,
         zone_label: ZONE_LABEL[r.zone] ?? r.zone,
         whatsapp_text: whatsappText(kind, r as ExchangeRow),
       }
     }))
     return NextResponse.json({
-      ok: true, rows: out, emailEnabled: !!CAMBIOS.resendKey,
+      ok: true, rows: out, emailEnabled: emailConfigured(),
       reasons: REASONS, portalUrl: CAMBIOS.publicUrl.includes('cambios.') ? CAMBIOS.publicUrl : `${CAMBIOS.publicUrl}/cambios`,
     })
   } catch (e) {

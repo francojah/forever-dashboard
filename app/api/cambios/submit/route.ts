@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { lookupOrder, pushEvent } from '@/lib/cambios/service'
+import { lookupOrder, pushEvent, emailAndLog } from '@/lib/cambios/service'
 import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
-import { sendExchangeEmail, type ExchangeRow } from '@/lib/cambios/email'
+import type { ExchangeRow } from '@/lib/cambios/email'
 import { notifyTeam } from '@/lib/cambios/notify'
 import { ZONE_LABEL } from '@/lib/cambios/config'
 
@@ -58,7 +58,37 @@ export async function POST(req: Request) {
     }
 
     const c = customerInfo(r.order)
-    const phone = String(body.phone ?? '').trim() || c.phone
+    const str = (v: unknown, max = 160) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+    let phone = str(body.phone, 40) || c.phone
+    let customerName = c.name
+    let address: Record<string, unknown> = c.address
+
+    if (type === 'cambio' && (r.zone === 'caba' || r.zone === 'moto_gba')) {
+      // Moto: el cliente completa los datos de retiro/entrega (salen en la etiqueta que imprime el equipo)
+      const sh = (body.shipping ?? {}) as Record<string, unknown>
+      const full = str(sh.full_name, 90), wa = str(sh.phone, 40), street = str(sh.street, 140), locality = str(sh.locality, 90)
+      if (full.split(' ').length < 2) return NextResponse.json({ ok: false, reason: 'Completá tu nombre y apellido.' })
+      if (wa.replace(/\D/g, '').length < 8) return NextResponse.json({ ok: false, reason: 'Completá tu WhatsApp.' })
+      if (street.length < 5 || !/\d/.test(street)) return NextResponse.json({ ok: false, reason: 'Completá la dirección con calle y altura.' })
+      if (locality.length < 2) return NextResponse.json({ ok: false, reason: 'Completá la localidad o barrio.' })
+      customerName = full
+      phone = wa
+      address = {
+        name: full, street, floor: str(sh.floor, 60), locality, city: '',
+        province: c.address.province, zipcode: str(sh.zipcode, 12), notes: str(sh.notes, 240), source: 'cliente',
+      }
+    }
+
+    if (type === 'cambio' && r.zone === 'correo') {
+      // Correo: el cliente elige desde qué sucursal despacha
+      const b = (body.branch ?? {}) as Record<string, unknown>
+      const name = str(b.name, 140)
+      if (name.length < 3) return NextResponse.json({ ok: false, reason: 'Elegí la sucursal de Correo Argentino desde donde vas a despachar.' })
+      address = {
+        ...c.address,
+        dispatch_branch: { name, address: str(b.address, 160), locality: str(b.locality, 100), province: str(b.province, 60), hours: str(b.hours, 120) },
+      }
+    }
     const row = {
       status_token: randomToken(),
       type,
@@ -66,12 +96,12 @@ export async function POST(req: Request) {
       status: type !== 'cambio' ? 'revision' : amountDue(r.amount, items) === 0 ? 'pago_confirmado' : 'pendiente_pago',
       tn_order_id: String(r.order.id),
       order_number: String(r.order.number),
-      customer_name: c.name,
+      customer_name: customerName,
       email: String(body.email).trim().toLowerCase(),
       phone,
       zone: r.zone,
       shipping_option: r.order.shipping_option,
-      address: c.address,
+      address,
       shipping_amount: type === 'cambio' ? r.amount : null,
       items,
       customer_note: String(body.note ?? '').slice(0, 1000) || null,
@@ -80,16 +110,13 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin().from('exchanges').insert(row).select('*').single()
     if (error || !data) throw new Error(error?.message || 'insert failed')
     const due = amountDue(data.shipping_amount, items)
-    const [sent] = await Promise.all([
-      sendExchangeEmail('creado', data as ExchangeRow),
+    await Promise.all([
+      emailAndLog('creado', data as ExchangeRow),
       notifyTeam(
         `Nuevo cambio ${data.code}`,
         `Orden #${data.order_number} · ${ZONE_LABEL[data.zone] ?? data.zone} · ${items.length} prenda${items.length > 1 ? 's' : ''} · ${due == null ? 'monto a confirmar' : due === 0 ? 'sin costo' : '$' + Math.round(due).toLocaleString('es-AR')}`,
       ),
     ])
-    if (sent) {
-      await supabaseAdmin().from('exchanges').update({ events: pushEvent(data.events, 'email', 'creado') }).eq('id', data.id)
-    }
     return NextResponse.json({ ok: true, token: data.status_token, code: data.code })
   } catch (e) {
     console.error('[cambios/submit]', e)

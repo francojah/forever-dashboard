@@ -10,8 +10,9 @@ type Ex = {
   receipt_uploaded_at: string | null; moto_date: string | null; tracking_number: string | null
   created_at: string; paid_at: string | null; received_at: string | null; dispatched_at: string | null
   label_url: string | null; label_sent_at: string | null
+  dispatch_branch?: { name?: string; address?: string; locality?: string; hours?: string } | null
 }
-type Resp = { ok: boolean; exchange: Ex; alias: string; cvu?: string; whatsapp: string }
+type Resp = { ok: boolean; exchange: Ex; alias: string; cvu?: string; whatsapp: string; storeUrl?: string }
 type Step = { label: string; detail?: string; done: boolean }
 
 const isMoto = (e: Ex) => e.zone === 'caba' || e.zone === 'moto_gba'
@@ -49,8 +50,8 @@ function buildSteps(e: Ex): Step[] {
   return [
     { label: 'Pedido de cambio recibido', done: true },
     { label: 'Pago confirmado', detail: 'Transferí el total y subí el comprobante (arriba).', done: !!e.paid_at },
-    { label: 'Te enviamos la etiqueta', detail: 'Te mandamos la etiqueta de Correo Argentino para que despaches la prenda en cualquier sucursal.', done: !!e.label_sent_at },
-    { label: 'Recibimos tu prenda', detail: 'Cuando llega a nuestro depósito la revisamos y preparamos la nueva.', done: !!e.received_at },
+    { label: e.label_sent_at ? 'Etiqueta recibida' : 'Pendiente de recibir etiqueta', detail: 'Te mandamos por mail la etiqueta de Correo Argentino para que despaches la prenda en la sucursal que elegiste.', done: !!e.label_sent_at },
+    { label: 'Recibimos tu prenda', detail: e.dispatch_branch?.name ? `Despachá el paquete en ${e.dispatch_branch.name}. Cuando llega, preparamos la nueva.` : 'Despachá el paquete en la sucursal de Correo Argentino. Cuando llega, preparamos la nueva.', done: !!e.received_at },
     { label: 'Te enviamos la nueva', detail: e.tracking_number ? `Seguimiento: ${e.tracking_number}` : `Despachamos los cambios los lunes.`, done: !!e.dispatched_at },
   ]
 }
@@ -174,7 +175,7 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
         )}
 
         {/* Correo: etiqueta */}
-        {correo && e.status === 'pago_confirmado' && (
+        {correo && (e.status === 'pago_confirmado' || e.status === 'etiqueta_enviada') && (
           <Card className="space-y-3 border-2 border-[#B8892B] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]">
             <p className="text-[13px] font-semibold text-[#8B6914]">Tu próximo paso</p>
             {e.label_url ? (
@@ -183,18 +184,21 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
                 <ol className="text-[14px] text-neutral-700 space-y-1.5 list-decimal pl-5">
                   <li>Descargala e imprimila.</li>
                   <li>Pegala en el paquete con la prenda.</li>
-                  <li>Despachalo en cualquier sucursal de Correo Argentino.</li>
+                  <li>Despachalo en {e.dispatch_branch?.name ? <b>{e.dispatch_branch.name}</b> : 'la sucursal de Correo Argentino que elegiste'}{e.dispatch_branch?.address ? ` (${e.dispatch_branch.address})` : ''}.</li>
                 </ol>
                 <a href={e.label_url} className="block w-full h-[52px] rounded-xl bg-black text-white text-[15px] font-semibold leading-[52px] text-center">Descargar etiqueta</a>
               </>
             ) : (
-              <p className="text-[15px] leading-relaxed">Pago confirmado. <b>En breve te enviamos la etiqueta de Correo Argentino</b> para que despaches la prenda. Te avisamos por mail y WhatsApp.</p>
+              <>
+                <p className="font-display text-[20px] font-bold leading-tight">Pendiente de recibir etiqueta</p>
+                <p className="text-[15px] leading-relaxed">Confirmamos tu pago. <b>Te vamos a enviar por mail la etiqueta de Correo Argentino</b> para que despaches la prenda{e.dispatch_branch?.name ? <> desde <b>{e.dispatch_branch.name}</b></> : null}. Cuando esté lista también la vas a poder descargar acá.</p>
+              </>
             )}
           </Card>
         )}
 
         {/* Línea de tiempo */}
-        <Card className={e.status === 'pendiente_pago' || (correo && e.status === 'pago_confirmado') ? '' : 'shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]'}>
+        <Card className={e.status === 'pendiente_pago' || (correo && (e.status === 'pago_confirmado' || e.status === 'etiqueta_enviada')) ? '' : 'shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35)]'}>
           <h2 className="font-display text-[15px] font-bold mb-4">Seguimiento</h2>
           <ol>
             {steps.map((s, i) => {
@@ -237,6 +241,8 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
             ))}
           </ul>
         </Card>
+
+        <a href={data.storeUrl || 'https://www.foreverbasics.com.ar'} className="block w-full h-[52px] rounded-xl border border-black text-black text-[15px] font-semibold leading-[50px] text-center bg-white">Volver a la tienda</a>
 
         <p className="text-xs text-neutral-500 text-center">
           ¿Dudas? <a className="underline" href={waLink(data.whatsapp, `Hola! Consulta por el cambio ${e.code}`)}>Escribinos por WhatsApp</a>

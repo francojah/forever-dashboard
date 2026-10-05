@@ -1,3 +1,4 @@
+import { sendExchangeEmail, type EmailKind, type ExchangeRow } from './email'
 import { CAMBIOS } from './config'
 import {
   buildCatalog, buildItems, checkEligibility, classifyZone, emailMatches, shippingAmount,
@@ -53,7 +54,30 @@ type Ev = { at: string; type: string; detail: string | null }
 export function labelInfo(events: unknown): { path: string; at: string } | null {
   const arr = (Array.isArray(events) ? events : []) as Ev[]
   for (let i = arr.length - 1; i >= 0; i--) {
-    if (arr[i].type === 'etiqueta' && arr[i].detail) return { path: arr[i].detail as string, at: arr[i].at }
+    if (arr[i].type === 'etiqueta' && arr[i].detail) {
+      const d = arr[i].detail as string
+      return { path: d.includes('|') ? d.slice(d.indexOf('|') + 1) : d, at: arr[i].at }
+    }
+  }
+  return null
+}
+
+
+/** Manda el mail al cliente y deja registrado en el historial si salió o falló. */
+export async function emailAndLog(kind: EmailKind, row: ExchangeRow & { events?: unknown }) {
+  const res = await sendExchangeEmail(kind, row)
+  const { data } = await supabaseAdmin().from('exchanges').select('events').eq('id', row.id).single()
+  const events = pushEvent(data?.events ?? row.events, res.ok ? 'email' : 'email_error', res.ok ? kind : `${kind}: ${res.error || 'error'}`)
+  await supabaseAdmin().from('exchanges').update({ events }).eq('id', row.id)
+  return res
+}
+
+/** Último intento de mail: null si nunca se intentó. */
+export function lastEmail(events: unknown): { ok: boolean; detail: string | null; at: string } | null {
+  const arr = (Array.isArray(events) ? events : []) as Ev[]
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].type === 'email') return { ok: true, detail: arr[i].detail, at: arr[i].at }
+    if (arr[i].type === 'email_error') return { ok: false, detail: arr[i].detail, at: arr[i].at }
   }
   return null
 }
