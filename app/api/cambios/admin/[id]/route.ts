@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
-import { pushEvent, emailAndLog, labelInfo } from '@/lib/cambios/service'
+import { pushEvent, emailAndLog, labelInfo, noteOnOrder } from '@/lib/cambios/service'
 import { kindForStatus, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
 
 export const dynamic = 'force-dynamic'
@@ -102,6 +102,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       emailSent = res.ok
       emailError = res.ok ? null : res.error || 'error'
     }
+    if (action === 'cancel' && ex.type === 'cambio' && ex.status !== 'cancelado') await noteOnOrder(updated, 'cancelado')
     return NextResponse.json({ ok: true, emailSent, emailError, emailKind: email })
   } catch (e) {
     console.error('[cambios/admin/update]', e)

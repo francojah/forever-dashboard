@@ -47,6 +47,8 @@ export const CAMBIOS = {
   appUrl: (process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app').replace(/\/$/, ''),
   /** Dominio público del portal (links que recibe el cliente). Ej: https://cambios.foreverbasics.com.ar */
   publicUrl: (process.env.CAMBIOS_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app').replace(/\/$/, ''),
+  /** Dejar una nota en la venta original de Tiendanube cuando se genera o cancela un cambio ("off" lo apaga) */
+  orderNote: (process.env.CAMBIOS_TN_NOTE || 'on').toLowerCase() !== 'off',
   /** Tienda (para que el cliente pueda volver) */
   storeUrl: (process.env.CAMBIOS_STORE_URL || 'https://www.foreverbasics.com.ar').replace(/\/$/, ''),
   /**

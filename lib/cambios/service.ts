@@ -1,3 +1,4 @@
+import { appendOwnerNote } from './tiendanube'
 import { sendExchangeEmail, type EmailKind, type ExchangeRow } from './email'
 import { CAMBIOS } from './config'
 import {
@@ -80,4 +81,31 @@ export function lastEmail(events: unknown): { ok: boolean; detail: string | null
     if (arr[i].type === 'email_error') return { ok: false, detail: arr[i].detail, at: arr[i].at }
   }
   return null
+}
+
+
+type NoteRow = {
+  id: string; code: string; tn_order_id: string; zone: string; type: string
+  items: { name: string; variant_label: string; new_product_name?: string | null; new_variant_label?: string | null; quantity: number }[]
+  events?: unknown
+}
+
+/** Deja constancia del cambio en la nota interna de la venta original (y lo registra en el historial). */
+export async function noteOnOrder(row: NoteRow, what: 'generado' | 'cancelado') {
+  if (!CAMBIOS.orderNote || !row.tn_order_id) return
+  const today = new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+  const detail = row.items.map((i) =>
+    `${i.quantity > 1 ? i.quantity + ' x ' : ''}${i.name} ${i.variant_label}${i.new_variant_label ? ` > ${i.new_product_name ? i.new_product_name + ' ' : ''}${i.new_variant_label}` : ''}`
+  ).join('; ')
+  const line = what === 'generado'
+    ? `[CAMBIO ${row.code}] Generado el ${today}: ${detail}. Ver en ${adminPanelUrl()}`
+    : `[CAMBIO ${row.code}] Cancelado el ${today}.`
+  const res = await appendOwnerNote(row.tn_order_id, line)
+  const { data } = await supabaseAdmin().from('exchanges').select('events').eq('id', row.id).single()
+  const events = pushEvent(data?.events ?? row.events, res.ok ? 'nota_tn' : 'nota_tn_error', res.ok ? what : `${what}: ${res.error || 'error'}`)
+  await supabaseAdmin().from('exchanges').update({ events }).eq('id', row.id)
+}
+
+function adminPanelUrl() {
+  return CAMBIOS.publicUrl.includes('cambios.') ? `${CAMBIOS.publicUrl}/admin` : `${CAMBIOS.appUrl}/gestion-cambios`
 }

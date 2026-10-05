@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { lookupOrder, pushEvent, emailAndLog } from '@/lib/cambios/service'
+import { lookupOrder, pushEvent, emailAndLog, noteOnOrder } from '@/lib/cambios/service'
 import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
@@ -117,6 +117,8 @@ export async function POST(req: Request) {
         `Orden #${data.order_number} · ${ZONE_LABEL[data.zone] ?? data.zone} · ${items.length} prenda${items.length > 1 ? 's' : ''} · ${due == null ? 'monto a confirmar' : due === 0 ? 'sin costo' : '$' + Math.round(due).toLocaleString('es-AR')}`,
       ),
     ])
+    // Después del mail (los dos escriben el historial): nota en la venta original de Tiendanube
+    if (type === 'cambio') await noteOnOrder(data, 'generado')
     return NextResponse.json({ ok: true, token: data.status_token, code: data.code })
   } catch (e) {
     console.error('[cambios/submit]', e)

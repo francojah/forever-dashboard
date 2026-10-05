@@ -1,6 +1,8 @@
 /**
- * Acceso SOLO LECTURA a Tiendanube para el portal de cambios.
- * Nunca escribe: ni órdenes, ni stock.
+ * Acceso a Tiendanube para el portal de cambios.
+ * Todo es SOLO LECTURA, con una única excepción pedida por Franco: `appendOwnerNote`,
+ * que agrega una línea a la nota interna de la venta original avisando que tiene un cambio.
+ * Nunca crea órdenes ni toca stock, precios o estados.
  */
 import { createClient } from '@supabase/supabase-js'
 
@@ -114,4 +116,29 @@ export function variantLabel(v: { values?: { es?: string }[] }): string {
 
 export function productName(p: TNProduct): string {
   return typeof p.name === 'string' ? p.name : p.name?.es ?? 'Producto'
+}
+
+/**
+ * ÚNICA escritura en Tiendanube: agrega una línea a la nota interna ("nota del vendedor") de la venta.
+ * Conserva lo que ya estaba escrito y no repite una línea que ya existe. Nunca lanza.
+ */
+export async function appendOwnerNote(orderId: string | number, line: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { token, userId } = await getTNCredentials()
+    const headers = {
+      Authentication: `bearer ${token}`,
+      'User-Agent': 'ForeverAdsApp (soporte@foreverbasics.com.ar)',
+      'Content-Type': 'application/json',
+    }
+    const url = `${TN_API}/${userId}/orders/${orderId}`
+    const cur = await fetch(`${url}?fields=id,owner_note`, { headers, cache: 'no-store' })
+    if (!cur.ok) return { ok: false, error: `Tiendanube HTTP ${cur.status}` }
+    const existing = String(((await cur.json()) as { owner_note?: string | null }).owner_note || '').trim()
+    if (existing.includes(line)) return { ok: true }
+    const owner_note = existing ? `${existing}\n${line}` : line
+    const res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify({ owner_note }), cache: 'no-store' })
+    return res.ok ? { ok: true } : { ok: false, error: `Tiendanube HTTP ${res.status}` }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message.slice(0, 160) }
+  }
 }

@@ -115,7 +115,7 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{variant === 'standalone' && userName ? `Hola ${userName}` : 'Cambios'}</h1>
-          <p className="text-xs text-gray-500 dark:text-zinc-400">Solo lee Tiendanube: no crea órdenes ni modifica stock.</p>
+          <p className="text-xs text-gray-500 dark:text-zinc-400">No crea órdenes ni modifica stock en Tiendanube: solo deja una nota en la venta original.</p>
         </div>
         {variant === 'standalone' && onLogout && (
           <button className={btn} onClick={onLogout}>Salir</button>
