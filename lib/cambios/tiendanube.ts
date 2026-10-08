@@ -30,7 +30,7 @@ async function getTNCredentials() {
   return { token, userId }
 }
 
-async function tnGet<T>(path: string): Promise<T | null> {
+export async function tnGet<T>(path: string): Promise<T | null> {
   const { token, userId } = await getTNCredentials()
   const res = await fetch(`${TN_API}/${userId}/${path}`, {
     headers: {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import MotoLabels from './MotoLabels'
 
 type Item = {
   product_id: number; variant_id: number | null; name: string; variant_label: string; quantity: number; reason?: string
@@ -50,7 +51,8 @@ function statusTone(s: string) {
 export default function CambiosAdminPanel({ variant = 'dashboard', userName, onLogout }: { variant?: 'dashboard' | 'standalone'; userName?: string; onLogout?: () => void }) {
   const [data, setData] = useState<Data | null>(null)
   const [err, setErr] = useState('')
-  const [tab, setTab] = useState<'activos' | 'stock' | 'historial'>('activos')
+  const [tab, setTab] = useState<'activos' | 'stock' | 'historial' | 'moto'>('activos')
+  const [motoCount, setMotoCount] = useState<number | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [flash, setFlash] = useState('')
 
@@ -147,14 +149,16 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       {flash && <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-zinc-900 text-white text-sm px-4 py-2 shadow-lg">{flash}</div>}
       {err && <p className="text-sm text-red-600">{err}</p>}
 
-      <div className="flex gap-1 border-b border-gray-200 dark:border-zinc-800">
-        {([['activos', `Activos (${active.length})`], ['stock', `Ajustes de stock (${stockTasks.filter((t) => t.kind !== 'skip').length})`], ['historial', `Historial (${history.length})`]] as const).map(([k, l]) => (
+      <div className="flex gap-1 border-b border-gray-200 dark:border-zinc-800 overflow-x-auto">
+        {([['activos', `Activos (${active.length})`], ['stock', `Ajustes de stock (${stockTasks.filter((t) => t.kind !== 'skip').length})`], ['historial', `Historial (${history.length})`], ['moto', `Etiquetas moto${motoCount != null ? ` (${motoCount})` : ''}`]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-3 py-2 text-sm -mb-px border-b-2 ${tab === k ? 'border-zinc-900 dark:border-white font-medium text-gray-900 dark:text-white' : 'border-transparent text-gray-500'}`}>{l}</button>
+            className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${tab === k ? 'border-zinc-900 dark:border-white font-medium text-gray-900 dark:text-white' : 'border-transparent text-gray-500'}`}>{l}</button>
         ))}
       </div>
 
       {!data && !err && <p className="text-sm text-gray-500">Cargando…</p>}
+
+      {tab === 'moto' && <MotoLabels onCount={setMotoCount} />}
 
       {tab === 'stock' && (
         <div className={card + ' divide-y divide-gray-100 dark:divide-zinc-800'}>
