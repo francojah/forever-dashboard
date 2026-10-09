@@ -1,0 +1,53 @@
+import { describe, it, expect } from 'vitest'
+import { resolvePeriod, previousPeriod, startOfLocalDayUTC, localDate } from '../lib/faro/dates'
+import { summarizeSales, buildSummary, OrderRow } from '../lib/faro/metrics'
+import { normalizeSettings, feePctFor } from '../lib/faro/settings'
+
+const TZ = 'America/Argentina/Buenos_Aires'
+
+describe('fechas en la zona del negocio', () => {
+  it('a las 23:30 de Argentina sigue siendo el mismo día (no el siguiente UTC)', () => {
+    const now = new Date('2026-10-10T02:30:00Z') // 9/10 23:30 ART
+    expect(localDate(now, TZ)).toBe('2026-10-09')
+    expect(resolvePeriod('today', TZ, now).from).toBe('2026-10-09')
+  })
+  it('7 días incluye hoy y el anterior es la semana previa', () => {
+    const p = resolvePeriod('7d', TZ, new Date('2026-10-09T15:00:00Z'))
+    expect([p.from, p.to]).toEqual(['2026-10-03', '2026-10-09'])
+    const q = previousPeriod(p)
+    expect([q.from, q.to]).toEqual(['2026-09-26', '2026-10-02'])
+  })
+  it('el día local empieza a las 03:00 UTC', () => {
+    expect(startOfLocalDayUTC('2026-10-09', TZ)).toBe('2026-10-09T03:00:00.000Z')
+  })
+})
+
+const order = (o: Partial<OrderRow>): OrderRow => ({
+  store_id: 's', order_id: Math.random().toString(), number: null, created_at: '2026-10-09T15:00:00Z', status: 'open', payment_status: 'paid', cancelled_at: null,
+  subtotal: 109200, discount: 36400, total: 78085, shipping_customer: 5285, shipping_owner: 5285, payment_method: 'credit_card', gateway: null, installments: 3,
+  units: 3, customer_id: 'c1', customer_email: null, province: null, shipping_option: null, shipping_pickup: null,
+  items: [{ product_id: 'p', variant_id: 'v', name: 'Remera', qty: 3, price: 36400, cost: 6500 }], ...o,
+})
+
+describe('margen de contribución', () => {
+  it('usa lo cobrado sin envío como venta neta y descuenta comisiones', () => {
+    const s = normalizeSettings({ platform_fee_pct: 1, packaging_per_order: 350, payment_fees: [{ method: 'credit_card', pct: 6 }], ad_tax_pct: 21 })
+    const r = summarizeSales([order({}), order({ payment_status: 'pending' }), order({ status: 'cancelled' })], TZ, new Map(), s)
+    expect(r.orders).toBe(1)
+    expect(r.pending).toBe(1)
+    expect(r.cancelled).toBe(1)
+    expect(r.netSales).toBe(72800)
+    expect(r.cogs).toBe(19500) // costo de Tiendanube
+    const fees = 78085 * 0.06
+    expect(Math.round(r.contribution)).toBe(Math.round(72800 + 5285 - 19500 - 5285 - 728 - fees - 350))
+    const sum = buildSummary(r, { spend: 10000, impressions: 0, linkClicks: 0, lpv: 0, atc: 0, ic: 0, purchases: 1, purchaseValue: 0 }, s)
+    expect(sum.adCost).toBe(12100)
+    expect(Math.round(sum.profitAfterAds)).toBe(Math.round(r.contribution - 12100))
+  })
+  it('comisión: método exacto, luego comodín, si no 0 y "desconocida"', () => {
+    const s = normalizeSettings({ payment_fees: [{ method: 'credit_card', pct: 6 }, { method: '*', pct: 4 }] })
+    expect(feePctFor(s, 'credit_card').pct).toBe(6)
+    expect(feePctFor(s, 'wallet').pct).toBe(4)
+    expect(feePctFor(normalizeSettings({}), 'wallet')).toEqual({ pct: 0, known: false })
+  })
+})

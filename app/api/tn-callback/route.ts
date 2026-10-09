@@ -1,105 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { apiContext } from '@/lib/faro/context'
+import { svc } from '@/lib/faro/db'
+import { fetchStoreInfo } from '@/lib/faro/tiendanube'
 
-const APP_ID     = process.env.TIENDANUBE_APP_ID || '30221'
-const APP_SECRET = process.env.TIENDANUBE_CLIENT_SECRET!
+const APP_ID       = process.env.TIENDANUBE_APP_ID || ''
+const APP_SECRET   = process.env.TIENDANUBE_CLIENT_SECRET || ''
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
+/**
+ * Vuelta de la instalación de la app de Tiendanube (OAuth).
+ * - Guarda la tienda como conexión del espacio activo (Faro v2).
+ * - Mantiene app_config.tiendanube_credentials para el módulo de Cambios, pero solo
+ *   si es la misma tienda que ya estaba (o no había ninguna): conectar otra tienda
+ *   no pisa la de Forever.
+ */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const code    = searchParams.get('code')
-  const storeId = searchParams.get('store_id') // some versions send this
-
-  if (!code) {
-    return new NextResponse(`
-      <html><body style="font-family:sans-serif;padding:40px">
-        <h2>No se recibio el codigo de autorizacion</h2>
-        <p>Volve a intentar el proceso de instalacion.</p>
-      </body></html>
-    `, { headers: { 'Content-Type': 'text/html' } })
-  }
+  const code = new URL(req.url).searchParams.get('code')
+  const back = (q: string) => NextResponse.redirect(new URL(`/ajustes?tab=conexiones&${q}`, req.url))
+  if (!code) return back('error=tn-codigo')
 
   try {
-    // Exchange code for access token
-    const tokenRes = await fetch(`https://www.tiendanube.com/apps/authorize/token`, {
+    const tokenRes = await fetch('https://www.tiendanube.com/apps/authorize/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id:     APP_ID,
-        client_secret: APP_SECRET,
-        grant_type:    'authorization_code',
-        code,
-      }),
+      body: JSON.stringify({ client_id: APP_ID, client_secret: APP_SECRET, grant_type: 'authorization_code', code }),
     })
-
     const tokenData = await tokenRes.json()
+    if (!tokenData.access_token) throw new Error(tokenData.error_description || tokenData.error || 'Tiendanube no devolvió token')
+    const accessToken = String(tokenData.access_token)
+    const userId = String(tokenData.user_id)
 
-    if (!tokenData.access_token) {
-      throw new Error(JSON.stringify(tokenData))
+    // Compatibilidad con el módulo de Cambios
+    const legacy = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const { data: current } = await legacy.from('app_config').select('value').eq('key', 'tiendanube_credentials').maybeSingle()
+    const currentUser = (current?.value as { user_id?: string | number } | null)?.user_id
+    if (!currentUser || String(currentUser) === userId) {
+      await legacy.from('app_config').upsert({
+        key: 'tiendanube_credentials',
+        value: { access_token: accessToken, user_id: userId, connected_at: new Date().toISOString() },
+      }, { onConflict: 'key' })
     }
 
-    const { access_token, user_id } = tokenData
-
-    // Save to Supabase for reference (best-effort, ignore if table doesn't exist)
-    if (SUPABASE_URL && SUPABASE_KEY) {
-      try {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-        await supabase.from('app_config').upsert({
-          key: 'tiendanube_credentials',
-          value: { access_token, user_id, connected_at: new Date().toISOString() },
-        }, { onConflict: 'key' })
-      } catch { /* ignore if table doesn't exist */ }
-    }
-
-    // Show success page with the credentials
-    return new NextResponse(
-      `<html>
-      <head><title>Tiendanube conectado</title></head>
-      <body style="font-family:-apple-system,sans-serif;padding:40px;max-width:600px;margin:0 auto">
-        <h2 style="color:#16a34a">Tiendanube conectado exitosamente</h2>
-        <p>Copia estas variables y agregarlas en Vercel y GitHub Secrets:</p>
-        
-        <div style="background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0">
-          <p style="margin:0 0 8px"><strong>TIENDANUBE_USER_ID</strong></p>
-          <code style="font-size:16px;background:#e4e4e7;padding:8px 12px;border-radius:4px;display:block">${user_id}</code>
-        </div>
-        
-        <div style="background:#f4f4f5;border-radius:8px;padding:20px;margin:20px 0">
-          <p style="margin:0 0 8px"><strong>TIENDANUBE_ACCESS_TOKEN</strong></p>
-          <code style="font-size:16px;background:#e4e4e7;padding:8px 12px;border-radius:4px;display:block">${access_token}</code>
-        </div>
-
-        <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:20px 0">
-          <p style="margin:0;font-size:14px;color:#92400e">
-            IMPORTANTE: Guarda estos valores ahora. El access token no vuelve a mostrarse.
-          </p>
-        </div>
-
-        <p style="font-size:14px;color:#6b7280">
-          Donde agregarlos:<br>
-          1. <strong>Vercel</strong>: Dashboard &rarr; Settings &rarr; Environment Variables<br>
-          2. <strong>GitHub Secrets</strong>: Repo &rarr; Settings &rarr; Secrets and variables &rarr; Actions<br>
-          3. <strong>.env.local</strong>: en tu proyecto local
-        </p>
-
-        <a href="/" style="display:inline-block;margin-top:20px;padding:10px 20px;background:#18181b;color:white;border-radius:8px;text-decoration:none">
-          Volver al dashboard
-        </a>
-      </body>
-      </html>`,
-      { headers: { 'Content-Type': 'text/html' } }
-    )
-
+    // Faro v2: sumar la tienda al espacio
+    const wsCookie = cookies().get('faro_tn_ws')?.value
+    const ctx = await apiContext(wsCookie)
+    if (ctx instanceof Response) return NextResponse.redirect(new URL('/login', req.url))
+    const info = await fetchStoreInfo(userId, accessToken).catch(() => ({ name: `Tienda ${userId}`, currency: 'ARS', url: null }))
+    const sb = svc()
+    const { data: conn, error } = await sb.from('connections').upsert({
+      workspace_id: ctx.workspace.id, provider: 'tiendanube', external_id: userId, label: info.name,
+      access_token: accessToken, status: 'ok', last_error: null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'workspace_id,provider,external_id' }).select('id').single()
+    if (error || !conn) throw new Error(error?.message || 'No se pudo guardar la conexión')
+    await sb.from('stores').upsert({
+      workspace_id: ctx.workspace.id, connection_id: conn.id, platform: 'tiendanube', external_id: userId,
+      name: info.name, url: info.url, currency: info.currency, active: true,
+    }, { onConflict: 'workspace_id,platform,external_id' })
+    cookies().delete('faro_tn_ws')
+    return back('store=ok')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return new NextResponse(
-      `<html><body style="font-family:sans-serif;padding:40px">
-        <h2>Error al obtener el token</h2>
-        <pre style="background:#fee2e2;padding:16px;border-radius:8px">${msg}</pre>
-        <p>Revisa que el Client Secret este bien configurado en las variables de entorno de Vercel.</p>
-      </body></html>`,
-      { headers: { 'Content-Type': 'text/html' } }
-    )
+    return back(`error=${encodeURIComponent(err instanceof Error ? err.message : 'tn')}`)
   }
 }

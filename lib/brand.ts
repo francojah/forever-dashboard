@@ -10,12 +10,12 @@
  */
 
 export const PRODUCT = {
-  name: process.env.NEXT_PUBLIC_PRODUCT_NAME || 'Ecom Intelligence',
+  name: process.env.NEXT_PUBLIC_PRODUCT_NAME || 'Faro',
   tagline: process.env.NEXT_PUBLIC_PRODUCT_TAGLINE || 'Meta Ads + Ecommerce en un solo lugar',
   // Logo del producto (tu marca). Si no hay, se usa el monograma de abajo.
   logoUrl: process.env.NEXT_PUBLIC_PRODUCT_LOGO || '',
   // Color de marca en HEX (se inyecta como --brand-600). Default indigo.
-  accent: process.env.NEXT_PUBLIC_BRAND_ACCENT || '#4f46e5',
+  accent: process.env.NEXT_PUBLIC_BRAND_ACCENT || '#E8A33D',
 }
 
 /** Iniciales para el monograma cuando no hay logo. */

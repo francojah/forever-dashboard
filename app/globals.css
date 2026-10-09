@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 :root {
+  /* Faro v2: puerto de noche y luz de faro. Valores RGB para usar con alpha en Tailwind. */
+  --f-bg: 238 242 245;        /* niebla */
+  --f-surface: 255 255 255;
+  --f-sunken: 245 247 249;
+  --f-ink: 19 35 58;          /* azul tinta */
+  --f-mute: 91 107 128;
+  --f-faint: 145 158 176;
+  --f-line: 220 227 234;
+  --f-beacon: 232 163 61;     /* luz del faro: lo único que pide acción */
+  --f-beacon-ink: 122 74 8;
+  --f-good: 31 138 91;
+  --f-bad: 194 65 58;
+  --f-warn: 183 121 31;
+
   /* Semánticos */
   --color-ok: #16a34a;
   --color-warn: #d97706;
@@ -16,6 +30,27 @@
   --brand-700: #4338ca;
   --brand-fg:  #ffffff;
 }
+
+/* Faro v2 — modo oscuro: noche de puerto, no negro neutro */
+.dark {
+  --f-bg: 12 21 34;
+  --f-surface: 19 31 48;
+  --f-sunken: 15 25 40;
+  --f-ink: 228 235 243;
+  --f-mute: 139 155 176;
+  --f-faint: 96 112 133;
+  --f-line: 36 52 74;
+  --f-beacon: 242 179 76;
+  --f-beacon-ink: 250 214 150;
+  --f-good: 72 187 133;
+  --f-bad: 236 110 100;
+  --f-warn: 226 168 78;
+}
+
+.faro { font-feature-settings: "tnum" 1, "cv11" 1; }
+.faro .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.faro :focus-visible { outline: 2px solid rgb(var(--f-beacon)); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .faro * { transition: none !important; animation: none !important; } }
 
 /* Utilidades de marca — usan las variables de arriba */
 .text-brand      { color: var(--brand-600); }

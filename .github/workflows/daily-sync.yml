@@ -1,50 +1,22 @@
-name: Sync — Meta Ads + Tiendanube (cada 4h)
+name: Faro — sincronización cada 15 minutos
 
+# Pide a Faro que traiga lo nuevo de Tiendanube y Meta para todos los negocios.
+# Requiere el secret CRON_SECRET (el mismo valor que en Vercel).
 on:
-  # 10:00, 14:00, 18:00, 22:00 UTC = 07:00, 11:00, 15:00, 19:00 Argentina (UTC-3)
   schedule:
-    - cron: '0 10,14,18,22 * * *'
-  # También podés triggerearlo manualmente desde GitHub → Actions → Run workflow
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
   sync:
-    name: Sync data to Supabase
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 3
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Meta Ads sync
+      - name: Llamar al sync de Faro
         env:
-          META_ACCESS_TOKEN:         ${{ secrets.META_ACCESS_TOKEN }}
-          META_ACCOUNT_ID:           ${{ secrets.META_ACCOUNT_ID }}
-          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/sync-meta.js
-
-      - name: Run Tiendanube sync
-        if: ${{ env.TIENDANUBE_USER_ID != '' }}
-        env:
-          TIENDANUBE_USER_ID:        ${{ secrets.TIENDANUBE_USER_ID }}
-          TIENDANUBE_ACCESS_TOKEN:   ${{ secrets.TIENDANUBE_ACCESS_TOKEN }}
-          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/sync-tiendanube.js
-
-      - name: Notify on failure
-        if: failure()
-        run: echo "::error::El sync falló. Revisar logs arriba."
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FARO_URL: ${{ vars.FARO_URL || 'https://forever-dashboard.vercel.app' }}
+        run: |
+          code=$(curl -s -o out.json -w "%{http_code}" --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$FARO_URL/api/v2/cron/sync")
+          cat out.json; echo
+          test "$code" = "200"

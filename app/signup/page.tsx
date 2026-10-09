@@ -34,14 +34,14 @@ export default function SignupPage() {
     }
     // Si el proyecto no exige confirmación de email, ya hay sesión → al onboarding.
     if (data.session) {
-      router.push('/onboarding')
+      router.push('/')
       router.refresh()
       return
     }
     // Intentar iniciar sesión directo (por si la confirmación está desactivada)
     const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
     if (!loginErr) {
-      router.push('/onboarding')
+      router.push('/')
       router.refresh()
     } else {
       setInfo('Te enviamos un email para confirmar tu cuenta. Confirmalo y volvé a iniciar sesión.')

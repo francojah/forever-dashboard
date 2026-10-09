@@ -1,19 +1,19 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Onest } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/lib/theme-context'
-import CommandPalette from '@/components/CommandPalette'
 
 const inter = Inter({ subsets: ['latin'] })
+const onest = Onest({ subsets: ['latin'], variable: '--font-faro', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Forever Intelligence',
-  description: 'Performance & Ecommerce Intelligence — Meta Ads · Tiendanube · IA',
+  title: 'Faro',
+  description: 'Ventas, anuncios y ganancia de tu ecommerce en un solo lugar',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'ForeverAds',
+    title: 'Faro',
   },
   icons: {
     icon: '/icon-192.png',
@@ -38,9 +38,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className={`${inter.className} antialiased bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100`}>
+      <body className={`${inter.className} ${onest.variable} antialiased bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100`}>
         <ThemeProvider>
-          <CommandPalette />
           {children}
         </ThemeProvider>
       </body>
