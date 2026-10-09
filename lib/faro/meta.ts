@@ -197,7 +197,7 @@ export async function syncInsightsRange(acc: AdAccountRow, token: string, from: 
  * Sincroniza una cuenta:
  *  - entidades cada 10 min (o forzado)
  *  - métricas: últimos 3 días siempre; 7 días en la primera corrida del día
- *  - backfill de 90 días en tramos de 30, reanudable
+ *  - backfill de 13 meses en tramos de 30 días, reanudable
  */
 export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number; forceEntities?: boolean } = {}): Promise<{ rows: number; done: boolean }> {
   const t0 = Date.now()
@@ -216,8 +216,8 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
     rows += await syncInsightsRange(acc, token, recentFrom, today)
     await sb.from('ad_accounts').update({ last_synced_at: new Date().toISOString(), last_sync_error: null }).eq('id', acc.id)
 
-    // Backfill hacia atrás
-    const target = addDays(today, -89)
+    // Backfill hacia atrás (13 meses, igual que las órdenes)
+    const target = addDays(today, -400)
     let from = acc.insights_from || addDays(today, -6)
     if (!acc.insights_from) await sb.from('ad_accounts').update({ insights_from: from }).eq('id', acc.id)
     while (from > target && Date.now() - t0 < budget) {

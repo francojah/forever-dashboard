@@ -42,19 +42,19 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
             {d.campaigns.length === 0 ? <div className="px-5"><Empty title="Sin inversión en este período" /></div> : (
               <table className="w-full text-[13.5px]">
                 <thead><tr className="text-mute text-left border-y border-line bg-sunken/60">
-                  <th className="font-medium px-5 py-2">Campaña</th><th className="font-medium px-2 py-2 text-right">Gasto</th>
-                  <th className="font-medium px-2 py-2 text-right">Compras</th><th className="font-medium px-2 py-2 text-right">Costo/compra</th><th className="font-medium px-5 py-2 text-right">ROAS Meta</th>
+                  <th className="font-medium px-5 py-2">Campaña</th><th className="font-medium px-2 py-2 text-right whitespace-nowrap">Gasto</th>
+                  <th className="font-medium px-2 py-2 text-right">Compras</th><th className="font-medium px-2 py-2 text-right whitespace-nowrap">Costo/compra</th><th className="font-medium px-5 py-2 text-right whitespace-nowrap">ROAS Meta</th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
                   {d.campaigns.slice(0, 6).map((c) => {
                     const cpa = c.m.purchases > 0 ? c.m.spend / c.m.purchases : null
                     return (
                       <tr key={c.id}>
-                        <td className="px-5 py-2.5 max-w-[220px] truncate text-ink" title={c.name}>{c.name}</td>
-                        <td className="px-2 py-2.5 text-right num">{money(c.m.spend)}</td>
+                        <td className="px-5 py-2.5 max-w-[200px] truncate text-ink" title={c.name}>{c.name}</td>
+                        <td className="px-2 py-2.5 text-right num whitespace-nowrap">{money(c.m.spend)}</td>
                         <td className="px-2 py-2.5 text-right num">{int(c.m.purchases)}</td>
-                        <td className={`px-2 py-2.5 text-right num ${cpa != null && d.maxCpaRef != null ? (cpa <= d.maxCpaRef ? 'text-good' : 'text-bad') : 'text-mute'}`}>{cpa != null ? money(cpa) : '—'}</td>
-                        <td className="px-5 py-2.5 text-right num">{c.m.spend > 0 ? ratio(c.m.purchaseValue / c.m.spend) : '—'}</td>
+                        <td className={`px-2 py-2.5 text-right num whitespace-nowrap ${cpa != null && d.maxCpaRef != null ? (cpa <= d.maxCpaRef ? 'text-good' : 'text-bad') : 'text-mute'}`}>{cpa != null ? money(cpa) : '—'}</td>
+                        <td className="px-5 py-2.5 text-right num">{c.m.purchaseValue > 0 ? ratio(c.m.purchaseValue / c.m.spend) : '—'}</td>
                       </tr>
                     )
                   })}

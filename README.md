@@ -1,145 +1,38 @@
-# Forever Ads App
+# Faro
 
-Dashboard de Meta Ads para FOREVER BASICS — auto-update diario, login de equipo, ideas IA, análisis de competencia y gestión de leads.
+Ventas, anuncios y ganancia de un ecommerce en un solo lugar. Next.js 14 + Supabase + Vercel.
 
----
+## Secciones
 
-## Setup completo — paso a paso
+| Sección | Para qué |
+| --- | --- |
+| Inicio | Ventas netas, ganancia después de publicidad, MER y costo por compra del período; gráfico diario; hasta 3 acciones sugeridas |
+| Ventas | Medios de pago, envíos, provincias, productos (margen y días de stock) y clientes |
+| Anuncios | Campañas → ad sets → anuncios con edición en tabla, revisión antes de publicar, protegidos, historial con deshacer y subida masiva de creativos |
+| Finanzas | Estado de resultados por mes desde las órdenes reales, costos fijos con vigencia, caja y cierre de mes |
+| Ajustes | Conexiones (Tiendanube, Meta), costos y comisiones, costo de productos, equipo y estado de la sincronización |
+| Cambios | Módulo opcional (portal de cambios de Forever) |
 
-### PASO 1 — Crear cuenta en Supabase (5 min)
+## Datos
 
-1. Ir a **supabase.com** → crear cuenta gratuita
-2. Clic en **"New project"** → nombre: `forever-ads` → elegir contraseña → región: South America
-3. Esperar que el proyecto se cree (~2 min)
-4. Ir a **Settings → API** y copiar:
-   - `Project URL` → es tu `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public` key → es tu `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → es tu `SUPABASE_SERVICE_ROLE_KEY` ⚠️ nunca la compartas
+- `orders`: órdenes crudas por tienda. Webhooks de Tiendanube (`/api/v2/webhooks/tiendanube`) + reconciliación por `updated_at`.
+- `ad_entities` y `ad_insights_daily`: campañas/ad sets/anuncios y métricas por anuncio y día (Graph API, `META_API_VERSION`, por defecto v24.0).
+- Todo período se calcula con SQL/TypeScript sobre esas tablas, en la zona horaria del negocio.
+- `workspaces` agrupa tiendas, cuentas de Meta, costos y equipo. Un usuario puede tener varios.
 
-5. Ir a **SQL Editor → New query**, pegar todo el contenido de `supabase/schema.sql` y hacer clic en **Run**
+Sincronización: al abrir la app (si el dato tiene más de 5 min), con el botón Actualizar, y cada 15 min por GitHub Actions (`.github/workflows/daily-sync.yml` → `/api/v2/cron/sync` con `CRON_SECRET`).
 
-6. Crear el primer usuario del equipo:
-   - Ir a **Authentication → Users → Add user**
-   - Email: el email de cada persona del equipo
-   - Password: contraseña temporal (que pueden cambiar después)
+## Puesta en marcha
 
----
+1. Correr `supabase/migrations/20261009_faro_v2.sql` en Supabase → SQL Editor.
+2. Variables en Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TIENDANUBE_APP_ID`, `TIENDANUBE_CLIENT_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`. Opcionales: `META_APP_ID` y `META_APP_SECRET` (login con Facebook), `META_API_VERSION`.
+3. Secret `CRON_SECRET` en GitHub (mismo valor que en Vercel).
+4. Entrar, conectar tienda y cuentas en Ajustes → Conexiones y completar Costos y comisiones.
 
-### PASO 2 — Configurar el repo en GitHub (5 min)
-
-1. Ir a tu repo `forever-dashboard` (o crear un repo nuevo `forever-ads-app`)
-2. Ir a **Settings → Secrets and variables → Actions → New repository secret**
-3. Agregar estos secrets uno por uno:
-
-| Nombre | Valor |
-|--------|-------|
-| `META_ACCESS_TOKEN` | Tu token de Meta (Business Settings → System Users → Token) |
-| `META_ACCOUNT_ID` | `act_1614288152915913` |
-| `SUPABASE_URL` | Tu Project URL de Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Tu service_role key de Supabase |
-
----
-
-### PASO 3 — Deploy en Vercel (5 min)
-
-1. Ir a **vercel.com** → crear cuenta con GitHub
-2. Clic en **"Add New Project"** → importar tu repo
-3. En la sección **Environment Variables**, agregar todas las variables de `.env.example` con sus valores reales
-4. Clic en **Deploy** → esperar ~3 min → ¡tu app está online!
-5. Copiar la URL (ej: `forever-ads-app.vercel.app`)
-
----
-
-### PASO 4 — Primer sync manual (2 min)
-
-Para no esperar hasta las 7am del día siguiente:
-
-1. Ir a tu repo en GitHub → pestaña **Actions**
-2. Clic en **"Daily Meta Ads Sync"** → **"Run workflow"** → **"Run workflow"**
-3. Esperar ~1 min → va a aparecer ✅ verde
-4. Abrir tu app → el dashboard va a mostrar los datos
-
----
-
-### PASO 5 — Acceso del equipo
-
-Compartir la URL de Vercel + las credenciales creadas en el Paso 1 (punto 6).
-
-Para agregar más personas: Supabase → Authentication → Users → Add user.
-
----
-
-## Cómo funciona el auto-update
-
-Todos los días a las **7am Argentina** (10am UTC), GitHub Actions:
-1. Se conecta a Meta Ads API con tu token
-2. Descarga campañas, ad sets y anuncios de los últimos 7 días
-3. Calcula métricas clave y detecta alertas automáticas
-4. Guarda todo en Supabase con la fecha del día
-
-Al abrir la app, siempre ves los datos del último sync.
-
----
-
-## Módulos de la app
-
-| Módulo | Descripción |
-|--------|-------------|
-| **Dashboard** | KPIs, ad sets activos, ranking de creativos, alertas |
-| **Creativos** | Registro de imágenes/videos, seguimiento de estado (ganador/perdedor) |
-| **Ideas IA** | Claude genera ideas de contenido basadas en tu performance actual |
-| **Competencia** | Análisis de competidores con IA — posicionamiento, gaps y oportunidades |
-| **Leads** | Gestión de leads de Meta Lead Ads con pipeline de estados |
-| **Alertas** | Alertas automáticas cuando el CPA supera el breakeven o el ROAS cae |
-
----
-
-## Variables de entorno
-
-Copiar `.env.example` a `.env.local` para desarrollo local:
-
-```bash
-cp .env.example .env.local
-# Editar .env.local con tus valores reales
-```
-
-Para Vercel: agregar las mismas variables en Settings → Environment Variables.
-
----
-
-## Desarrollo local
+## Desarrollo
 
 ```bash
 npm install
 npm run dev
-# Abrir http://localhost:3000
+npm test
 ```
-
-Para correr el sync manualmente:
-
-```bash
-node scripts/sync-meta.js
-```
-
----
-
-## Stack tecnológico
-
-- **Next.js 14** — App Router + TypeScript
-- **Supabase** — Auth + PostgreSQL + Row Level Security
-- **Tailwind CSS** — Estilos
-- **Vercel** — Deploy + cron jobs (vía GitHub Actions)
-- **Meta Graph API** — Datos de campañas, ad sets y anuncios
-- **Anthropic Claude** — Ideas de contenido + análisis de competencia
-
----
-
-## Costo mensual estimado
-
-| Servicio | Plan | Costo |
-|----------|------|-------|
-| Supabase | Free | $0 |
-| Vercel | Hobby | $0 |
-| GitHub | Free | $0 |
-| Anthropic Claude | Pay as you go | ~$5–10/mes |
-| **Total** | | **~$5–10/mes** |

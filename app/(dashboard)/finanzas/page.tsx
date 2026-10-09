@@ -12,7 +12,7 @@ import ResultChart from '@/components/faro/finance/ResultChart'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-function Line({ label, value, net, kind = 'cost', note, strong, tag }: { label: React.ReactNode; value: number; net: number; kind?: 'income' | 'cost' | 'total'; note?: React.ReactNode; strong?: boolean; tag?: React.ReactNode }) {
+function Line({ label, value, net, kind = 'cost', note, strong, tag, noPct }: { label: React.ReactNode; value: number; net: number; kind?: 'income' | 'cost' | 'total'; note?: React.ReactNode; strong?: boolean; tag?: React.ReactNode; noPct?: boolean }) {
   const shown = kind === 'cost' ? -Math.abs(value) : value
   return (
     <tr className={kind === 'total' ? 'bg-sunken/70' : ''}>
@@ -21,12 +21,12 @@ function Line({ label, value, net, kind = 'cost', note, strong, tag }: { label: 
         {note && <p className="text-[12px] text-mute mt-0.5 font-normal">{note}</p>}
       </td>
       <td className={`py-2.5 px-2 text-right num whitespace-nowrap ${strong ? 'font-semibold' : ''} ${kind === 'total' ? (value < 0 ? 'text-bad' : 'text-ink') : kind === 'cost' ? 'text-mute' : 'text-ink'}`}>{money(shown)}</td>
-      <td className="py-2.5 pr-5 pl-2 text-right num text-faint w-20">{net > 0 ? pct(Math.abs(shown) / net, 1) : ''}</td>
+      <td className="py-2.5 pr-5 pl-2 text-right num text-faint w-20">{net > 0 && !noPct ? pct(Math.abs(shown) / net, 1) : ''}</td>
     </tr>
   )
 }
 
-function Statement({ p }: { p: PnL }) {
+function Statement({ p, noAds }: { p: PnL; noAds?: boolean }) {
   const s = p.sales
   const n = s.netSales
   const cogsTag = s.cogsCoverage.estimated > 0.02
@@ -35,18 +35,18 @@ function Statement({ p }: { p: PnL }) {
   return (
     <table className="w-full text-[14px]">
       <tbody className="divide-y divide-line">
-        <Line label="Ventas de productos a precio de lista" value={s.productsGross} net={n} kind="income" note={`${s.orders} órdenes pagadas · ${s.units} unidades`} />
-        <Line label="Descuentos y promociones" value={s.discounts} net={n} />
+        <Line noPct label="Ventas de productos a precio de lista" value={s.productsGross} net={n} kind="income" note={`${s.orders} órdenes pagadas · ${s.units} unidades`} />
+        <Line noPct label="Descuentos y promociones" value={s.discounts} net={n} note={s.productsGross > 0 ? `${pct(s.discounts / s.productsGross)} del precio de lista` : undefined} />
         <Line label="Ventas netas" value={n} net={n} kind="total" />
         <Line label="Envío cobrado a clientes" value={s.shippingCustomer} net={n} kind="income" />
         <Line label="Costo de mercadería" value={s.cogs} net={n} tag={cogsTag} />
-        <Line label="Envío pagado" value={s.shippingOwner} net={n} tag={<Badge tone="good">real</Badge>} />
+        <Line label="Envío pagado" value={s.shippingOwner} net={n} tag={<Badge title="Costo de envío que informa Tiendanube en cada orden">según Tiendanube</Badge>} />
         <Line label="Comisión de la plataforma" value={s.platformFee} net={n} />
         <Line label="Comisiones de pago" value={s.paymentFees} net={n} tag={s.paymentFeesUnknownShare > 0.02 ? <Badge tone="warn">{pct(s.paymentFeesUnknownShare)} sin configurar</Badge> : undefined} />
         <Line label="Packaging" value={s.packaging} net={n} />
         <Line label="Ingresos Brutos" value={s.iibb} net={n} />
         <Line label={<>Margen de contribución <Explain>Lo que deja cada venta antes de publicidad y fijos: ventas netas + envío cobrado − mercadería − envío pagado − comisiones − packaging − IIBB.</Explain></>} value={p.contribution} net={n} kind="total" />
-        <Line label="Inversión en anuncios" value={p.ads.spend} net={n} tag={<Badge tone="good">real</Badge>} />
+        <Line label="Inversión en anuncios" value={p.ads.spend} net={n} tag={noAds ? <Badge tone="warn">sin datos de Meta para este mes</Badge> : <Badge tone="good">real</Badge>} />
         <Line label="Impuestos no recuperables de la pauta" value={p.adTax} net={n} />
         <Line label="Ganancia después de publicidad" value={p.profitAfterAds} net={n} kind="total" />
         {p.fixed.map((f, i) => <Line key={`f${i}`} label={f.name} value={f.amount} net={n} note="Fijo" />)}
@@ -75,6 +75,8 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
       storeIds: ctx.stores.filter((s) => s.active).map((s) => s.id), accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id),
     }, months)
     const p = all.find((x) => x.month === month)!
+    const coverage = ctx.adAccounts.filter((a) => a.active).map((a) => a.insights_from).filter(Boolean).sort()[0] as string | undefined
+    const noAdsData = (m: string) => ctx.adAccounts.some((a) => a.active) && (!coverage || `${m}-31` < coverage)
     const s = p.sales
     const cm = s.netSales > 0 ? p.contribution / s.netSales : null
     const kpis = [
@@ -96,7 +98,7 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
         </div>
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-5 items-start">
           <Panel title={`Estado de resultados · ${monthLabel(month)}`} description={p.closed ? 'Mes cerrado: los números quedaron congelados.' : month === thisMonth ? 'Mes en curso, se actualiza con cada venta.' : 'Calculado desde las órdenes y la inversión reales.'} padded={false} actions={canEdit(ctx) && month < thisMonth ? <CloseMonth month={month} closed={p.closed} /> : undefined}>
-            <Statement p={p} />
+            <Statement p={p} noAds={noAdsData(month)} />
           </Panel>
           <Panel title={`Resultado por mes · ${year}`} description="Barras: resultado operativo. Línea: ventas netas.">
             <ResultChart data={all.map((m) => ({ month: m.month, result: m.operatingResult, net: m.sales.netSales, closed: m.closed }))} selected={month} />
@@ -107,7 +109,7 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
                   <tr key={m.month} className={m.month === month ? 'bg-beacon/10' : ''}>
                     <td className="py-1.5"><a href={`?m=${m.month}`} className="hover:underline">{monthLabel(m.month)}</a>{m.closed && <span className="ml-1.5 text-faint text-[11.5px]">cerrado</span>}</td>
                     <td className="py-1.5 text-right num">{money(m.sales.netSales)}</td>
-                    <td className="py-1.5 text-right num text-mute">{money(m.ads.spend + m.adTax)}</td>
+                    <td className="py-1.5 text-right num text-mute">{noAdsData(m.month) ? <span title="Meta todavía no trajo datos de este mes">sin datos</span> : money(m.ads.spend + m.adTax)}</td>
                     <td className={`py-1.5 text-right num ${m.operatingResult < 0 ? 'text-bad' : ''}`}>{money(m.operatingResult)}</td>
                   </tr>
                 ))}

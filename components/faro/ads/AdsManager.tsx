@@ -134,7 +134,7 @@ export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: {
     const budget = valueOf(n, 'daily_budget') as number | null
     const cpa = n.m.purchases > 0 ? n.m.spend / n.m.purchases : null
     const ctr = n.m.impressions > 0 ? n.m.linkClicks / n.m.impressions : null
-    const roas = n.m.spend > 0 ? n.m.purchaseValue / n.m.spend : null
+    const roas = n.m.spend > 0 && n.m.purchaseValue > 0 ? n.m.purchaseValue / n.m.spend : null
     const hasKids = n.children.length > 0
     const prot = isProtected(n)
     const inactiveParent = n.effectiveStatus && !['ACTIVE', 'PAUSED'].includes(n.effectiveStatus)

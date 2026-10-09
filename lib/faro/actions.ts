@@ -112,7 +112,7 @@ export async function suggestActions(args: {
           if (daysLeft < 7) {
             out.push({
               id: `stock-${v.id}`, kind: 'restock', title: `Reponer ${s.name}`,
-              reason: v.stock <= 0 ? `Sin stock. Vendía ${perDay.toFixed(1)} por día.` : `Quedan ${v.stock} unidades: alcanzan para ~${Math.max(1, Math.floor(daysLeft))} días al ritmo de las últimas 2 semanas.`,
+              reason: v.stock <= 0 ? `Sin stock. Vendía ${perDay.toLocaleString('es-AR', { maximumFractionDigits: 1 })} por día.` : `Quedan ${v.stock} ${v.stock === 1 ? 'unidad' : 'unidades'}: alcanza${v.stock === 1 ? '' : 'n'} para ~${Math.max(1, Math.floor(daysLeft))} ${Math.floor(daysLeft) <= 1 ? 'día' : 'días'} al ritmo de las últimas 2 semanas.`,
               impact: perDay * 7 * (v.price || 0), href: '/ventas?tab=productos',
             })
           }

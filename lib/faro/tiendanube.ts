@@ -268,6 +268,8 @@ export async function fetchStoreInfo(externalId: string, token: string) {
   return {
     name: pickName(d.name) || `Tienda ${externalId}`,
     currency: (d.main_currency as string) || 'ARS',
-    url: (d.original_domain as string) ? `https://${d.original_domain}` : (d.url_with_protocol as string) || null,
+    url: Array.isArray(d.domains) && d.domains.length
+      ? `https://${String(d.domains[0]).replace(/^https?:\/\//, '')}`
+      : (d.original_domain as string) ? `https://${d.original_domain}` : (d.url_with_protocol as string) || null,
   }
 }
