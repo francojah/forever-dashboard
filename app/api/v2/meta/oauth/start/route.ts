@@ -19,6 +19,9 @@ export async function GET(req: Request) {
   url.searchParams.set('client_id', appId)
   url.searchParams.set('redirect_uri', redirect)
   url.searchParams.set('state', state)
-  url.searchParams.set('scope', 'ads_read,ads_management,business_management,pages_show_list,pages_read_engagement')
+  // Apps tipo "Negocio" usan Facebook Login para empresas: se pide la configuración creada en Meta
+  // (META_CONFIG_ID). Sin configuración, se usan los permisos clásicos.
+  if (process.env.META_CONFIG_ID) url.searchParams.set('config_id', process.env.META_CONFIG_ID)
+  else url.searchParams.set('scope', 'ads_read,ads_management,business_management,pages_show_list,pages_read_engagement')
   return Response.redirect(url.toString())
 }

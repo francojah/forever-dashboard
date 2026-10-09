@@ -25,7 +25,7 @@ Sincronización: al abrir la app (si el dato tiene más de 5 min), con el botón
 ## Puesta en marcha
 
 1. Correr `supabase/migrations/20261009_faro_v2.sql` en Supabase → SQL Editor.
-2. Variables en Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TIENDANUBE_APP_ID`, `TIENDANUBE_CLIENT_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`. Opcionales: `META_APP_ID` y `META_APP_SECRET` (login con Facebook), `META_API_VERSION`.
+2. Variables en Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TIENDANUBE_APP_ID`, `TIENDANUBE_CLIENT_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`. Opcionales: `META_APP_ID`, `META_APP_SECRET` y `META_CONFIG_ID` (login con Facebook para empresas), `META_API_VERSION`.
 3. Secret `CRON_SECRET` en GitHub (mismo valor que en Vercel).
 4. Entrar, conectar tienda y cuentas en Ajustes → Conexiones y completar Costos y comisiones.
 
