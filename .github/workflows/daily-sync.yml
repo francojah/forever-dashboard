@@ -1,10 +1,12 @@
-name: Faro — sincronización cada 15 minutos
+name: Faro — sincronización cada 30 minutos
 
 # Pide a Faro que traiga lo nuevo de Tiendanube y Meta para todos los negocios.
-# Requiere el secret CRON_SECRET (el mismo valor que en Vercel).
+# Requiere el secret CRON_SECRET (el mismo valor que en Vercel). Sin él, no hace nada.
+# Cada 30 min para no pasar los minutos gratis de Actions; las ventas llegan al
+# instante por webhook y la app se actualiza sola al abrirla.
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,6 +19,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FARO_URL: ${{ vars.FARO_URL || 'https://forever-dashboard.vercel.app' }}
         run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::warning::Falta el secret CRON_SECRET: no se sincroniza"; exit 0; fi
           code=$(curl -s -o out.json -w "%{http_code}" --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$FARO_URL/api/v2/cron/sync")
           cat out.json; echo
           test "$code" = "200"

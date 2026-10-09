@@ -20,7 +20,7 @@ Ventas, anuncios y ganancia de un ecommerce en un solo lugar. Next.js 14 + Supab
 - Todo período se calcula con SQL/TypeScript sobre esas tablas, en la zona horaria del negocio.
 - `workspaces` agrupa tiendas, cuentas de Meta, costos y equipo. Un usuario puede tener varios.
 
-Sincronización: al abrir la app (si el dato tiene más de 5 min), con el botón Actualizar, y cada 15 min por GitHub Actions (`.github/workflows/daily-sync.yml` → `/api/v2/cron/sync` con `CRON_SECRET`).
+Sincronización: al abrir la app (si el dato tiene más de 5 min), con el botón Actualizar, y cada 30 min por GitHub Actions (`.github/workflows/daily-sync.yml` → `/api/v2/cron/sync` con `CRON_SECRET`).
 
 ## Puesta en marcha
 

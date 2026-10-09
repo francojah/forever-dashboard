@@ -91,7 +91,7 @@ export default function Connections(p: {
       {errorText && <p className="rounded-lg border border-bad/40 bg-bad/10 px-4 py-2.5 text-[13.5px] text-ink">{errorText}</p>}
       {p.storeAdded && <p className="rounded-lg border border-good/40 bg-good/10 px-4 py-2.5 text-[13.5px] text-ink">Tienda conectada. Faro está importando el historial de órdenes.</p>}
 
-      <Panel title="Tiendas" description="Las órdenes se actualizan solas con cada venta (webhooks) y cada 15 minutos."
+      <Panel title="Tiendas" description="Las órdenes se actualizan solas con cada venta y cada 30 minutos."
         actions={p.canEdit && p.tnInstall ? <a href="/api/v2/tiendanube/install" className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium hover:bg-sunken">Conectar Tiendanube</a> : undefined} padded={false}>
         {p.stores.length === 0 ? <div className="px-5"><Empty title="Sin tiendas conectadas" /></div> : (
           <ul className="divide-y divide-line border-t border-line">

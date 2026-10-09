@@ -3,7 +3,7 @@ import { syncAll } from '@/lib/faro/sync'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-/** Llamado cada 15 minutos por GitHub Actions (o Vercel Cron) con el CRON_SECRET. */
+/** Llamado cada 30 minutos por GitHub Actions y una vez por día por Vercel Cron, con el CRON_SECRET. */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET
   const auth = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
