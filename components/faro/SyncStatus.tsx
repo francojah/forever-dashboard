@@ -18,18 +18,26 @@ export default function SyncStatus({ sources, timezone }: { sources: SourceStatu
   const [error, setError] = useState<string | null>(null)
   const ran = useRef(false)
 
+  // Tandas automáticas del historial: se cortan ante errores o si una fuente pide esperar
+  const autoOk = useRef(true)
+  const rounds = useRef(0)
+
   const run = useCallback(async (force: boolean) => {
     setBusy(true)
     setError(null)
+    if (force) { autoOk.current = true; rounds.current = 0 }
     try {
       const r = await fetch('/api/v2/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force }) })
       const j = await r.json().catch(() => ({}))
-      const failed = (j.results || []).filter((x: { ok: boolean }) => !x.ok)
+      const results = (j.results || []) as { ok: boolean; target: string; error?: string; waitMs?: number; done?: boolean }[]
+      const failed = results.filter((x) => !x.ok)
       if (!r.ok) setError(j.error || 'No se pudo actualizar')
-      else if (failed.length) setError(failed.map((f: { target: string; error: string }) => `${f.target}: ${f.error}`).join(' · '))
+      else if (failed.length) setError(failed.map((f) => `${f.target}: ${f.error}`).join(' · '))
+      if (!r.ok || failed.length || results.some((x) => x.waitMs) || !results.some((x) => x.done === false)) autoOk.current = false
       router.refresh()
     } catch {
       setError('Sin conexión')
+      autoOk.current = false
     } finally {
       setBusy(false)
     }
@@ -42,10 +50,10 @@ export default function SyncStatus({ sources, timezone }: { sources: SourceStatu
     if (stale) run(false)
   }, [sources, run])
 
-  // Mientras se importa el historial, seguir pidiendo tandas
+  // Mientras se importa el historial, seguir pidiendo tandas (máximo 40 por visita)
   useEffect(() => {
-    if (!sources.some((s) => s.backfilling) || busy) return
-    const t = setTimeout(() => run(false), 1500)
+    if (!sources.some((s) => s.backfilling) || busy || !autoOk.current || rounds.current >= 40) return
+    const t = setTimeout(() => { rounds.current++; run(false) }, 3000)
     return () => clearTimeout(t)
   }, [sources, busy, run])
 

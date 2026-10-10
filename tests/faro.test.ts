@@ -51,3 +51,35 @@ describe('margen de contribución', () => {
     expect(feePctFor(normalizeSettings({}), 'wallet')).toEqual({ pct: 0, known: false })
   })
 })
+
+describe('Meta: pedidos grandes y límites', () => {
+  it('achica la página cuando Meta pide menos datos', async () => {
+    const { graphAll } = await import('../lib/faro/meta')
+    const limits: string[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: string) => {
+      const l = new URL(url).searchParams.get('limit')!
+      limits.push(l)
+      const body = Number(l) > 50
+        ? { error: { code: 1, message: "Please reduce the amount of data you're asking for, then retry your request" } }
+        : { data: [{ id: 1 }, { id: 2 }] }
+      return { json: async () => body } as Response
+    }) as typeof fetch
+    try {
+      const rows = await graphAll('act_1/ads', 'tok', { limit: '200' })
+      expect(rows.length).toBe(2)
+      expect(limits).toEqual(['200', '100', '50'])
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('no reintenta en el momento si la cuenta está limitada', async () => {
+    const { graphGet, isRateLimit } = await import('../lib/faro/meta')
+    let calls = 0
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => { calls++; return { json: async () => ({ error: { code: 80004, message: 'Se han realizado demasiadas llamadas desde esta cuenta publicitaria.' } }) } as Response }) as typeof fetch
+    try {
+      await expect(graphGet('act_1/insights', 'tok')).rejects.toSatisfy(isRateLimit)
+      expect(calls).toBe(1)
+    } finally { globalThis.fetch = orig }
+  })
+})

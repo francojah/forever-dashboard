@@ -1,6 +1,6 @@
 import { svc } from './db'
 import { syncStoreOrders, ensureWebhooks, StoreRow } from './tiendanube'
-import { syncAdAccount, AdAccountRow } from './meta'
+import { syncAdAccount, AdAccountRow, RATE_LIMIT_PREFIX, COOLDOWN_MIN, metaHistoryDone } from './meta'
 
 export interface SyncResult {
   target: string
@@ -10,6 +10,7 @@ export interface SyncResult {
   done: boolean
   error?: string
   skipped?: boolean
+  waitMs?: number
 }
 
 /**
@@ -39,9 +40,16 @@ export async function syncWorkspace(workspaceId: string, opts: { budgetMs?: numb
       }
     })())
   }
-  for (const a of (accounts || []) as AdAccountRow[]) {
+  for (const a of (accounts || []) as (AdAccountRow & { last_sync_error: string | null })[]) {
     jobs.push((async () => {
-      if (a.insights_from && fresh(a.last_synced_at) && !opts.forceEntities) return { target: a.name, kind: 'meta', ok: true, rows: 0, done: true, skipped: true } as SyncResult
+      if (metaHistoryDone(a) && fresh(a.last_synced_at) && !opts.forceEntities) return { target: a.name, kind: 'meta', ok: true, rows: 0, done: true, skipped: true } as SyncResult
+      // Si Meta limitó la cuenta, esperar antes de volver a pedir (insistir alarga el bloqueo)
+      if (a.last_sync_error?.startsWith(RATE_LIMIT_PREFIX)) {
+        const { data: last } = await sb.from('sync_log').select('created_at').eq('target_id', a.id).eq('status', 'error')
+          .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        const wait = last ? COOLDOWN_MIN * 60000 - (Date.now() - new Date(last.created_at as string).getTime()) : 0
+        if (wait > 0) return { target: a.name, kind: 'meta', ok: true, rows: 0, done: false, skipped: true, waitMs: wait } as SyncResult
+      }
       try {
         const r = await syncAdAccount(a, { budgetMs: budget, forceEntities: opts.forceEntities })
         return { target: a.name, kind: 'meta', ok: true, rows: r.rows, done: r.done } as SyncResult

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getRequestContext, NeedsMigrationError } from '@/lib/faro/context'
 import Shell from '@/components/faro/Shell'
+import { metaHistoryDone } from '@/lib/faro/meta'
 import type { SourceStatus } from '@/components/faro/SyncStatus'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const sources: SourceStatus[] = [
     ...ctx.stores.filter((s) => s.active).map((s) => ({ kind: 'tiendanube' as const, name: s.name, lastSyncedAt: s.last_synced_at, error: s.last_sync_error, backfilling: !s.backfill_done })),
-    ...ctx.adAccounts.filter((a) => a.active).map((a) => ({ kind: 'meta' as const, name: a.name, lastSyncedAt: a.last_synced_at, error: a.last_sync_error, backfilling: !a.insights_from })),
+    ...ctx.adAccounts.filter((a) => a.active).map((a) => ({ kind: 'meta' as const, name: a.name, lastSyncedAt: a.last_synced_at, error: a.last_sync_error, backfilling: !metaHistoryDone(a) })),
   ]
 
   return (
