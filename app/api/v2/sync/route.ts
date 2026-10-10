@@ -10,6 +10,6 @@ export async function POST(req: Request) {
   if (ctx instanceof Response) return ctx
   let force = false
   try { force = !!(await req.json())?.force } catch { /* sin body */ }
-  const results = await syncWorkspace(ctx.workspace.id, { budgetMs: 40000, minAgeMs: force ? 0 : 120000, forceEntities: force })
+  const results = await syncWorkspace(ctx.workspace.id, { budgetMs: 35000, minAgeMs: force ? 0 : 120000, forceEntities: force })
   return Response.json({ ok: results.every((r) => r.ok), results, at: new Date().toISOString() })
 }

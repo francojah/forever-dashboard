@@ -19,7 +19,7 @@ export interface SyncResult {
  */
 export async function syncWorkspace(workspaceId: string, opts: { budgetMs?: number; minAgeMs?: number; forceEntities?: boolean } = {}): Promise<SyncResult[]> {
   const sb = svc()
-  const budget = opts.budgetMs ?? 40000
+  const budget = opts.budgetMs ?? 35000
   const minAge = opts.minAgeMs ?? 0
   const [{ data: stores }, { data: accounts }] = await Promise.all([
     sb.from('stores').select('*').eq('workspace_id', workspaceId).eq('active', true),
@@ -62,11 +62,9 @@ export async function syncWorkspace(workspaceId: string, opts: { budgetMs?: numb
 }
 
 /** Todos los espacios (para el cron). */
-export async function syncAll(budgetMs = 45000): Promise<Record<string, SyncResult[]>> {
+export async function syncAll(budgetMs = 35000): Promise<Record<string, SyncResult[]>> {
   const { data } = await svc().from('workspaces').select('id,name')
-  const out: Record<string, SyncResult[]> = {}
-  for (const w of data || []) {
-    out[w.name as string] = await syncWorkspace(w.id as string, { budgetMs: Math.max(10000, budgetMs / Math.max(1, (data || []).length)) })
-  }
-  return out
+  // En paralelo: cada negocio usa sus propias cuentas, y así todos entran en los 60 s de Vercel
+  const results = await Promise.all((data || []).map((w) => syncWorkspace(w.id as string, { budgetMs, minAgeMs: 5 * 60000 })))
+  return Object.fromEntries((data || []).map((w, i) => [w.name as string, results[i]]))
 }

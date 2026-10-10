@@ -27,6 +27,9 @@ export class MetaError extends Error {
   }
 }
 
+/** Se acabó el tiempo de esta tanda (Vercel corta a los 60 s): se sigue en la próxima. */
+export class DeadlineError extends Error {}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function withToken(url: string, token: string) {
@@ -109,10 +112,11 @@ export async function graphPost<T = unknown>(path: string, token: string, body: 
 }
 
 /** Recorre todas las páginas de un edge. Si Meta pide menos datos, achica el tamaño de página y sigue. */
-export async function graphAll<T = unknown>(path: string, token: string, params: Record<string, string>, maxPages = 50): Promise<T[]> {
+export async function graphAll<T = unknown>(path: string, token: string, params: Record<string, string>, maxPages = 50, deadline?: number): Promise<T[]> {
   const out: T[] = []
   let next: string | null = `${GRAPH}/${path}?${new URLSearchParams(params)}`
   for (let i = 0; next && i < maxPages; i++) {
+    if (deadline && Date.now() > deadline) throw new DeadlineError('Sin tiempo en esta tanda')
     let page: { data?: T[]; paging?: { next?: string } }
     try {
       page = await graphGet(next, token)
@@ -157,21 +161,21 @@ const LIVE_STATUSES = ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'P
 const cents = (v: unknown) => (v == null || v === '' ? null : (parseFloat(String(v)) || 0) / 100)
 
 /** Campañas, ad sets y anuncios (sin archivados ni borrados). */
-export async function syncEntities(acc: AdAccountRow, token: string): Promise<number> {
+export async function syncEntities(acc: AdAccountRow, token: string, deadline?: number): Promise<number> {
   const eff = JSON.stringify(LIVE_STATUSES)
   const [campaigns, adsets, ads] = await Promise.all([
     graphAll<Record<string, unknown>>(`${acc.external_id}/campaigns`, token, {
       fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,created_time,updated_time',
       effective_status: eff, limit: '200',
-    }),
+    }, 50, deadline),
     graphAll<Record<string, unknown>>(`${acc.external_id}/adsets`, token, {
       fields: 'id,name,status,effective_status,campaign_id,optimization_goal,daily_budget,lifetime_budget,bid_strategy,targeting,created_time,updated_time',
       effective_status: eff, limit: '200',
-    }),
+    }, 50, deadline),
     graphAll<Record<string, unknown>>(`${acc.external_id}/ads`, token, {
       fields: 'id,name,status,effective_status,adset_id,campaign_id,created_time,updated_time,creative{id,thumbnail_url,image_url,object_type,body,title,video_id,effective_object_story_id,object_story_spec{page_id,instagram_user_id}}',
       effective_status: eff, limit: '100',
-    }),
+    }, 50, deadline),
   ])
   const now = new Date().toISOString()
   const rows = [
@@ -209,7 +213,7 @@ export async function syncEntities(acc: AdAccountRow, token: string): Promise<nu
 }
 
 /** Métricas por anuncio y día para un rango (fechas en la zona de la cuenta). */
-export async function syncInsightsRange(acc: AdAccountRow, token: string, from: string, to: string): Promise<number> {
+export async function syncInsightsRange(acc: AdAccountRow, token: string, from: string, to: string, deadline?: number): Promise<number> {
   let rows: Record<string, unknown>[]
   try {
     rows = await graphAll<Record<string, unknown>>(`${acc.external_id}/insights`, token, {
@@ -218,13 +222,13 @@ export async function syncInsightsRange(acc: AdAccountRow, token: string, from: 
       time_range: JSON.stringify({ since: from, until: to }),
       fields: 'ad_id,adset_id,campaign_id,spend,impressions,reach,inline_link_clicks,actions,action_values,video_p50_watched_actions',
       limit: '250',
-    }, 200)
+    }, 200, deadline)
   } catch (e) {
     // Cuentas grandes: si el rango es demasiado, partirlo a la mitad
     if (!isTooMuchData(e) || from >= to) throw e
     const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000)
     const mid = addDays(from, Math.floor(days / 2))
-    return (await syncInsightsRange(acc, token, from, mid)) + (await syncInsightsRange(acc, token, addDays(mid, 1), to))
+    return (await syncInsightsRange(acc, token, from, mid, deadline)) + (await syncInsightsRange(acc, token, addDays(mid, 1), to, deadline))
   }
   const now = new Date().toISOString()
   const mapped = rows.map((r) => {
@@ -261,7 +265,8 @@ export async function syncInsightsRange(acc: AdAccountRow, token: string, from: 
  */
 export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number; forceEntities?: boolean } = {}): Promise<{ rows: number; done: boolean }> {
   const t0 = Date.now()
-  const budget = opts.budgetMs ?? 40000
+  const budget = opts.budgetMs ?? 35000
+  const deadline = t0 + budget
   const tz = acc.timezone || 'America/Argentina/Buenos_Aires'
   const today = localDate(new Date(), tz)
   let rows = 0
@@ -269,11 +274,13 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
   try {
     const token = await getMetaToken(acc.connection_id)
     const entitiesAge = acc.last_entities_at ? Date.now() - new Date(acc.last_entities_at).getTime() : Infinity
-    if (opts.forceEntities || entitiesAge > (accountUsage(acc.external_id) >= USAGE_SOFT_LIMIT ? 30 : 10) * 60000) rows += await syncEntities(acc, token)
+    if (opts.forceEntities || entitiesAge > (accountUsage(acc.external_id) >= USAGE_SOFT_LIMIT ? 30 : 10) * 60000) rows += await syncEntities(acc, token, deadline)
 
     const lastDay = acc.last_synced_at ? localDate(new Date(acc.last_synced_at), tz) : null
     const recentFrom = addDays(today, lastDay === today ? -2 : -6)
-    rows += await syncInsightsRange(acc, token, recentFrom, today)
+    if (lastDay) rows += await syncInsightsRange(acc, token, recentFrom, today, deadline)
+    // Primera vez: de a un día, del más nuevo al más viejo, para que lo de hoy llegue aunque la cuenta sea grande
+    else for (let d = today; d >= recentFrom; d = addDays(d, -1)) rows += await syncInsightsRange(acc, token, d, d, deadline)
     await sb.from('ad_accounts').update({ last_synced_at: new Date().toISOString(), last_sync_error: null }).eq('id', acc.id)
 
     // Backfill hacia atrás (13 meses, igual que las órdenes)
@@ -283,13 +290,18 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
     while (from > target && Date.now() - t0 < budget && accountUsage(acc.external_id) < USAGE_SOFT_LIMIT) {
       const chunkTo = addDays(from, -1)
       const chunkFrom = addDays(chunkTo, -13) < target ? target : addDays(chunkTo, -13)
-      rows += await syncInsightsRange(acc, token, chunkFrom, chunkTo)
+      rows += await syncInsightsRange(acc, token, chunkFrom, chunkTo, deadline)
       from = chunkFrom
       await sb.from('ad_accounts').update({ insights_from: from }).eq('id', acc.id)
     }
     await logSync({ workspace_id: acc.workspace_id, source: 'meta', target_id: acc.id, status: 'ok', rows, ms: Date.now() - t0 })
     return { rows, done: from <= target || accountUsage(acc.external_id) >= USAGE_SOFT_LIMIT }
   } catch (e) {
+    if (e instanceof DeadlineError) {
+      // No es un error: se terminó el tiempo de esta tanda y lo que falta sigue en la próxima
+      await logSync({ workspace_id: acc.workspace_id, source: 'meta', target_id: acc.id, status: 'ok', rows, ms: Date.now() - t0, error: 'Tanda parcial: sigue en la próxima actualización' })
+      return { rows, done: false }
+    }
     const msg = isRateLimit(e)
       ? `${RATE_LIMIT_PREFIX} Meta limitó las consultas de esta cuenta; Faro reintenta solo en ${COOLDOWN_MIN} minutos.`
       : isTooMuchData(e) ? 'Meta no pudo devolver tantos datos juntos; se reintenta con tandas más chicas.'
