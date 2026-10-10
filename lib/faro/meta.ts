@@ -50,6 +50,25 @@ export const COOLDOWN_MIN = 15
 export const isRateLimit = (e: unknown) =>
   e instanceof MetaError && ([17, 80000, 80001, 80002, 80003, 80004, 80005, 80006, 80008, 80014].includes(e.code ?? -1) || /demasiadas llamadas|too many calls|rate limit/i.test(e.message))
 
+/**
+ * Uso del límite de cada cuenta según Meta (0-100), leído del header x-business-use-case-usage.
+ * Con acceso de desarrollo el margen es chico: el historial se frena antes de llegar al bloqueo.
+ */
+const usage = new Map<string, number>()
+function trackUsage(res: { headers?: { get(name: string): string | null } }) {
+  const raw = res.headers?.get?.('x-business-use-case-usage')
+  if (!raw) return
+  try {
+    const j = JSON.parse(raw) as Record<string, { call_count?: number; total_cputime?: number; total_time?: number }[]>
+    for (const [id, list] of Object.entries(j)) {
+      const max = Math.max(0, ...list.map((u) => Math.max(u.call_count || 0, u.total_cputime || 0, u.total_time || 0)))
+      usage.set(id.replace(/^act_/, ''), max)
+    }
+  } catch { /* header raro: se ignora */ }
+}
+export const accountUsage = (externalId: string) => usage.get(externalId.replace(/^act_/, '')) ?? 0
+export const USAGE_SOFT_LIMIT = 60
+
 /** Meta no puede devolver tanto en una sola respuesta. */
 export const isTooMuchData = (e: unknown) =>
   e instanceof MetaError && (/reduce the amount of data|reducir la cantidad de datos/i.test(e.message) || (e.code === 1 && e.subcode === 99))
@@ -59,6 +78,7 @@ export async function graphGet<T = unknown>(path: string, token: string, params:
   const url = path.startsWith('http') ? path : `${GRAPH}/${path}?${new URLSearchParams(params)}`
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(withToken(url, token), { cache: 'no-store' })
+    trackUsage(res)
     const json = await res.json().catch(() => ({}))
     if (json?.error) {
       const e = json.error
@@ -249,7 +269,7 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
   try {
     const token = await getMetaToken(acc.connection_id)
     const entitiesAge = acc.last_entities_at ? Date.now() - new Date(acc.last_entities_at).getTime() : Infinity
-    if (opts.forceEntities || entitiesAge > 10 * 60000) rows += await syncEntities(acc, token)
+    if (opts.forceEntities || entitiesAge > (accountUsage(acc.external_id) >= USAGE_SOFT_LIMIT ? 30 : 10) * 60000) rows += await syncEntities(acc, token)
 
     const lastDay = acc.last_synced_at ? localDate(new Date(acc.last_synced_at), tz) : null
     const recentFrom = addDays(today, lastDay === today ? -2 : -6)
@@ -260,7 +280,7 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
     const target = addDays(today, -HISTORY_DAYS)
     let from = acc.insights_from || addDays(today, -6)
     if (!acc.insights_from) await sb.from('ad_accounts').update({ insights_from: from }).eq('id', acc.id)
-    while (from > target && Date.now() - t0 < budget) {
+    while (from > target && Date.now() - t0 < budget && accountUsage(acc.external_id) < USAGE_SOFT_LIMIT) {
       const chunkTo = addDays(from, -1)
       const chunkFrom = addDays(chunkTo, -13) < target ? target : addDays(chunkTo, -13)
       rows += await syncInsightsRange(acc, token, chunkFrom, chunkTo)
@@ -268,7 +288,7 @@ export async function syncAdAccount(acc: AdAccountRow, opts: { budgetMs?: number
       await sb.from('ad_accounts').update({ insights_from: from }).eq('id', acc.id)
     }
     await logSync({ workspace_id: acc.workspace_id, source: 'meta', target_id: acc.id, status: 'ok', rows, ms: Date.now() - t0 })
-    return { rows, done: from <= target }
+    return { rows, done: from <= target || accountUsage(acc.external_id) >= USAGE_SOFT_LIMIT }
   } catch (e) {
     const msg = isRateLimit(e)
       ? `${RATE_LIMIT_PREFIX} Meta limitó las consultas de esta cuenta; Faro reintenta solo en ${COOLDOWN_MIN} minutos.`

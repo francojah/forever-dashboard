@@ -83,3 +83,18 @@ describe('Meta: pedidos grandes y límites', () => {
     } finally { globalThis.fetch = orig }
   })
 })
+
+describe('Meta: uso del límite', () => {
+  it('lee el porcentaje de uso de la cuenta desde el header', async () => {
+    const { graphGet, accountUsage } = await import('../lib/faro/meta')
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => ({
+      headers: new Headers({ 'x-business-use-case-usage': JSON.stringify({ '123': [{ type: 'ads_insights', call_count: 12, total_cputime: 71, total_time: 40 }] }) }),
+      json: async () => ({ data: [] }),
+    }) as unknown as Response) as typeof fetch
+    try {
+      await graphGet('act_123/insights', 'tok')
+      expect(accountUsage('act_123')).toBe(71)
+    } finally { globalThis.fetch = orig }
+  })
+})
