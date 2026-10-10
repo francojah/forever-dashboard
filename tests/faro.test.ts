@@ -126,3 +126,17 @@ describe('mejoras automáticas de Meta', () => {
     expect(p.music).toBe(false)
   })
 })
+
+describe('registro de actividad de Meta', () => {
+  it('traduce presupuestos y estados', async () => {
+    const { parseActivity } = await import('../lib/faro/activity')
+    const b = parseActivity({ event_type: 'update_campaign_budget', translated_event_type: 'Presupuesto de campaña actualizado', event_time: '2026-10-08T21:43:02+0000', object_id: '1', object_name: 'RETARGETING', object_type: 'CAMPAIGN_GROUP',
+      extra_data: JSON.stringify({ old_value: { type: 'payment_amount', currency: 'ARS', old_value: 160000, additional_value: 'Diario' }, new_value: { type: 'payment_amount', currency: 'ARS', new_value: 200000, additional_value: 'Diario' } }) }, 'Forever')
+    expect(b.level).toBe('campaign')
+    expect(b.from).toBe('$ 1.600 (diario)')
+    expect(b.to).toBe('$ 2.000 (diario)')
+    const s = parseActivity({ event_type: 'update_ad_set_run_status', object_type: 'CAMPAIGN', extra_data: '{"old_value":"Activo","new_value":"Inactivo"}' }, 'Forever')
+    expect([s.level, s.from, s.to, s.app]).toEqual(['adset', 'Activo', 'Inactivo', null])
+    expect(parseActivity({ event_type: 'ad_account_billing_charge', object_type: 'ACCOUNT' }, 'x').billing).toBe(true)
+  })
+})
