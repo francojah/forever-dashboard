@@ -145,15 +145,23 @@ export async function runAdvisor(ctx: FaroContext, userId: string | null): Promi
       max_tokens: 3000,
       system: SYSTEM,
       tools: [TOOL],
-      tool_choice: { type: 'tool', name: 'plan' },
-      messages: [{ role: 'user', content: `Datos del negocio "${ctx.workspace.name}":\n${JSON.stringify(snapshot)}` }],
+      // Algunos modelos no aceptan forzar la herramienta: se pide por instrucción y se acepta JSON como respaldo
+      tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: `Datos del negocio "${ctx.workspace.name}":\n${JSON.stringify(snapshot)}\n\nRespondé únicamente llamando a la herramienta "plan".` }],
     }),
   })
   const j = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(j?.error?.message || `Error de la IA (${res.status})`)
-  const block = (j.content || []).find((b: { type: string }) => b.type === 'tool_use')
-  if (!block) throw new Error('La IA no devolvió un plan')
-  const report = block.input as AiReport
+  const content = (j.content || []) as { type: string; input?: unknown; text?: string }[]
+  const block = content.find((b) => b.type === 'tool_use')
+  let report = block?.input as AiReport | undefined
+  if (!report) {
+    // Respaldo: el plan vino como JSON en el texto
+    const text = content.filter((b) => b.type === 'text').map((b) => b.text || '').join('\n')
+    const m = text.match(/\{[\s\S]*\}/)
+    try { report = m ? JSON.parse(m[0]) as AiReport : undefined } catch { report = undefined }
+  }
+  if (!report?.acciones) throw new Error('La IA no devolvió un plan')
   const usage = { input: j.usage?.input_tokens || 0, output: j.usage?.output_tokens || 0 }
   const createdAt = new Date().toISOString()
   // Guardar el último análisis (si la tabla existe)
