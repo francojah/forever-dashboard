@@ -1,6 +1,7 @@
 import { apiContext, canEdit } from '@/lib/faro/context'
 import { svc } from '@/lib/faro/db'
 import { graphGet, graphPost, getMetaToken } from '@/lib/faro/meta'
+import { degreesOfFreedomSpec } from '@/lib/faro/enhancements'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -49,9 +50,14 @@ export async function POST(req: Request) {
   const message = messages[0]
   const headline = headlines[0]
   // Varios textos o títulos: variaciones que Meta combina sola
-  const feed = messages.length > 1 || headlines.length > 1
-    ? { asset_feed_spec: { bodies: messages.map((text) => ({ text })), ...(headlines.length ? { titles: headlines.map((text) => ({ text })) } : {}), optimization_type: 'DEGREES_OF_FREEDOM' } }
-    : {}
+  const prefs = ctx.workspace.settings.meta_enhancements
+  const multi = messages.length > 1 || headlines.length > 1
+  const feedSpec: Record<string, unknown> = {
+    ...(multi ? { bodies: messages.map((text) => ({ text })), ...(headlines.length ? { titles: headlines.map((text) => ({ text })) } : {}), optimization_type: 'DEGREES_OF_FREEDOM' } : {}),
+    // Música: se pide solo si está prendida; si ya hay asset_feed_spec, se manda vacía para dejarla apagada
+    ...(prefs.music ? { audios: [{ type: 'random' }] } : multi ? { audios: [] } : {}),
+  }
+  const feed = Object.keys(feedSpec).length ? { asset_feed_spec: feedSpec } : {}
 
   try {
     const token = await getMetaToken(acc.connection_id)
@@ -92,6 +98,7 @@ export async function POST(req: Request) {
 
     const creative = await graphPost<{ id: string }>(`${acc.external_id}/adcreatives`, token, {
       name: b.name, object_story_spec: objectStory, ...feed, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
+      degrees_of_freedom_spec: degreesOfFreedomSpec(prefs, b.type),
     })
     const created: { adsetId: string; adId?: string; error?: string }[] = []
     for (const set of adsets as { entity_id: string; name: string; campaign_id: string }[]) {

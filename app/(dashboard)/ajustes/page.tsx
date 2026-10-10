@@ -9,6 +9,7 @@ import ProductCosts from '@/components/faro/settings/ProductCosts'
 import Team from '@/components/faro/settings/Team'
 import SyncLog from '@/components/faro/settings/SyncLog'
 import BreakEven from '@/components/faro/settings/BreakEven'
+import MetaEnhancements from '@/components/faro/settings/MetaEnhancements'
 import { loadUnitEconomics } from '@/lib/faro/economics'
 import { addDays, localDate, startOfLocalDayUTC } from '@/lib/faro/dates'
 
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic'
 export default async function AjustesPage({ searchParams }: { searchParams: { tab?: string; connection?: string; error?: string; store?: string; bienvenida?: string } }) {
   const ctx = await getRequestContext()
   if (!ctx) redirect('/login')
-  const tab = ['conexiones', 'costos', 'equilibrio', 'productos', 'equipo', 'estado'].includes(searchParams.tab || '') ? searchParams.tab! : 'conexiones'
+  const tab = ['conexiones', 'costos', 'equilibrio', 'meta', 'productos', 'equipo', 'estado'].includes(searchParams.tab || '') ? searchParams.tab! : 'conexiones'
   const sb = svc()
   let body: React.ReactNode = null
 
@@ -58,6 +59,8 @@ export default async function AjustesPage({ searchParams }: { searchParams: { ta
   } else if (tab === 'equilibrio') {
     const e = await loadUnitEconomics(ctx, 30)
     body = <BreakEven base={{ fixedMonthly: e.fixedMonthly, fixedItems: e.fixedItems, aov: e.aov, contributionPct: e.contributionPct, adSpend: e.adSpend, netSales30: e.netSales, orders30: e.orders, adTaxPct: e.adTaxPct }} />
+  } else if (tab === 'meta') {
+    body = <MetaEnhancements initial={ctx.workspace.settings.meta_enhancements} canEdit={canEdit(ctx)} />
   } else if (tab === 'productos') {
     body = <ProductCosts canEdit={canEdit(ctx)} stores={ctx.stores.map((s) => ({ id: s.id, name: s.name }))} fallbackPct={ctx.workspace.settings.cost_fallback_pct} usePlatform={ctx.workspace.settings.use_platform_cost} />
   } else if (tab === 'equipo') {
@@ -79,6 +82,7 @@ export default async function AjustesPage({ searchParams }: { searchParams: { ta
         { key: 'conexiones', label: 'Conexiones' },
         { key: 'costos', label: 'Costos y comisiones', badge: !ctx.workspace.settings.configured ? <span className="w-2 h-2 rounded-full bg-beacon" /> : undefined },
         { key: 'equilibrio', label: 'Punto de equilibrio' },
+        { key: 'meta', label: 'Anuncios en Meta' },
         { key: 'productos', label: 'Costo de productos' },
         { key: 'equipo', label: 'Equipo' },
         { key: 'estado', label: 'Estado' },

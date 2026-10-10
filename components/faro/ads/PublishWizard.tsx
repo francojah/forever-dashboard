@@ -57,13 +57,13 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
 
 const input = 'rounded-lg border border-line bg-surface px-3 py-2 text-[13.5px]'
 
-export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ads, defaultLink, templates = [], preAdset, preDup }: {
+export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ads, defaultLink, templates = [], preAdset, preDup, enhancementsOn = 0 }: {
   canEdit: boolean
   accounts: { id: string; name: string; protected_ids: string[] }[]
   adsets: AdsetOpt[]; campaigns: CampaignOpt[]; ads: AdOpt[]
   defaultLink: string
   templates?: { accountId: string; name: string; body: string; title: string }[]
-  preAdset?: string | null; preDup?: string[]
+  preAdset?: string | null; preDup?: string[]; enhancementsOn?: number
 }) {
   const startAcc = (preAdset && adsets.find((s) => s.id === preAdset)?.accountId) || (preDup?.length && ads.find((a) => a.id === preDup[0])?.accountId) || accounts[0]?.id || ''
   const [account, setAccount] = useState(startAcc)
@@ -432,6 +432,7 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
           <p className="text-[13px] text-mute">{contentCount} {source === 'archivos' ? 'creativos' : 'anuncios a duplicar'} × {destCount} ad set{destCount === 1 ? '' : 's'}{dest === 'nuevo' ? ' nuevo' : ''}</p>
           {source === 'archivos' && (cleanTexts.length > 1 || cleanTitles.length > 1) && <p className="text-[12.5px] text-mute mt-1">{cleanTexts.length} textos y {cleanTitles.length || 1} títulos por anuncio</p>}
           <p className="text-[12.5px] text-faint mt-2">Todo se crea en pausa. Lo revisás y lo activás cuando quieras.</p>
+          {source === 'archivos' && <p className="text-[12.5px] text-mute mt-1">Mejoras automáticas de Meta: {enhancementsOn} prendidas, el resto apagadas. <a href="/ajustes?tab=meta" className="underline hover:text-ink">Cambiar</a></p>}
           <button onClick={run} disabled={running || missing.length > 0 || total === 0} className="mt-4 w-full rounded-lg bg-ink text-bg px-4 py-3 text-[14px] font-semibold disabled:opacity-50">
             {running ? 'Creando…' : `Crear ${total || ''} en pausa`}
           </button>

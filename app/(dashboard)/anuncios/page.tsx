@@ -7,6 +7,7 @@ import { loadOrders, loadCostIndex, summarizeSales, loadAdsDaily } from '@/lib/f
 import { PageHeader, PeriodPicker, Panel, Tabs, Empty } from '@/components/faro/ui'
 import AdsWorkspace from '@/components/faro/ads/AdsWorkspace'
 import PublishWizard from '@/components/faro/ads/PublishWizard'
+import { enabledCount } from '@/lib/faro/enhancements'
 import ChangeHistory from '@/components/faro/ads/ChangeHistory'
 import CreativeGallery, { CreativeCard } from '@/components/faro/ads/CreativeGallery'
 import { svc } from '@/lib/faro/db'
@@ -108,6 +109,7 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         templates={templates}
         preAdset={searchParams.adset || null}
         preDup={searchParams.dup ? searchParams.dup.split(',').filter(Boolean).slice(0, 20) : []}
+        enhancementsOn={enabledCount(ctx.workspace.settings.meta_enhancements)}
       />
     )
   } else {

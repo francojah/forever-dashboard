@@ -27,8 +27,8 @@ async function applyCopy(token: string, accountExternal: string, adId: string, v
   const ad = await graphGet<{ name: string; creative?: { id: string } }>(adId, token, { fields: 'name,creative{id}' })
   const oldCreative = ad.creative?.id
   if (!oldCreative) throw new Error('El anuncio no tiene creativo')
-  const cr = await graphGet<{ object_story_spec?: Record<string, unknown>; asset_feed_spec?: unknown; url_tags?: string; name?: string }>(
-    oldCreative, token, { fields: 'object_story_spec,asset_feed_spec,url_tags,name' })
+  const cr = await graphGet<{ object_story_spec?: Record<string, unknown>; asset_feed_spec?: unknown; url_tags?: string; name?: string; degrees_of_freedom_spec?: { creative_features_spec?: Record<string, { enroll_status?: string }> } }>(
+    oldCreative, token, { fields: 'object_story_spec,asset_feed_spec,url_tags,name,degrees_of_freedom_spec' })
   if (!cr.object_story_spec || cr.asset_feed_spec) throw new Error('Este anuncio usa un formato dinámico o una publicación existente: editá el texto desde Ads Manager')
   const spec = JSON.parse(JSON.stringify(cr.object_story_spec)) as Record<string, Record<string, unknown>>
   if (spec.link_data) {
@@ -51,6 +51,8 @@ async function applyCopy(token: string, accountExternal: string, adId: string, v
     name: `${cr.name || ad.name} · editado ${new Date().toISOString().slice(0, 10)}`,
     object_story_spec: spec,
     ...(cr.url_tags ? { url_tags: cr.url_tags } : {}),
+    // Conserva las mejoras automáticas que tenía el creativo original
+    ...(cr.degrees_of_freedom_spec?.creative_features_spec ? { degrees_of_freedom_spec: { creative_features_spec: Object.fromEntries(Object.entries(cr.degrees_of_freedom_spec.creative_features_spec).filter(([k, v]) => v?.enroll_status && k !== 'standard_enhancements').map(([k, v]) => [k, { enroll_status: v.enroll_status }])) } } : {}),
   })
   await graphPost(adId, token, { creative: { creative_id: created.id } })
   return { oldCreative, newCreative: created.id }

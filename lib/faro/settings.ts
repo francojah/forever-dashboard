@@ -13,6 +13,8 @@ export interface PaymentFee {
   label?: string
 }
 
+import { EnhancementPrefs, normalizePrefs } from './enhancements'
+
 export interface WorkspaceSettings {
   platform_fee_pct: number          // comisión de la plataforma (plan Tiendanube)
   payment_fees: PaymentFee[]        // comisiones de pasarela por método
@@ -23,6 +25,7 @@ export interface WorkspaceSettings {
   cost_fallback_pct: number         // si un producto no tiene costo: % del precio de venta
   use_platform_cost: boolean        // usar el "costo" cargado en Tiendanube cuando exista
   configured: boolean               // terminó el onboarding de costos
+  meta_enhancements: EnhancementPrefs // mejoras automáticas de Meta en anuncios nuevos
 }
 
 export const DEFAULT_SETTINGS: WorkspaceSettings = {
@@ -35,6 +38,7 @@ export const DEFAULT_SETTINGS: WorkspaceSettings = {
   cost_fallback_pct: 35,
   use_platform_cost: true,
   configured: false,
+  meta_enhancements: normalizePrefs(null),
 }
 
 /** Sugerencias editables que se muestran en el onboarding. No se aplican solas. */
@@ -79,6 +83,7 @@ export function normalizeSettings(raw: unknown): WorkspaceSettings {
     cost_fallback_pct: num(r.cost_fallback_pct, DEFAULT_SETTINGS.cost_fallback_pct),
     use_platform_cost: typeof r.use_platform_cost === 'boolean' ? r.use_platform_cost : true,
     configured: !!r.configured,
+    meta_enhancements: normalizePrefs(r.meta_enhancements),
   }
 }
 

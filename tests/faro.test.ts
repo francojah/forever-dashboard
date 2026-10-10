@@ -110,3 +110,19 @@ describe('embudo', () => {
     expect(w?.key).toBe('atc') // 30/1200 = 2,5% contra 4%
   })
 })
+
+describe('mejoras automáticas de Meta', () => {
+  it('manda todo explícito y respeta el tipo de anuncio', async () => {
+    const { degreesOfFreedomSpec, normalizePrefs } = await import('../lib/faro/enhancements')
+    const p = normalizePrefs({ features: { inline_comment: false } })
+    const img = degreesOfFreedomSpec(p, 'image').creative_features_spec
+    const vid = degreesOfFreedomSpec(p, 'video').creative_features_spec
+    expect(img.text_optimizations.enroll_status).toBe('OPT_OUT')
+    expect(img.image_touchups.enroll_status).toBe('OPT_IN')
+    expect(img.inline_comment.enroll_status).toBe('OPT_OUT')
+    expect(vid.image_touchups).toBeUndefined()
+    expect(vid.video_auto_crop.enroll_status).toBe('OPT_OUT')
+    expect(img.adapt_to_placement).toBeUndefined()
+    expect(p.music).toBe(false)
+  })
+})
