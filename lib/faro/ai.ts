@@ -102,34 +102,34 @@ Reglas:
 - "publicar": ideas concretas de creativos o ángulos a producir esta semana, apoyadas en lo que mejor rinde (formato, gancho, producto).
 - Máximo 7 acciones, ordenadas por impacto. Español rioplatense, claro y directo, sin relleno.`
 
-const TOOL = {
-  name: 'plan',
-  description: 'Plan de acción para la cuenta y la tienda',
-  input_schema: {
-    type: 'object',
-    required: ['resumen', 'acciones', 'publicar', 'no_tocar'],
-    properties: {
-      resumen: { type: 'string', description: 'Diagnóstico en 2-3 oraciones' },
-      acciones: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['tipo', 'prioridad', 'titulo', 'por_que', 'como', 'impacto', 'riesgo'],
-          properties: {
-            tipo: { type: 'string', enum: ['escalar', 'bajar', 'pausar', 'estructura', 'creativos', 'web', 'oferta', 'medicion'] },
-            prioridad: { type: 'integer', enum: [1, 2, 3] },
-            titulo: { type: 'string' },
-            por_que: { type: 'string' },
-            como: { type: 'array', items: { type: 'string' } },
-            impacto: { type: 'string' },
-            riesgo: { type: 'string' },
-            objetivo: { type: ['object', 'null'], properties: { nivel: { type: 'string', enum: ['campaign', 'adset', 'ad'] }, id: { type: 'string' }, nombre: { type: 'string' } } },
-          },
+/** Esquema del plan (salida estructurada: el JSON viene garantizado con esta forma). */
+const PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['resumen', 'acciones', 'publicar', 'no_tocar'],
+  properties: {
+    resumen: { type: 'string', description: 'Diagnóstico en 2-3 oraciones' },
+    acciones: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['tipo', 'prioridad', 'titulo', 'por_que', 'como', 'impacto', 'riesgo', 'objetivo_id', 'objetivo_nombre'],
+        properties: {
+          tipo: { type: 'string', enum: ['escalar', 'bajar', 'pausar', 'estructura', 'creativos', 'web', 'oferta', 'medicion'] },
+          prioridad: { type: 'integer', description: '1 urgente, 2 importante, 3 cuando se pueda' },
+          titulo: { type: 'string' },
+          por_que: { type: 'string' },
+          como: { type: 'array', items: { type: 'string' } },
+          impacto: { type: 'string' },
+          riesgo: { type: 'string' },
+          objetivo_id: { type: 'string', description: 'id de la campaña, ad set o anuncio afectado; vacío si no aplica' },
+          objetivo_nombre: { type: 'string', description: 'nombre del objetivo; vacío si no aplica' },
         },
       },
-      publicar: { type: 'array', items: { type: 'string' } },
-      no_tocar: { type: 'array', items: { type: 'string' } },
     },
+    publicar: { type: 'array', items: { type: 'string' } },
+    no_tocar: { type: 'array', items: { type: 'string' } },
   },
 }
 
@@ -142,26 +142,34 @@ export async function runAdvisor(ctx: FaroContext, userId: string | null): Promi
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
       model: AI_MODEL,
-      max_tokens: 3000,
+      // El razonamiento del modelo también cuenta acá: con poco margen se queda sin espacio para el plan
+      max_tokens: 16000,
       system: SYSTEM,
-      tools: [TOOL],
-      // Algunos modelos no aceptan forzar la herramienta: se pide por instrucción y se acepta JSON como respaldo
-      tool_choice: { type: 'auto' },
-      messages: [{ role: 'user', content: `Datos del negocio "${ctx.workspace.name}":\n${JSON.stringify(snapshot)}\n\nRespondé únicamente llamando a la herramienta "plan".` }],
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: PLAN_SCHEMA } },
+      messages: [{ role: 'user', content: `Datos del negocio "${ctx.workspace.name}":\n${JSON.stringify(snapshot)}` }],
     }),
   })
   const j = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(j?.error?.message || `Error de la IA (${res.status})`)
-  const content = (j.content || []) as { type: string; input?: unknown; text?: string }[]
-  const block = content.find((b) => b.type === 'tool_use')
-  let report = block?.input as AiReport | undefined
-  if (!report) {
-    // Respaldo: el plan vino como JSON en el texto
-    const text = content.filter((b) => b.type === 'text').map((b) => b.text || '').join('\n')
+  const content = (j.content || []) as { type: string; text?: string }[]
+  const text = content.filter((b) => b.type === 'text').map((b) => b.text || '').join('')
+  let raw: (Omit<AiReport, 'acciones'> & { acciones: (AiAction & { objetivo_id?: string; objetivo_nombre?: string })[] }) | undefined
+  try { raw = JSON.parse(text) } catch {
     const m = text.match(/\{[\s\S]*\}/)
-    try { report = m ? JSON.parse(m[0]) as AiReport : undefined } catch { report = undefined }
+    try { raw = m ? JSON.parse(m[0]) : undefined } catch { raw = undefined }
   }
-  if (!report?.acciones) throw new Error('La IA no devolvió un plan')
+  if (!raw?.acciones) {
+    const why = j.stop_reason === 'max_tokens' ? 'se quedó sin espacio para responder' : j.stop_reason === 'refusal' ? 'se negó a responder' : `respuesta inesperada (${j.stop_reason || 'sin motivo'})`
+    throw new Error(`La IA no devolvió un plan: ${why}`)
+  }
+  const report: AiReport = {
+    ...raw,
+    acciones: raw.acciones.map((a) => ({
+      ...a,
+      prioridad: (Math.min(3, Math.max(1, Number(a.prioridad) || 2)) as 1 | 2 | 3),
+      objetivo: a.objetivo_id ? { nivel: 'adset', id: a.objetivo_id, nombre: a.objetivo_nombre || a.objetivo_id } : null,
+    })),
+  }
   const usage = { input: j.usage?.input_tokens || 0, output: j.usage?.output_tokens || 0 }
   const createdAt = new Date().toISOString()
   // Guardar el último análisis (si la tabla existe)

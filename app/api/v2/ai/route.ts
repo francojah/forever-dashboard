@@ -2,7 +2,7 @@ import { apiContext } from '@/lib/faro/context'
 import { runAdvisor, aiConfigured } from '@/lib/faro/ai'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 /** Analiza la cuenta y la tienda con IA y devuelve un plan de acción. */
 export async function POST() {
