@@ -7,11 +7,14 @@ export const maxDuration = 60
 
 interface Body {
   accountId: string
-  adsetId: string
+  adsetId?: string
+  adsetIds?: string[]        // crear el mismo anuncio en varios ad sets
+  messages?: string[]        // varios textos: Meta elige la mejor combinación
+  headlines?: string[]
   path: string               // en el bucket faro-creatives
   type: 'image' | 'video'
   name: string
-  message: string
+  message?: string
   headline?: string
   link: string
   cta?: string
@@ -36,10 +39,19 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({})) as Body
   const acc = ctx.adAccounts.find((a) => a.id === b.accountId)
   if (!acc) return Response.json({ error: 'Cuenta inválida' }, { status: 400 })
-  if (!b.adsetId || !b.path || !b.pageId || !b.link || !b.name) return Response.json({ error: 'Faltan datos (ad set, archivo, página, link o nombre)' }, { status: 400 })
+  const adsetIds = Array.from(new Set((b.adsetIds?.length ? b.adsetIds : b.adsetId ? [b.adsetId] : []).filter(Boolean))).slice(0, 20)
+  const messages = (b.messages?.length ? b.messages : [b.message || '']).map((x) => x.trim()).filter(Boolean).slice(0, 5)
+  const headlines = (b.headlines?.length ? b.headlines : [b.headline || '']).map((x) => x.trim()).filter(Boolean).slice(0, 5)
+  if (!adsetIds.length || !b.path || !b.pageId || !b.link || !b.name || !messages.length) return Response.json({ error: 'Faltan datos (ad set, archivo, página, link, nombre o texto)' }, { status: 400 })
   if (!b.path.startsWith(`${ctx.workspace.id}/`)) return Response.json({ error: 'Archivo inválido' }, { status: 400 })
-  const { data: adset } = await svc().from('ad_entities').select('entity_id,name,campaign_id').eq('ad_account_id', acc.id).eq('entity_id', b.adsetId).eq('level', 'adset').maybeSingle()
-  if (!adset) return Response.json({ error: 'Ad set no encontrado en la cuenta' }, { status: 400 })
+  const { data: adsets } = await svc().from('ad_entities').select('entity_id,name,campaign_id').eq('ad_account_id', acc.id).in('entity_id', adsetIds).eq('level', 'adset')
+  if (!adsets || adsets.length !== adsetIds.length) return Response.json({ error: 'Algún ad set no se encontró en la cuenta' }, { status: 400 })
+  const message = messages[0]
+  const headline = headlines[0]
+  // Varios textos o títulos: variaciones que Meta combina sola
+  const feed = messages.length > 1 || headlines.length > 1
+    ? { asset_feed_spec: { bodies: messages.map((text) => ({ text })), ...(headlines.length ? { titles: headlines.map((text) => ({ text })) } : {}), optimization_type: 'DEGREES_OF_FREEDOM' } }
+    : {}
 
   try {
     const token = await getMetaToken(acc.connection_id)
@@ -55,7 +67,7 @@ export async function POST(req: Request) {
       const hash = Object.values(img.images || {})[0]?.hash
       if (!hash) throw new Error('Meta no devolvió la imagen')
       objectStory = { page_id: b.pageId, ...(b.igUserId ? { instagram_user_id: b.igUserId } : {}),
-        link_data: { image_hash: hash, link: b.link, message: b.message, ...(b.headline ? { name: b.headline } : {}), call_to_action: cta } }
+        link_data: { image_hash: hash, link: b.link, message, ...(headline ? { name: headline } : {}), call_to_action: cta } }
     } else {
       let videoId = b.videoId
       if (!videoId) {
@@ -75,26 +87,36 @@ export async function POST(req: Request) {
       const th = await graphGet<{ data?: { uri: string; is_preferred: boolean }[] }>(`${videoId}/thumbnails`, token)
       const thumb = (th.data || []).find((t) => t.is_preferred)?.uri || th.data?.[0]?.uri
       objectStory = { page_id: b.pageId, ...(b.igUserId ? { instagram_user_id: b.igUserId } : {}),
-        video_data: { video_id: videoId, ...(thumb ? { image_url: thumb } : {}), message: b.message, ...(b.headline ? { title: b.headline } : {}), call_to_action: cta } }
+        video_data: { video_id: videoId, ...(thumb ? { image_url: thumb } : {}), message, ...(headline ? { title: headline } : {}), call_to_action: cta } }
     }
 
     const creative = await graphPost<{ id: string }>(`${acc.external_id}/adcreatives`, token, {
-      name: b.name, object_story_spec: objectStory, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
+      name: b.name, object_story_spec: objectStory, ...feed, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
     })
-    const ad = await graphPost<{ id: string }>(`${acc.external_id}/ads`, token, {
-      name: b.name, adset_id: b.adsetId, creative: { creative_id: creative.id }, status: b.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
-    })
-    await svc().from('change_log').insert({
-      workspace_id: ctx.workspace.id, ad_account_id: acc.id, user_id: ctx.user.id, user_email: ctx.user.email,
-      level: 'ad', entity_id: ad.id, entity_name: b.name, field: 'create_ad',
-      old_value: null, new_value: { adset_id: b.adsetId, adset_name: adset.name, creative_id: creative.id, status: b.status || 'PAUSED' }, status: 'ok',
-    })
-    await svc().from('ad_entities').upsert({
-      ad_account_id: acc.id, entity_id: ad.id, level: 'ad', parent_id: b.adsetId, campaign_id: adset.campaign_id,
-      name: b.name, status: b.status || 'PAUSED', effective_status: b.status || 'PAUSED', creative: { id: creative.id }, synced_at: new Date().toISOString(),
-    }, { onConflict: 'ad_account_id,entity_id' })
+    const created: { adsetId: string; adId?: string; error?: string }[] = []
+    for (const set of adsets as { entity_id: string; name: string; campaign_id: string }[]) {
+      try {
+        const ad = await graphPost<{ id: string }>(`${acc.external_id}/ads`, token, {
+          name: b.name, adset_id: set.entity_id, creative: { creative_id: creative.id }, status: b.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+        })
+        created.push({ adsetId: set.entity_id, adId: ad.id })
+        await svc().from('change_log').insert({
+          workspace_id: ctx.workspace.id, ad_account_id: acc.id, user_id: ctx.user.id, user_email: ctx.user.email,
+          level: 'ad', entity_id: ad.id, entity_name: b.name, field: 'create_ad',
+          old_value: null, new_value: { adset_id: set.entity_id, adset_name: set.name, creative_id: creative.id, status: b.status || 'PAUSED', texts: messages.length, titles: headlines.length }, status: 'ok',
+        })
+        await svc().from('ad_entities').upsert({
+          ad_account_id: acc.id, entity_id: ad.id, level: 'ad', parent_id: set.entity_id, campaign_id: set.campaign_id,
+          name: b.name, status: b.status || 'PAUSED', effective_status: b.status || 'PAUSED', creative: { id: creative.id, body: message, title: headline || null }, synced_at: new Date().toISOString(),
+        }, { onConflict: 'ad_account_id,entity_id' })
+      } catch (e) {
+        created.push({ adsetId: set.entity_id, error: e instanceof Error ? e.message : 'Error de Meta' })
+      }
+    }
     await storage.remove([b.path]).catch(() => null)
-    return Response.json({ ok: true, adId: ad.id, creativeId: creative.id })
+    const ok = created.filter((c) => c.adId)
+    if (!ok.length) throw new Error(created[0]?.error || 'Meta rechazó el anuncio')
+    return Response.json({ ok: true, adId: ok[0].adId, adIds: ok.map((c) => c.adId), failed: created.filter((c) => c.error), creativeId: creative.id })
   } catch (e) {
     return Response.json({ ok: false, error: e instanceof Error ? e.message : 'Error de Meta' }, { status: 400 })
   }
