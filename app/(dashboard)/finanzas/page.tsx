@@ -35,9 +35,10 @@ function Statement({ p, noAds }: { p: PnL; noAds?: boolean }) {
   return (
     <table className="w-full text-[14px]">
       <tbody className="divide-y divide-line">
-        <Line noPct label="Ventas de productos a precio de lista" value={s.productsGross} net={n} kind="income" note={`${s.orders} órdenes pagadas · ${s.units} unidades`} />
+        <Line noPct label={<>Facturación <Explain>Lo cobrado en órdenes pagadas, envío incluido. Es el número que muestra Tiendanube. Abajo se separa en productos y envío.</Explain></>} value={n + s.shippingCustomer} net={n} kind="total" note={`${s.orders} órdenes pagadas · ${money(n)} productos + ${money(s.shippingCustomer)} envío`} />
+        <Line noPct label="Ventas de productos a precio de lista" value={s.productsGross} net={n} kind="income" note={`${s.units} unidades`} />
         <Line noPct label="Descuentos y promociones" value={s.discounts} net={n} note={s.productsGross > 0 ? `${pct(s.discounts / s.productsGross)} del precio de lista` : undefined} />
-        <Line label="Ventas netas" value={n} net={n} kind="total" />
+        <Line label="Ventas netas de productos" value={n} net={n} kind="total" note="Base de los porcentajes de esta tabla" />
         <Line label="Envío cobrado a clientes" value={s.shippingCustomer} net={n} kind="income" />
         <Line label="Costo de mercadería" value={s.cogs} net={n} tag={cogsTag} />
         <Line label="Envío pagado" value={s.shippingOwner} net={n} tag={<Badge title="Costo de envío que informa Tiendanube en cada orden">según Tiendanube</Badge>} />
@@ -103,12 +104,12 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
           <Panel title={`Resultado por mes · ${year}`} description="Barras: resultado operativo. Línea: ventas netas.">
             <ResultChart data={all.map((m) => ({ month: m.month, result: m.operatingResult, net: m.sales.netSales, closed: m.closed }))} selected={month} />
             <table className="w-full mt-4 text-[13px]">
-              <thead><tr className="text-mute text-left border-b border-line"><th className="font-medium py-1.5">Mes</th><th className="font-medium py-1.5 text-right">Ventas netas</th><th className="font-medium py-1.5 text-right">Publicidad</th><th className="font-medium py-1.5 text-right">Resultado</th></tr></thead>
+              <thead><tr className="text-mute text-left border-b border-line"><th className="font-medium py-1.5">Mes</th><th className="font-medium py-1.5 text-right">Facturación</th><th className="font-medium py-1.5 text-right">Publicidad</th><th className="font-medium py-1.5 text-right">Resultado</th></tr></thead>
               <tbody className="divide-y divide-line">
                 {[...all].reverse().map((m) => (
                   <tr key={m.month} className={m.month === month ? 'bg-beacon/10' : ''}>
                     <td className="py-1.5"><a href={`?m=${m.month}`} className="hover:underline">{monthLabel(m.month)}</a>{m.closed && <span className="ml-1.5 text-faint text-[11.5px]">cerrado</span>}</td>
-                    <td className="py-1.5 text-right num">{money(m.sales.netSales)}</td>
+                    <td className="py-1.5 text-right num">{money(m.sales.netSales + m.sales.shippingCustomer)}</td>
                     <td className="py-1.5 text-right num text-mute">{noAdsData(m.month) ? <span title="Meta todavía no trajo datos de este mes">sin datos</span> : money(m.ads.spend + m.adTax)}</td>
                     <td className={`py-1.5 text-right num ${m.operatingResult < 0 ? 'text-bad' : ''}`}>{money(m.operatingResult)}</td>
                   </tr>

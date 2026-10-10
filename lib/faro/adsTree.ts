@@ -31,6 +31,9 @@ export interface TreeNode {
   parentId: string | null
   campaignId: string | null
   thumbnail: string | null
+  image: string | null
+  isVideo: boolean
+  copy: { body: string | null; title: string | null } | null
   targeting: Record<string, unknown> | null
   frequency: number | null
   m: Metrics
@@ -45,7 +48,7 @@ interface EntityRow {
   ad_account_id: string; entity_id: string; level: 'campaign' | 'adset' | 'ad'; parent_id: string | null; campaign_id: string | null
   name: string; status: string | null; effective_status: string | null; objective: string | null; optimization_goal: string | null
   daily_budget: number | null; lifetime_budget: number | null; targeting: Record<string, unknown> | null
-  creative: { thumbnail_url?: string; image_url?: string } | null
+  creative: { thumbnail_url?: string; image_url?: string; video_id?: string; object_type?: string; body?: string; title?: string } | null
 }
 
 export async function loadAdsTree(
@@ -82,6 +85,9 @@ export async function loadAdsTree(
       dailyBudget: e.daily_budget != null ? Number(e.daily_budget) : null, lifetimeBudget: e.lifetime_budget != null ? Number(e.lifetime_budget) : null,
       budgetOwner: null, parentId: e.parent_id, campaignId: e.campaign_id,
       thumbnail: e.creative?.thumbnail_url || e.creative?.image_url || null,
+      image: e.creative?.image_url || e.creative?.thumbnail_url || null,
+      isVideo: !!e.creative?.video_id || e.creative?.object_type === 'VIDEO',
+      copy: e.creative ? { body: e.creative.body || null, title: e.creative.title || null } : null,
       targeting: e.targeting, frequency: null, m: zero(), children: [],
       protected: (acc.protected_ids || []).includes(e.entity_id) || (!!e.campaign_id && (acc.protected_ids || []).includes(e.campaign_id)),
     }

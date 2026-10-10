@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TreeNode } from '@/lib/faro/adsTree'
 import { money, int, ratio, pct } from '@/lib/faro/format'
@@ -31,7 +31,16 @@ function describe(field: Field, v: unknown): string {
   return v == null || v === '' ? '—' : String(v)
 }
 
-export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: { tree: TreeNode[]; accounts: Account[]; maxCpa: number | null; canEdit: boolean; focus: string | null }) {
+type View = 'resultados' | 'entrega' | 'embudo' | 'video'
+const VIEWS: { key: View; label: string }[] = [
+  { key: 'resultados', label: 'Resultados' }, { key: 'entrega', label: 'Entrega y costos' }, { key: 'embudo', label: 'Embudo' }, { key: 'video', label: 'Video' },
+]
+const div = (a: number, b: number) => (b > 0 ? a / b : null)
+
+export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1 }: { tree: TreeNode[]; accounts: Account[]; maxCpa: number | null; canEdit: boolean; focus: string | null; todaySpend?: Record<string, number>; hourShare?: number }) {
+  const [view, setView] = useState<View>('resultados')
+  useEffect(() => { try { const v = localStorage.getItem('faro_ads_view') as View | null; if (v && VIEWS.some((x) => x.key === v)) setView(v) } catch { /* sin storage */ } }, [])
+  const pickView = (v: View) => { setView(v); try { localStorage.setItem('faro_ads_view', v) } catch { /* sin storage */ } }
   const router = useRouter()
   const [account, setAccount] = useState<string>('all')
   const [showInactive, setShowInactive] = useState(false)
@@ -129,12 +138,60 @@ export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: {
 
   const anyProtectedPending = Array.from(pending.values()).some((p) => isProtected(p.node))
 
+  type Cell = { v: React.ReactNode; tone?: string; title?: string }
+  const cellsFor = (n: TreeNode): Cell[] => {
+    const m = n.m
+    const cpa = div(m.spend, m.purchases)
+    const roas = m.purchaseValue > 0 ? div(m.purchaseValue, m.spend) : null
+    const cpaTone = cpa != null && maxCpa != null ? (cpa <= maxCpa ? 'text-good' : 'text-bad') : 'text-mute'
+    const freq: Cell = { v: n.frequency != null ? n.frequency.toLocaleString('es-AR', { maximumFractionDigits: 1 }) : '', tone: n.frequency != null && n.frequency > 3 ? 'text-warn font-medium' : '' }
+    if (view === 'entrega') return [
+      { v: money(m.spend) },
+      { v: money(todaySpend[n.id] || 0), tone: 'text-mute' },
+      { v: int(m.impressions) },
+      { v: money(div(m.spend * 1000, m.impressions)), title: 'Costo por mil impresiones' },
+      { v: pct(div(m.linkClicks, m.impressions), 2), title: 'Clics en el enlace ÷ impresiones' },
+      { v: money(div(m.spend, m.linkClicks)), title: 'Costo por clic en el enlace' },
+      { v: money(div(m.spend, m.lpv)), title: 'Costo por visita a la web (landing page view)' },
+      freq,
+    ]
+    if (view === 'embudo') return [
+      { v: int(m.linkClicks) },
+      { v: int(m.lpv), title: `${pct(div(m.lpv, m.linkClicks))} de los clics llegó a cargar la web` },
+      { v: int(m.atc), title: `${pct(div(m.atc, m.lpv), 1)} de las visitas agregó al carrito` },
+      { v: int(m.ic), title: `${pct(div(m.ic, m.atc))} de los carritos inició el pago` },
+      { v: int(m.purchases), title: `${pct(div(m.purchases, m.ic))} de los pagos iniciados terminó en compra` },
+      { v: pct(div(m.purchases, m.lpv), 2), title: 'Compras ÷ visitas a la web' },
+      { v: cpa != null ? money(cpa) : '—', tone: cpaTone },
+    ]
+    if (view === 'video') return [
+      { v: money(m.spend) },
+      { v: pct(div(m.video3s, m.impressions)), title: 'Hook rate: reproducciones de 3 s ÷ impresiones. Bueno: más de 25%' },
+      { v: pct(div(m.videoP50, m.video3s)), title: 'Retención: vieron la mitad ÷ los que vieron 3 s' },
+      { v: pct(div(m.linkClicks, m.impressions), 2) },
+      { v: cpa != null ? money(cpa) : '—', tone: cpaTone },
+      freq,
+    ]
+    return [
+      { v: money(m.spend) },
+      { v: int(m.purchases) },
+      { v: cpa != null ? money(cpa) : '—', tone: cpaTone },
+      { v: roas != null ? ratio(roas) : '—' },
+      { v: pct(div(m.linkClicks, m.impressions), 2) },
+      { v: money(div(m.spend, m.linkClicks)), title: 'Costo por clic en el enlace' },
+      freq,
+    ]
+  }
+  const HEAD: Record<View, string[]> = {
+    resultados: ['Gasto', 'Compras', 'Costo/compra', 'ROAS Meta', 'CTR', 'CPC', 'Frecuencia'],
+    entrega: ['Gasto', 'Gasto hoy', 'Impresiones', 'CPM', 'CTR', 'CPC', 'Costo/visita', 'Frecuencia'],
+    embudo: ['Clics', 'Visitas web', 'Carrito', 'Inicio de pago', 'Compras', 'Conversión', 'Costo/compra'],
+    video: ['Gasto', 'Hook rate', 'Retención 50%', 'CTR', 'Costo/compra', 'Frecuencia'],
+  }
+
   const Row = ({ n, depth }: { n: TreeNode; depth: number }) => {
     const status = valueOf(n, 'status') as string
     const budget = valueOf(n, 'daily_budget') as number | null
-    const cpa = n.m.purchases > 0 ? n.m.spend / n.m.purchases : null
-    const ctr = n.m.impressions > 0 ? n.m.linkClicks / n.m.impressions : null
-    const roas = n.m.spend > 0 && n.m.purchaseValue > 0 ? n.m.purchaseValue / n.m.spend : null
     const hasKids = n.children.length > 0
     const prot = isProtected(n)
     const inactiveParent = n.effectiveStatus && !['ACTIVE', 'PAUSED'].includes(n.effectiveStatus)
@@ -198,13 +255,9 @@ export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: {
               <button disabled={!canEdit} onClick={() => setBudgetEdit(n.id)} className={`rounded px-1 hover:bg-sunken ${pending.has(`${n.id}:daily_budget`) ? 'text-beacon-ink font-semibold' : ''}`} title="Editar presupuesto diario">{money(budget)}</button>
             )
           ) : <span className="text-faint">{n.level === 'adset' ? 'de campaña' : n.level === 'campaign' && n.children.some((c) => c.dailyBudget) ? 'por ad set' : '—'}</span>}
+          {budget != null && <Pacing spent={todaySpend[n.id] || 0} budget={budget} hourShare={hourShare} />}
         </td>
-        <td className="px-2 py-2 text-right num">{money(n.m.spend)}</td>
-        <td className="px-2 py-2 text-right num">{int(n.m.purchases)}</td>
-        <td className={`px-2 py-2 text-right num ${cpa != null && maxCpa != null ? (cpa <= maxCpa ? 'text-good' : 'text-bad') : 'text-mute'}`}>{cpa != null ? money(cpa) : '—'}</td>
-        <td className="px-2 py-2 text-right num">{roas != null ? ratio(roas) : '—'}</td>
-        <td className="px-2 py-2 text-right num">{pct(ctr, 2)}</td>
-        <td className={`px-3 py-2 text-right num ${n.frequency != null && n.frequency > 3 ? 'text-warn font-medium' : ''}`}>{n.frequency != null ? n.frequency.toLocaleString('es-AR', { maximumFractionDigits: 1 }) : ''}</td>
+        {cellsFor(n).map((c, i) => <td key={i} className={`px-2 py-2 text-right num whitespace-nowrap ${i === cellsFor(n).length - 1 ? 'pr-3' : ''} ${c.tone || ''}`} title={c.title}>{c.v}</td>)}
       </tr>
     )
   }
@@ -224,6 +277,9 @@ export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: {
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
+        <div role="tablist" aria-label="Columnas" className="flex rounded-lg border border-line bg-surface p-0.5 text-[13px]">
+          {VIEWS.map((v) => <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => pickView(v.key)} className={`rounded-md px-2.5 py-1 ${view === v.key ? 'bg-ink text-bg font-medium' : 'text-mute hover:text-ink'}`}>{v.label}</button>)}
+        </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre" className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13.5px] w-56" aria-label="Buscar" />
         <label className="flex items-center gap-2 text-[13.5px] text-mute">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-[rgb(var(--f-ink))]" />
@@ -251,17 +307,12 @@ export default function AdsManager({ tree, accounts, maxCpa, canEdit, focus }: {
               <th className="w-8" />
               <th className="font-medium py-2.5 pr-3">Nombre</th>
               <th className="font-medium px-2 py-2.5 text-right">Presupuesto/día</th>
-              <th className="font-medium px-2 py-2.5 text-right">Gasto</th>
-              <th className="font-medium px-2 py-2.5 text-right">Compras</th>
-              <th className="font-medium px-2 py-2.5 text-right">Costo/compra</th>
-              <th className="font-medium px-2 py-2.5 text-right">ROAS Meta</th>
-              <th className="font-medium px-2 py-2.5 text-right">CTR</th>
-              <th className="font-medium px-3 py-2.5 text-right">Frecuencia</th>
+              {HEAD[view].map((h, i) => <th key={h} className={`font-medium px-2 py-2.5 text-right whitespace-nowrap ${i === HEAD[view].length - 1 ? 'pr-3' : ''}`}>{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {visible.length ? renderRows(visible, 0) : (
-              <tr><td colSpan={9} className="py-10 text-center text-mute">No hay campañas con gasto o activas en este período.</td></tr>
+              <tr><td colSpan={3 + HEAD[view].length} className="py-10 text-center text-mute">No hay campañas con gasto o activas en este período.</td></tr>
             )}
           </tbody>
         </table>
@@ -392,3 +443,16 @@ function EditDialog({ editing, onClose, onStage }: { editing: { node: TreeNode; 
   )
 }
 
+
+/** Cuánto del presupuesto diario se gastó hoy, contra lo esperable a esta hora. */
+function Pacing({ spent, budget, hourShare }: { spent: number; budget: number; hourShare: number }) {
+  const share = budget > 0 ? spent / budget : 0
+  const expected = Math.max(0.05, hourShare)
+  const tone = share > expected * 1.35 ? 'bg-warn' : share < expected * 0.5 ? 'bg-faint' : 'bg-good'
+  return (
+    <div className="mt-1 ml-auto w-24" title={`Hoy: ${money(spent)} de ${money(budget)} (${Math.round(share * 100)}%). A esta hora lo esperable es ~${Math.round(hourShare * 100)}%.`}>
+      <div className="h-1 rounded-full bg-line overflow-hidden"><div className={`h-full ${tone}`} style={{ width: `${Math.min(100, share * 100)}%` }} /></div>
+      <p className="text-[11px] text-faint mt-0.5 num">hoy {money(spent)}</p>
+    </div>
+  )
+}

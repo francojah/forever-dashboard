@@ -6,8 +6,14 @@ import { loadSales, Breakdown } from '@/lib/faro/sales'
 import { PageHeader, PeriodPicker, Panel, Tabs, Delta, Empty, Badge } from '@/components/faro/ui'
 import { money, int, pct } from '@/lib/faro/format'
 import { pctDelta } from '@/lib/faro/metrics'
+import { loadFunnel, funnelSteps } from '@/lib/faro/funnel'
+import type { StoreRow } from '@/lib/faro/tiendanube'
+import Funnel from '@/components/faro/Funnel'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+const TABS = [{ key: 'resumen', label: 'Resumen' }, { key: 'embudo', label: 'Embudo' }, { key: 'productos', label: 'Productos' }, { key: 'clientes', label: 'Clientes' }]
 
 function Bars({ rows, value = 'amount', note }: { rows: Breakdown[]; value?: 'amount' | 'orders'; note?: (r: Breakdown) => React.ReactNode }) {
   const max = Math.max(1, ...rows.map((r) => r[value]))
@@ -35,13 +41,25 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
   if (!ctx.stores.length) {
     return (<><PageHeader title="Ventas" /><Panel><Empty title="Todavía no conectaste una tienda"><Link href="/ajustes?tab=conexiones" className="underline">Conectar Tiendanube</Link></Empty></Panel></>)
   }
-  const tab = ['resumen', 'productos', 'clientes'].includes(searchParams.tab || '') ? searchParams.tab! : 'resumen'
+  const tab = ['resumen', 'embudo', 'productos', 'clientes'].includes(searchParams.tab || '') ? searchParams.tab! : 'resumen'
   const period = resolvePeriod(parsePeriodKey(searchParams.p), ctx.workspace.timezone, new Date(), { from: searchParams.from, to: searchParams.to })
+  if (tab === 'embudo') {
+    const f = await loadFunnel({ stores: ctx.stores.filter((x) => x.active) as unknown as StoreRow[], accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id), tz: ctx.workspace.timezone, period })
+    return (
+      <>
+        <PageHeader title="Ventas" description={`${period.label} comparado con ${f.prevLabel}. Dónde se pierde la gente entre el anuncio y el pago.`}>
+          <PeriodPicker value={period.key} from={period.from} to={period.to} />
+        </PageHeader>
+        <Tabs value={tab} tabs={TABS} />
+        <Funnel steps={funnelSteps(f.cur, f.prev)} cur={f.cur} prevLabel={f.prevLabel} adminUrl={null} />
+      </>
+    )
+  }
   const d = await loadSales(ctx, period, tab === 'productos')
   const s = d.sales
 
   const figures = [
-    { label: 'Ventas netas', value: money(s.netSales), delta: pctDelta(s.netSales, d.prev.netSales) },
+    { label: 'Facturación', value: money(s.netSales + s.shippingCustomer), delta: pctDelta(s.netSales + s.shippingCustomer, d.prev.netSales + (d.prev.shippingCustomer || 0)) },
     { label: 'Órdenes pagadas', value: int(s.orders), delta: pctDelta(s.orders, d.prev.orders) },
     { label: 'Ticket promedio', value: money(s.orders ? s.netSales / s.orders : null), delta: pctDelta(s.orders ? s.netSales / s.orders : null, d.prev.orders ? d.prev.netSales / d.prev.orders : null) },
     { label: 'Unidades por orden', value: s.orders ? (s.units / s.orders).toLocaleString('es-AR', { maximumFractionDigits: 1 }) : '—', delta: pctDelta(s.orders ? s.units / s.orders : null, d.prev.orders ? d.prev.units / d.prev.orders : null) },
@@ -53,7 +71,7 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
       <PageHeader title="Ventas" description={`${period.label} comparado con ${d.prevLabel}. Solo órdenes pagadas y no canceladas.`}>
         <PeriodPicker value={period.key} from={period.from} to={period.to} />
       </PageHeader>
-      <Tabs value={tab} tabs={[{ key: 'resumen', label: 'Resumen' }, { key: 'productos', label: 'Productos' }, { key: 'clientes', label: 'Clientes' }]} />
+      <Tabs value={tab} tabs={TABS} />
 
       {tab === 'resumen' && (
         <div className="flex flex-col gap-5">

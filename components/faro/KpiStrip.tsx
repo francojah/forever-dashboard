@@ -10,11 +10,11 @@ export default function KpiStrip({ cur, before, prevLabel, currency }: { cur: Pe
   const s = cur.sales
   const items = [
     {
-      label: 'Ventas netas',
-      value: money(s.netSales, { currency }),
-      sub: `${int(s.orders)} órdenes · ticket ${money(cur.aov, { currency })}`,
-      delta: pctDelta(s.netSales, before.sales.netSales), up: true,
-      explain: <>Lo cobrado por productos, sin el envío: {money(s.netSales + s.shippingCustomer)} cobrados − {money(s.shippingCustomer)} de envío. Ya descuenta {money(s.discounts)} de promociones. Solo órdenes pagadas y no canceladas.</>,
+      label: 'Facturación',
+      value: money(s.netSales + s.shippingCustomer, { currency }),
+      sub: `${int(s.orders)} órdenes · ${money(s.netSales, { currency })} en productos + ${money(s.shippingCustomer, { currency })} de envío`,
+      delta: pctDelta(s.netSales + s.shippingCustomer, before.sales.netSales + before.sales.shippingCustomer), up: true,
+      explain: <>Lo cobrado en órdenes pagadas y no canceladas, envío incluido: es el mismo número que muestra Tiendanube. Ventas netas de productos {money(s.netSales)} (ya descuenta {money(s.discounts)} de promociones) + envío cobrado {money(s.shippingCustomer)}. Ticket promedio de productos {money(cur.aov)}.</>,
     },
     {
       label: 'Ganancia después de publicidad',

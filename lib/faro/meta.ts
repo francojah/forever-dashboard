@@ -173,7 +173,7 @@ export async function syncEntities(acc: AdAccountRow, token: string, deadline?: 
       effective_status: eff, limit: '200',
     }, 50, deadline),
     graphAll<Record<string, unknown>>(`${acc.external_id}/ads`, token, {
-      fields: 'id,name,status,effective_status,adset_id,campaign_id,created_time,updated_time,creative{id,thumbnail_url,image_url,object_type,body,title,video_id,effective_object_story_id,object_story_spec{page_id,instagram_user_id}}',
+      fields: 'id,name,status,effective_status,adset_id,campaign_id,created_time,updated_time,creative.thumbnail_width(480).thumbnail_height(480){id,thumbnail_url,image_url,object_type,body,title,video_id,effective_object_story_id,object_story_spec{page_id,instagram_user_id}}',
       effective_status: eff, limit: '100',
     }, 50, deadline),
   ])

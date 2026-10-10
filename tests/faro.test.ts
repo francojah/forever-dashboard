@@ -98,3 +98,15 @@ describe('Meta: uso del límite', () => {
     } finally { globalThis.fetch = orig }
   })
 })
+
+describe('embudo', () => {
+  it('marca como traba el paso más flojo contra su referencia', async () => {
+    const { funnelSteps } = await import('../lib/faro/funnel')
+    const { weakest } = await import('../lib/faro/funnel')
+    const ads = { spend: 1000, impressions: 100000, linkClicks: 1500, lpv: 1200, atc: 30, ic: 15, purchases: 8, purchaseValue: 0 }
+    const store = { abandoned: 50, abandonedValue: 0, abandonedWithEmail: 0, ordersCreated: 40, ordersPaid: 36, unpaid: 4, unpaidValue: 0, cancelled: 0, partial: false }
+    const s = funnelSteps({ ads, store }, { ads, store })
+    const w = weakest([...s.ads, ...s.store])
+    expect(w?.key).toBe('atc') // 30/1200 = 2,5% contra 4%
+  })
+})

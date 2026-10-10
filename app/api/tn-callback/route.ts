@@ -50,6 +50,15 @@ export async function GET(req: NextRequest) {
     if (ctx instanceof Response) return NextResponse.redirect(new URL('/login', req.url))
     const info = await fetchStoreInfo(userId, accessToken).catch(() => ({ name: `Tienda ${userId}`, currency: 'ARS', url: null }))
     const sb = svc()
+    // Una tienda pertenece a un solo negocio. Si ya está en otro, casi siempre es porque
+    // Tiendanube tenía abierta la sesión de otra tienda al autorizar.
+    const { data: elsewhere } = await sb.from('stores').select('workspace_id, workspaces(name)')
+      .eq('platform', 'tiendanube').eq('external_id', userId).neq('workspace_id', ctx.workspace.id).limit(1).maybeSingle()
+    if (elsewhere) {
+      const other = (elsewhere as unknown as { workspaces?: { name?: string } | null }).workspaces?.name || 'otro negocio'
+      cookies().delete('faro_tn_ws')
+      return back(`error=${encodeURIComponent(`La tienda ${info.name} ya está conectada en ${other}. Cerrá sesión en Tiendanube, entrá con la cuenta de la tienda que querés sumar y volvé a conectar.`)}`)
+    }
     const { data: conn, error } = await sb.from('connections').upsert({
       workspace_id: ctx.workspace.id, provider: 'tiendanube', external_id: userId, label: info.name,
       access_token: accessToken, status: 'ok', last_error: null, updated_at: new Date().toISOString(),

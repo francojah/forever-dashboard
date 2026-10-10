@@ -16,6 +16,29 @@ interface Item {
   error?: string
   adId?: string
   activated?: boolean
+  ratio?: string
+  ratioWarn?: string
+  message?: string
+  headline?: string
+  open?: boolean
+}
+
+/** Proporción del archivo y si sirve para los formatos de Meta (1:1, 4:5, 9:16). */
+function measure(file: File, type: 'image' | 'video', url: string): Promise<{ ratio?: string; ratioWarn?: string }> {
+  return new Promise((resolve) => {
+    const done = (w: number, h: number) => {
+      if (!w || !h) return resolve({})
+      const r = w / h
+      const known: [string, number][] = [['1:1', 1], ['4:5', 0.8], ['9:16', 0.5625], ['16:9', 1.778]]
+      const near = known.find(([, v]) => Math.abs(r - v) < 0.03)
+      const label = near ? near[0] : `${w}×${h}`
+      const warn = !near ? 'Proporción poco común: Meta lo recorta' : near[0] === '16:9' ? 'Horizontal: rinde peor en Reels e Historias' : (Math.min(w, h) < 600 ? 'Resolución baja' : undefined)
+      resolve({ ratio: label, ratioWarn: warn })
+    }
+    if (type === 'image') { const i = new Image(); i.onload = () => done(i.naturalWidth, i.naturalHeight); i.onerror = () => resolve({}); i.src = url }
+    else { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight); v.onerror = () => resolve({}); v.src = url }
+    void file
+  })
 }
 
 const CTAS = [
@@ -30,7 +53,7 @@ function baseName(f: string) {
 }
 const today = () => { const d = new Date(); return `${d.getDate()}/${d.getMonth() + 1}` }
 
-export default function CreativeUploader({ canEdit, accounts, adsets, defaultLink }: { canEdit: boolean; accounts: { id: string; name: string; protected_ids: string[] }[]; adsets: AdsetOpt[]; defaultLink: string }) {
+export default function CreativeUploader({ canEdit, accounts, adsets, defaultLink, templates = [] }: { canEdit: boolean; accounts: { id: string; name: string; protected_ids: string[] }[]; adsets: AdsetOpt[]; defaultLink: string; templates?: { accountId: string; name: string; body: string; title: string }[] }) {
   const [account, setAccount] = useState(accounts[0]?.id || '')
   const [adset, setAdset] = useState('')
   const [identities, setIdentities] = useState<Identity[]>([])
@@ -67,6 +90,7 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
       add.push({ key: `${f.name}-${f.size}-${Math.random()}`, file: f, preview: URL.createObjectURL(f), type, name: `${type === 'video' ? 'VID' : 'IMG'} - ${baseName(f.name)} - ${today()}`, state: 'listo' })
     })
     setItems((cur) => [...cur, ...add].slice(0, 30))
+    add.forEach((it) => measure(it.file, it.type, it.preview).then((r) => update(it.key, r)))
   }
 
   const update = (key: string, patch: Partial<Item>) => setItems((cur) => cur.map((i) => (i.key === key ? { ...i, ...patch } : i)))
@@ -85,7 +109,8 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
         const r = await fetch('/api/v2/meta/publish', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            accountId: account, adsetId: adset, path: u.path, type: it.type, name: it.name, message, headline, link, cta,
+            accountId: account, adsetId: adset, path: u.path, type: it.type, name: it.name,
+            message: it.message?.trim() || message, headline: it.headline?.trim() || headline, link, cta,
             urlTags: utm ? UTM : undefined, pageId: id?.page_id, igUserId: id?.instagram_user_id, videoId,
           }),
         }).then((x) => x.json())
@@ -101,7 +126,10 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
 
   async function publishAll() {
     setRunning(true)
-    for (const it of items.filter((i) => i.state === 'listo' || i.state === 'error')) await publishOne(it)
+    // De a dos a la vez: más rápido sin saturar el límite de Meta
+    const queue = items.filter((i) => i.state === 'listo' || i.state === 'error')
+    const worker = async () => { for (let it = queue.shift(); it; it = queue.shift()) await publishOne(it) }
+    await Promise.all([worker(), worker()])
     setRunning(false)
   }
 
@@ -117,7 +145,7 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
   if (!canEdit) return <Panel><p className="text-mute">Tu rol es de solo lectura.</p></Panel>
   const ready = items.filter((i) => i.state === 'listo' || i.state === 'error').length
   const created = items.filter((i) => i.state === 'creado' && !i.activated && i.adId)
-  const missing = [!adset && 'elegí un ad set', !identities.length && 'la cuenta no tiene página detectada', !link && 'falta el link', !message.trim() && 'falta el texto principal', !items.length && 'agregá archivos'].filter(Boolean)
+  const missing = [!adset && 'elegí un ad set', !identities.length && 'la cuenta no tiene página detectada', !link && 'falta el link', !message.trim() && !items.every((i) => i.message?.trim()) && 'falta el texto principal', !items.length && 'agregá archivos'].filter(Boolean)
 
   return (
     <div className="grid lg:grid-cols-[1fr_380px] gap-5">
@@ -143,7 +171,18 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
                     : <video src={it.preview} className="w-14 h-14 rounded object-cover border border-line" muted />}
                   <div className="flex-1 min-w-0">
                     <input value={it.name} disabled={it.state !== 'listo' && it.state !== 'error'} onChange={(e) => update(it.key, { name: e.target.value })} className="w-full rounded border border-transparent hover:border-line focus:border-line bg-transparent px-1.5 py-1 text-[13.5px] text-ink" aria-label="Nombre del anuncio" />
-                    <p className="px-1.5 text-[12px] text-mute">{it.type === 'video' ? 'Video' : 'Imagen'} · {(it.file.size / 1024 / 1024).toLocaleString('es-AR', { maximumFractionDigits: 1 })} MB {it.error && <span className="text-bad">· {it.error}</span>}</p>
+                    <p className="px-1.5 text-[12px] text-mute">
+                      {it.type === 'video' ? 'Video' : 'Imagen'} · {(it.file.size / 1024 / 1024).toLocaleString('es-AR', { maximumFractionDigits: 1 })} MB
+                      {it.ratio && <> · {it.ratio}</>}{it.ratioWarn && <span className="text-warn"> · {it.ratioWarn}</span>}
+                      {(it.state === 'listo' || it.state === 'error') && <> · <button type="button" onClick={() => update(it.key, { open: !it.open })} className="underline hover:text-ink">{it.message || it.headline ? 'texto propio' : 'texto propio (opcional)'}</button></>}
+                      {it.error && <span className="text-bad"> · {it.error}</span>}
+                    </p>
+                    {it.open && (
+                      <div className="mt-1.5 px-1.5 flex flex-col gap-1.5">
+                        <textarea rows={3} value={it.message || ''} onChange={(e) => update(it.key, { message: e.target.value })} placeholder="Texto principal solo para este anuncio (si lo dejás vacío usa el general)" className="rounded border border-line bg-surface px-2 py-1 text-[13px]" />
+                        <input value={it.headline || ''} onChange={(e) => update(it.key, { headline: e.target.value })} placeholder="Título solo para este anuncio" className="rounded border border-line bg-surface px-2 py-1 text-[13px]" />
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0">
                     {it.state === 'listo' && <button onClick={() => setItems((c) => c.filter((x) => x.key !== it.key))} className="text-[12.5px] text-mute hover:text-ink">Quitar</button>}
@@ -192,6 +231,14 @@ export default function CreativeUploader({ canEdit, accounts, adsets, defaultLin
         </Panel>
         <Panel title="Texto">
           <div className="flex flex-col gap-3 text-[13.5px]">
+            {templates.some((t) => t.accountId === account) && (
+              <label className="flex flex-col gap-1">Copiar texto de un anuncio activo
+                <select value="" onChange={(e) => { const t = templates.filter((x) => x.accountId === account)[Number(e.target.value)]; if (t) { setMessage(t.body); setHeadline(t.title) } }} className="rounded-lg border border-line bg-surface px-3 py-2">
+                  <option value="">Elegí un anuncio…</option>
+                  {templates.filter((t) => t.accountId === account).map((t, i) => <option key={i} value={i}>{t.name}</option>)}
+                </select>
+              </label>
+            )}
             <label className="flex flex-col gap-1">Texto principal<textarea rows={5} value={message} onChange={(e) => setMessage(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
             <label className="flex flex-col gap-1">Título<input value={headline} onChange={(e) => setHeadline(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
             <label className="flex flex-col gap-1">Link de destino<input value={link} onChange={(e) => setLink(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>

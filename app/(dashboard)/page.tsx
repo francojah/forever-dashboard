@@ -8,6 +8,8 @@ import KpiStrip from '@/components/faro/KpiStrip'
 import DailyChart from '@/components/faro/DailyChart'
 import ActionList from '@/components/faro/ActionList'
 import SetupNotice from '@/components/faro/SetupNotice'
+import AiAdvisor from '@/components/faro/AiAdvisor'
+import { lastReport, aiConfigured } from '@/lib/faro/ai'
 import { money, int, ratio, pct } from '@/lib/faro/format'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +20,7 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
   if (!ctx.stores.length && !ctx.adAccounts.length) redirect('/ajustes?tab=conexiones&bienvenida=1')
 
   const period = resolvePeriod(parsePeriodKey(searchParams.p), ctx.workspace.timezone, new Date(), { from: searchParams.from, to: searchParams.to })
-  const d = await loadHome(ctx, period)
+  const [d, ai] = await Promise.all([loadHome(ctx, period), lastReport(ctx.workspace.id)])
   const cur = ctx.workspace.currency
 
   return (
@@ -36,6 +38,8 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
         </Panel>
 
         <ActionList actions={d.actions} canEdit={canEdit(ctx)} />
+
+        {ctx.adAccounts.length > 0 && <AiAdvisor initial={ai} configured={aiConfigured()} timezone={ctx.workspace.timezone} />}
 
         <div className="grid lg:grid-cols-2 gap-5">
           <Panel title="Campañas" description={period.label} actions={<Link href={`/anuncios?p=${period.key}`} className="text-[13px] text-mute hover:text-ink underline-offset-2 hover:underline">Ver todas</Link>} padded={false}>
