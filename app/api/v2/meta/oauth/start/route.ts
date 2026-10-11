@@ -9,8 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: Request) {
   // Meta solo acepta la dirección principal registrada: si se abrió Faro desde la dirección
   // de un deploy (forever-dashboard-xxxx.vercel.app), se pasa primero a la principal.
-  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL   // la provee Vercel: forever-dashboard.vercel.app
-  const canonical = new URL(prod ? `https://${prod}` : 'https://forever-dashboard.vercel.app')
+  const canonical = new URL(process.env.FARO_URL || 'https://forever-dashboard.vercel.app')
   const here = new URL(req.url)
   if (here.host !== canonical.host && here.host.endsWith('.vercel.app')) {
     return Response.redirect(new URL(here.pathname + here.search, canonical.origin))
