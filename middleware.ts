@@ -42,8 +42,8 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  // Rutas públicas: landing estática de Faro + API + portal de cambios (sin auth)
-  if (pathname === '/landing.html' || pathname.startsWith('/api') || pathname === '/cambios' || pathname.startsWith('/cambios/')) {
+  // Rutas públicas: landing estática de Faro, páginas legales (las pide Meta), API y portal de cambios (sin auth)
+  if (pathname === '/landing.html' || pathname === '/privacidad' || pathname === '/terminos' || pathname === '/eliminar-datos' || pathname.startsWith('/api') || pathname === '/cambios' || pathname.startsWith('/cambios/')) {
     return response
   }
 

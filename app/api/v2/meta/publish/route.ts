@@ -173,6 +173,10 @@ export async function POST(req: Request) {
     if (!ok.length) throw new Error(created[0]?.error || 'Meta rechazó el anuncio')
     return Response.json({ ok: true, adId: ok[0].adId, adIds: ok.map((c) => c.adId), failed: created.filter((c) => c.error), creativeId: creative.id })
   } catch (e) {
-    return Response.json({ ok: false, error: e instanceof Error ? e.message : 'Error de Meta' }, { status: 400 })
+    const msg = e instanceof Error ? e.message : 'Error de Meta'
+    const devMode = (e as { subcode?: number })?.subcode === 1885183 || /modo de desarrollo|development mode/i.test(msg)
+    return Response.json({ ok: false, error: devMode
+      ? 'La app de Meta que usa Faro está en modo desarrollo: pasala a modo activo (Live) en developers.facebook.com y volvé a intentar.'
+      : msg }, { status: 400 })
   }
 }
