@@ -7,6 +7,13 @@ export const dynamic = 'force-dynamic'
 
 /** Abre el login de Facebook pidiendo permisos de anuncios. */
 export async function GET(req: Request) {
+  // Meta solo acepta la dirección principal registrada: si se abrió Faro desde la dirección
+  // de un deploy (forever-dashboard-xxxx.vercel.app), se pasa primero a la principal.
+  const canonical = new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://forever-dashboard.vercel.app')
+  const here = new URL(req.url)
+  if (here.host !== canonical.host && here.host.endsWith('.vercel.app')) {
+    return Response.redirect(new URL(here.pathname + here.search, canonical.origin))
+  }
   const ctx = await apiContext()
   if (ctx instanceof Response) return Response.redirect(new URL('/login', req.url))
   if (!canEdit(ctx)) return Response.redirect(new URL('/ajustes?error=solo-lectura', req.url))
