@@ -140,3 +140,17 @@ describe('registro de actividad de Meta', () => {
     expect(parseActivity({ event_type: 'ad_account_billing_charge', object_type: 'ACCOUNT' }, 'x').billing).toBe(true)
   })
 })
+
+describe('versiones feed + historias', () => {
+  it('junta por nombre y por tipo', async () => {
+    const { autoPair, pairKey } = await import('../lib/faro/creativePairs')
+    expect(pairKey('Remera_negra_STORY.jpg')).toBe(pairKey('remera-negra-feed.png'))
+    const f = (key: string, name: string, vertical: boolean, type: 'image' | 'video' = 'image'): import('../lib/faro/creativePairs').PairableFile => ({ key, file: { name }, type, state: 'listo', vertical })
+    const out = autoPair([f('a', 'oversize 4x5.jpg', false), f('b', 'oversize 9x16.jpg', true), f('c', 'slim feed.jpg', false), f('d', 'slim story.mp4', true, 'video')])
+    expect(out.find((x) => x.key === 'a')?.story).toBe('b')
+    expect(out.find((x) => x.key === 'b')?.partOf).toBe('a')
+    expect(out.find((x) => x.key === 'd')?.partOf).toBeUndefined()
+    const two = autoPair([f('x', 'IMG_123.jpg', false), f('y', 'IMG_999.jpg', true)])
+    expect(two[0].story).toBe('y')
+  })
+})

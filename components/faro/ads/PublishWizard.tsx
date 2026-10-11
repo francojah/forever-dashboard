@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClientBrowser } from '@/lib/supabase'
 import { money, int } from '@/lib/faro/format'
 import { Badge } from '../ui'
+import { autoPair } from '@/lib/faro/creativePairs'
 
 export interface AdsetOpt { accountId: string; id: string; name: string; status: string; goal: string | null; campaignId: string; campaign: string }
 export interface CampaignOpt { accountId: string; id: string; name: string; status: string; hasBudget: boolean }
@@ -13,6 +14,9 @@ interface Pixel { id: string; name: string; last_fired_time?: string }
 interface FileItem {
   key: string; file: File; preview: string; type: 'image' | 'video'; name: string
   state: 'listo' | 'subiendo' | 'procesando' | 'creado' | 'error'; error?: string; adIds?: string[]; ratio?: string; ratioWarn?: string
+  vertical?: boolean   // 9:16: va en historias y reels
+  story?: string       // key de la versión 9:16 que va en el mismo anuncio
+  partOf?: string      // esta es la versión 9:16 de otro archivo
 }
 
 const CTAS = [['SHOP_NOW', 'Comprar'], ['LEARN_MORE', 'Más información'], ['BUY_NOW', 'Comprar ahora'], ['ORDER_NOW', 'Pedir ahora'], ['GET_OFFER', 'Obtener oferta'], ['SEND_MESSAGE', 'Enviar mensaje']]
@@ -21,13 +25,13 @@ const TRAFFIC = new Set(['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSI
 const baseName = (f: string) => f.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().toUpperCase().slice(0, 60)
 const todayLabel = () => { const d = new Date(); return `${d.getDate()}/${d.getMonth() + 1}` }
 
-function measure(type: 'image' | 'video', url: string): Promise<{ ratio?: string; ratioWarn?: string }> {
+function measure(type: 'image' | 'video', url: string): Promise<{ ratio?: string; ratioWarn?: string; vertical?: boolean }> {
   return new Promise((resolve) => {
     const done = (w: number, h: number) => {
       if (!w || !h) return resolve({})
       const r = w / h
       const near = ([['1:1', 1], ['4:5', 0.8], ['9:16', 0.5625], ['16:9', 1.778]] as [string, number][]).find(([, v]) => Math.abs(r - v) < 0.03)
-      resolve({ ratio: near ? near[0] : `${w}×${h}`, ratioWarn: !near ? 'proporción poco común: Meta lo recorta' : near[0] === '16:9' ? 'horizontal: rinde peor en Reels e Historias' : Math.min(w, h) < 600 ? 'resolución baja' : undefined })
+      resolve({ vertical: r < 0.7, ratio: near ? near[0] : `${w}×${h}`, ratioWarn: !near ? 'proporción poco común: Meta lo recorta' : near[0] === '16:9' ? 'horizontal: rinde peor en Reels e Historias' : Math.min(w, h) < 600 ? 'resolución baja' : undefined })
     }
     if (type === 'image') { const i = new Image(); i.onload = () => done(i.naturalWidth, i.naturalHeight); i.onerror = () => resolve({}); i.src = url }
     else { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight); v.onerror = () => resolve({}); v.src = url }
@@ -148,13 +152,14 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
       add.push({ key: `${f.name}-${f.size}-${Math.random()}`, file: f, preview: URL.createObjectURL(f), type, name: `${type === 'video' ? 'VID' : 'IMG'} - ${baseName(f.name)} - ${todayLabel()}`, state: 'listo' })
     })
     setFiles((cur) => [...cur, ...add].slice(0, 30))
-    add.forEach((it) => measure(it.type, it.preview).then((r) => setFiles((cur) => cur.map((x) => (x.key === it.key ? { ...x, ...r } : x)))))
+    Promise.all(add.map((it) => measure(it.type, it.preview).then((r) => ({ key: it.key, r })))).then((ms) =>
+      setFiles((cur) => autoPair(cur.map((x) => { const m = ms.find((y) => y.key === x.key); return m ? { ...x, ...m.r } : x }))))
   }
   const upd = (key: string, patch: Partial<FileItem>) => setFiles((cur) => cur.map((i) => (i.key === key ? { ...i, ...patch } : i)))
   const say = (ok: boolean, text: string) => setLog((l) => [...l, { ok, text }])
 
   const destCount = dest === 'nuevo' ? 1 : targets.size
-  const contentCount = source === 'archivos' ? files.filter((f) => f.state === 'listo' || f.state === 'error').length : dupIds.size
+  const contentCount = source === 'archivos' ? files.filter((f) => !f.partOf && (f.state === 'listo' || f.state === 'error')).length : dupIds.size
   const total = destCount * contentCount
   const cleanTexts = texts.map((t) => t.trim()).filter(Boolean)
   const cleanTitles = titles.map((t) => t.trim()).filter(Boolean)
@@ -185,34 +190,46 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
     return r.adsetId as string
   }
 
+  async function uploadToStorage(f: FileItem): Promise<string> {
+    const u = await fetch('/api/v2/meta/upload-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: f.file.name, size: f.file.size }) }).then((r) => r.json())
+    if (!u.token) throw new Error(u.error || 'No se pudo preparar la subida')
+    const up = await createClientBrowser().storage.from('faro-creatives').uploadToSignedUrl(u.path, u.token, f.file, { contentType: f.file.type })
+    if (up.error) throw new Error(up.error.message)
+    return u.path as string
+  }
+
   async function publishFile(it: FileItem, adsetIds: string[]): Promise<string[]> {
     const id = identities[identity]
-    upd(it.key, { state: 'subiendo', error: undefined })
+    const story = it.story ? files.find((f) => f.key === it.story) : undefined
+    const mark = (patch: Partial<FileItem>) => { upd(it.key, patch); if (story) upd(story.key, patch) }
+    mark({ state: 'subiendo', error: undefined })
     try {
-      const u = await fetch('/api/v2/meta/upload-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: it.file.name, size: it.file.size }) }).then((r) => r.json())
-      if (!u.token) throw new Error(u.error || 'No se pudo preparar la subida')
-      const up = await createClientBrowser().storage.from('faro-creatives').uploadToSignedUrl(u.path, u.token, it.file, { contentType: it.file.type })
-      if (up.error) throw new Error(up.error.message)
-      upd(it.key, { state: 'procesando' })
+      const [path, storyPath] = await Promise.all([uploadToStorage(it), story ? uploadToStorage(story) : Promise.resolve(undefined)])
+      mark({ state: 'procesando' })
       let videoId: string | undefined
+      let storyVideoId: string | undefined
       for (let attempt = 0; attempt < 8; attempt++) {
         const r = await fetch('/api/v2/meta/publish', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountId: account, adsetIds, path: u.path, type: it.type, name: it.name, messages: cleanTexts, headlines: cleanTitles, link, cta, urlTags: utm ? UTM : undefined, pageId: id?.page_id, igUserId: id?.instagram_user_id, videoId }),
+          body: JSON.stringify({ accountId: account, adsetIds, path, storyPath, type: it.type, name: it.name, messages: cleanTexts, headlines: cleanTitles, link, cta, urlTags: utm ? UTM : undefined, pageId: id?.page_id, igUserId: id?.instagram_user_id, videoId, storyVideoId }),
         }).then((x) => x.json())
         if (r.ok) {
-          upd(it.key, { state: 'creado', adIds: r.adIds || [r.adId], error: r.failed?.length ? `${r.failed.length} ad set(s) fallaron: ${r.failed[0].error}` : undefined })
+          mark({ state: 'creado', adIds: r.adIds || [r.adId], error: r.failed?.length ? `${r.failed.length} ad set(s) fallaron: ${r.failed[0].error}` : undefined })
           return r.adIds || [r.adId]
         }
-        if (r.pending) { videoId = r.videoId; continue }
+        if (r.pending) { videoId = r.videoId; storyVideoId = r.storyVideoId; continue }
         throw new Error(r.error || 'Meta rechazó el anuncio')
       }
       throw new Error('Meta sigue procesando el video: probá de nuevo en unos minutos')
     } catch (e) {
-      upd(it.key, { state: 'error', error: e instanceof Error ? e.message : 'Error' })
+      mark({ state: 'error', error: e instanceof Error ? e.message : 'Error' })
       return []
     }
   }
+
+  const unpair = (feedKey: string) => setFiles((cur) => cur.map((f) => (f.key === feedKey ? { ...f, story: undefined } : f.partOf === feedKey ? { ...f, partOf: undefined } : f)))
+  const pair = (feedKey: string, storyKey: string) => setFiles((cur) => cur.map((f) => (f.key === feedKey ? { ...f, story: storyKey } : f.key === storyKey ? { ...f, partOf: feedKey } : f)))
+  const remove = (key: string) => setFiles((cur) => cur.filter((x) => x.key !== key).map((f) => (f.story === key ? { ...f, story: undefined } : f.partOf === key ? { ...f, partOf: undefined } : f)))
 
   async function run() {
     setRunning(true); setLog([]); setActivated(false)
@@ -224,7 +241,7 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
     }
     const newAds: string[] = []
     if (source === 'archivos') {
-      const queue = files.filter((f) => f.state === 'listo' || f.state === 'error')
+      const queue = files.filter((f) => !f.partOf && (f.state === 'listo' || f.state === 'error'))
       const worker = async () => { for (let it = queue.shift(); it; it = queue.shift()) newAds.push(...await publishFile(it, adsetIds)) }
       await Promise.all([worker(), worker()])
       say(newAds.length > 0, `${newAds.length} anuncios creados en pausa.`)
@@ -336,29 +353,49 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
                 className={`cursor-pointer rounded-lg border-2 border-dashed ${drag ? 'border-beacon bg-beacon/10' : 'border-line'} px-4 py-7 text-center text-[14px] text-mute`}
               >
                 Arrastrá imágenes o videos (hasta 30) o <span className="text-ink underline">elegilos</span>
-                <p className="text-[12px] text-faint mt-1">Ideal 4:5 para feed y 9:16 para Reels e Historias</p>
+                <p className="text-[12px] text-faint mt-1">Si subís la versión 4:5 (o 1:1) y la 9:16 de un mismo creativo, Faro las junta en un solo anuncio</p>
                 <input ref={fileInput} type="file" multiple accept="image/*,video/*" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
               </div>
               {files.length > 0 && (
                 <ul className="mt-4 grid sm:grid-cols-2 gap-3">
-                  {files.map((it) => (
-                    <li key={it.key} className="flex gap-3 rounded-lg border border-line p-2.5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {it.type === 'image' ? <img src={it.preview} alt="" className="w-16 h-16 rounded object-cover" /> : <video src={it.preview} className="w-16 h-16 rounded object-cover" muted />}
-                      <div className="flex-1 min-w-0">
-                        <input value={it.name} disabled={it.state !== 'listo' && it.state !== 'error'} onChange={(e) => upd(it.key, { name: e.target.value })} className="w-full rounded border border-transparent hover:border-line focus:border-line bg-transparent px-1 py-0.5 text-[13px] text-ink" aria-label="Nombre del anuncio" />
-                        <p className="px-1 text-[12px] text-mute">{it.type === 'video' ? 'Video' : 'Imagen'} · {(it.file.size / 1048576).toLocaleString('es-AR', { maximumFractionDigits: 1 })} MB{it.ratio && ` · ${it.ratio}`}{it.ratioWarn && <span className="text-warn"> · {it.ratioWarn}</span>}</p>
-                        <div className="px-1 mt-1 flex items-center gap-2">
-                          {it.state === 'listo' && <button onClick={() => setFiles((c) => c.filter((x) => x.key !== it.key))} className="text-[12px] text-mute hover:text-ink">Quitar</button>}
-                          {it.state === 'subiendo' && <Badge>subiendo</Badge>}
-                          {it.state === 'procesando' && <Badge tone="beacon">Meta lo procesa</Badge>}
-                          {it.state === 'creado' && <Badge tone="good">{it.adIds?.length || 1} creado{(it.adIds?.length || 1) > 1 ? 's' : ''}</Badge>}
-                          {it.state === 'error' && <Badge tone="bad">error</Badge>}
-                          {it.error && <span className="text-[12px] text-bad truncate" title={it.error}>{it.error}</span>}
-                        </div>
+                  {files.filter((f) => !f.partOf).map((it) => {
+                    const story = it.story ? files.find((f) => f.key === it.story) : undefined
+                    const editable = it.state === 'listo' || it.state === 'error'
+                    const candidates = files.filter((f) => f.key !== it.key && !f.partOf && !f.story && f.type === it.type && editable && (f.state === 'listo' || f.state === 'error'))
+                    const Thumb = ({ f, label }: { f: FileItem; label?: string }) => (
+                      <div className="relative shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {f.type === 'image' ? <img src={f.preview} alt="" className={`${f.vertical ? 'w-11' : 'w-16'} h-16 rounded object-cover`} /> : <video src={f.preview} className={`${f.vertical ? 'w-11' : 'w-16'} h-16 rounded object-cover`} muted />}
+                        {label && <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 text-white text-[10px] px-1">{label}</span>}
                       </div>
-                    </li>
-                  ))}
+                    )
+                    return (
+                      <li key={it.key} className={`flex gap-3 rounded-lg border p-2.5 ${story ? 'border-beacon/40 bg-beacon/5' : 'border-line'}`}>
+                        <div className="flex gap-1.5"><Thumb f={it} label={story ? 'Feed' : undefined} />{story && <Thumb f={story} label="Historias" />}</div>
+                        <div className="flex-1 min-w-0">
+                          <input value={it.name} disabled={!editable} onChange={(e) => upd(it.key, { name: e.target.value })} className="w-full rounded border border-transparent hover:border-line focus:border-line bg-transparent px-1 py-0.5 text-[13px] text-ink" aria-label="Nombre del anuncio" />
+                          <p className="px-1 text-[12px] text-mute">
+                            {story ? <>1 anuncio · {it.type === 'video' ? 'videos' : 'imágenes'} {it.ratio} para feed + {story.ratio} para historias y reels</> : <>{it.type === 'video' ? 'Video' : 'Imagen'} · {(it.file.size / 1048576).toLocaleString('es-AR', { maximumFractionDigits: 1 })} MB{it.ratio && ` · ${it.ratio}`}{it.ratioWarn && <span className="text-warn"> · {it.ratioWarn}</span>}</>}
+                          </p>
+                          <div className="px-1 mt-1 flex flex-wrap items-center gap-2">
+                            {editable && story && <button onClick={() => unpair(it.key)} className="text-[12px] text-mute hover:text-ink">Separar en 2 anuncios</button>}
+                            {editable && !story && candidates.length > 0 && (
+                              <select value="" onChange={(e) => e.target.value && pair(it.key, e.target.value)} className="rounded border border-line bg-surface px-1.5 py-0.5 text-[12px] text-mute max-w-[200px]" aria-label="Sumar otra versión al mismo anuncio">
+                                <option value="">+ Sumar versión historias…</option>
+                                {candidates.map((c) => <option key={c.key} value={c.key}>{c.file.name}{c.ratio ? ` (${c.ratio})` : ''}</option>)}
+                              </select>
+                            )}
+                            {it.state === 'listo' && <button onClick={() => { remove(it.key); if (story) remove(story.key) }} className="text-[12px] text-mute hover:text-ink">Quitar</button>}
+                            {it.state === 'subiendo' && <Badge>subiendo</Badge>}
+                            {it.state === 'procesando' && <Badge tone="beacon">Meta lo procesa</Badge>}
+                            {it.state === 'creado' && <Badge tone="good">{it.adIds?.length || 1} creado{(it.adIds?.length || 1) > 1 ? 's' : ''}</Badge>}
+                            {it.state === 'error' && <Badge tone="bad">error</Badge>}
+                            {it.error && <span className="text-[12px] text-bad truncate" title={it.error}>{it.error}</span>}
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
