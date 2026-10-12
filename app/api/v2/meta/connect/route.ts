@@ -35,6 +35,10 @@ export async function DELETE(req: Request) {
   if (ctx.role !== 'owner') return Response.json({ error: 'Solo el dueño puede quitar conexiones' }, { status: 403 })
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return Response.json({ error: 'Falta id' }, { status: 400 })
+  // Antes de borrar, las cuentas que usaban esta conexión pasan a otra conexión de Meta del mismo negocio
+  const { data: other } = await svc().from('connections').select('id').eq('workspace_id', ctx.workspace.id).eq('provider', 'meta').neq('id', id)
+    .order('updated_at', { ascending: false }).limit(1).maybeSingle()
+  if (other) await svc().from('ad_accounts').update({ connection_id: other.id }).eq('workspace_id', ctx.workspace.id).eq('connection_id', id)
   await svc().from('connections').delete().eq('id', id).eq('workspace_id', ctx.workspace.id)
-  return Response.json({ ok: true })
+  return Response.json({ ok: true, moved: !!other })
 }

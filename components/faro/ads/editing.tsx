@@ -25,7 +25,7 @@ export function describe(field: Field, v: unknown): string {
   if (field === 'status') return v === 'ACTIVE' ? 'Activo' : 'Pausado'
   if (field === 'daily_budget') return money(Number(v))
   if (field === 'genders') { const g = (v as number[]) || []; return g.length === 1 ? (g[0] === 1 ? 'Hombres' : 'Mujeres') : 'Todos' }
-  if (field === 'copy') { const c = v as { message?: string; headline?: string; link?: string }; return [c.headline, c.message?.slice(0, 60), c.link].filter(Boolean).join(' · ') || '—' }
+  if (field === 'copy') { const c = v as { message?: string; headline?: string; link?: string; description?: string }; return [c.headline, c.message?.slice(0, 60), c.description, c.link].filter(Boolean).join(' · ') || '—' }
   return v == null || v === '' ? '—' : String(v)
 }
 
@@ -38,13 +38,14 @@ export function EditDialog({ editing, onClose, onStage }: { editing: { node: Tre
   const [gender, setGender] = useState(t.genders?.length === 1 ? String(t.genders[0]) : 'all')
   const [message, setMessage] = useState('')
   const [headline, setHeadline] = useState('')
+  const [description, setDescription] = useState('')
   const [link, setLink] = useState('')
   const [stagedMulti, setStagedMulti] = useState(false)
 
   return (
     <div className="fixed inset-0 z-40 bg-ink/40 grid place-items-center p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="w-full max-w-md rounded-panel border border-line bg-surface p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-[16px] font-semibold text-ink">{editing.kind === 'name' ? 'Cambiar nombre' : editing.kind === 'targeting' ? 'Edad y género' : 'Texto y link del anuncio'}</h3>
+        <h3 className="text-[16px] font-semibold text-ink">{editing.kind === 'name' ? 'Cambiar nombre' : editing.kind === 'targeting' ? 'Edad y género' : 'Texto, título, descripción y link'}</h3>
         <p className="text-[13px] text-mute mt-0.5 truncate">{n.name}</p>
         <div className="mt-4 flex flex-col gap-3 text-[13.5px]">
           {editing.kind === 'name' && (
@@ -68,6 +69,7 @@ export function EditDialog({ editing, onClose, onStage }: { editing: { node: Tre
             <>
               <label className="flex flex-col gap-1">Texto principal (vacío = sin cambios)<textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
               <label className="flex flex-col gap-1">Título (vacío = sin cambios)<input value={headline} onChange={(e) => setHeadline(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
+              <label className="flex flex-col gap-1">Descripción (vacío = sin cambios)<input value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
               <label className="flex flex-col gap-1">Link de destino (vacío = sin cambios)<input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" className="rounded-lg border border-line bg-surface px-3 py-2" /></label>
               <p className="text-warn text-[12.5px]">Se crea un creativo nuevo con estos cambios: el anuncio vuelve a revisión de Meta y a aprendizaje.</p>
             </>
@@ -83,6 +85,7 @@ export function EditDialog({ editing, onClose, onStage }: { editing: { node: Tre
                 const v: Record<string, string> = {}
                 if (message.trim()) v.message = message.trim()
                 if (headline.trim()) v.headline = headline.trim()
+                if (description.trim()) v.description = description.trim()
                 if (link.trim()) v.link = link.trim()
                 if (Object.keys(v).length) onStage('copy', v, {})
                 else onClose()

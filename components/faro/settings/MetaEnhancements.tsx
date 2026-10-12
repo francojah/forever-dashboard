@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ENHANCEMENTS, MUSIC, EnhancementPrefs, defaultPrefs } from '@/lib/faro/enhancements'
+import { ENHANCEMENTS, MUSIC, MULTI_ADS, EnhancementPrefs, defaultPrefs } from '@/lib/faro/enhancements'
 import { Panel } from '../ui'
 
 function Toggle({ on, onChange, disabled, label }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
@@ -57,6 +57,7 @@ export default function MetaEnhancements({ initial, canEdit }: { initial: Enhanc
       <Panel title="Apagadas" description="Reescriben, superponen o generan contenido que no revisaste. Los especialistas las apagan cuando el creativo es propio.">
         <ul className="divide-y divide-line -my-3">
           {offList.map((e) => <Row key={e.key} k={e.key} label={e.label} what={e.what} why={e.why} applies={e.applies} on={prefs.features[e.key]} recommended={e.on} onChange={(v) => set(e.key, v)} />)}
+          <Row k={MULTI_ADS.key} label={MULTI_ADS.label} what={MULTI_ADS.what} why={MULTI_ADS.why} on={prefs.multiAds} recommended={MULTI_ADS.on} onChange={(v) => save({ ...prefs, multiAds: v })} />
           <Row k={MUSIC.key} label={MUSIC.label} what={MUSIC.what} why={MUSIC.why} on={prefs.music} recommended={MUSIC.on} onChange={(v) => save({ ...prefs, music: v })} />
         </ul>
       </Panel>

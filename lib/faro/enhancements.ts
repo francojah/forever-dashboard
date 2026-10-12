@@ -84,10 +84,16 @@ export const MUSIC = {
   why: 'Puede no pegar con el tono o pisar la voz del video. Mejor poner la música en la edición.',
 }
 
-export interface EnhancementPrefs { features: Record<string, boolean>; music: boolean }
+export const MULTI_ADS = {
+  key: 'multi_ads', label: 'Anuncios multianunciante', on: false,
+  what: 'Meta puede mostrar tu anuncio en un bloque junto con anuncios de otras marcas.',
+  why: 'Diluye la atención y empeora el rendimiento de marcas con creativo propio. Los especialistas lo apagan.',
+}
+
+export interface EnhancementPrefs { features: Record<string, boolean>; music: boolean; multiAds: boolean }
 
 export function defaultPrefs(): EnhancementPrefs {
-  return { features: Object.fromEntries(ENHANCEMENTS.map((e) => [e.key, e.on])), music: MUSIC.on }
+  return { features: Object.fromEntries(ENHANCEMENTS.map((e) => [e.key, e.on])), music: MUSIC.on, multiAds: MULTI_ADS.on }
 }
 
 export function normalizePrefs(raw: unknown): EnhancementPrefs {
@@ -96,6 +102,7 @@ export function normalizePrefs(raw: unknown): EnhancementPrefs {
   const f = (r.features && typeof r.features === 'object' ? r.features : {}) as Record<string, unknown>
   for (const e of ENHANCEMENTS) if (typeof f[e.key] === 'boolean') d.features[e.key] = f[e.key] as boolean
   if (typeof r.music === 'boolean') d.music = r.music
+  if (typeof r.multiAds === 'boolean') d.multiAds = r.multiAds
   return d
 }
 
@@ -110,4 +117,4 @@ export function degreesOfFreedomSpec(prefs: EnhancementPrefs, media: 'image' | '
   return { creative_features_spec: spec }
 }
 
-export const enabledCount = (p: EnhancementPrefs) => ENHANCEMENTS.filter((e) => p.features[e.key]).length + (p.music ? 1 : 0)
+export const enabledCount = (p: EnhancementPrefs) => ENHANCEMENTS.filter((e) => p.features[e.key]).length + (p.music ? 1 : 0) + (p.multiAds ? 1 : 0)

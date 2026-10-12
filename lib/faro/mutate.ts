@@ -21,7 +21,7 @@ const ALLOWED: Record<Change['level'], Field[]> = {
   ad: ['status', 'name', 'copy', 'creative_id'],
 }
 
-interface CopyValue { message?: string; headline?: string; link?: string }
+interface CopyValue { message?: string; headline?: string; link?: string; description?: string }
 
 async function applyCopy(token: string, accountExternal: string, adId: string, v: CopyValue) {
   const ad = await graphGet<{ name: string; creative?: { id: string } }>(adId, token, { fields: 'name,creative{id}' })
@@ -34,6 +34,7 @@ async function applyCopy(token: string, accountExternal: string, adId: string, v
   if (spec.link_data) {
     if (v.message != null) spec.link_data.message = v.message
     if (v.headline != null) spec.link_data.name = v.headline
+    if (v.description != null) spec.link_data.description = v.description
     if (v.link) {
       spec.link_data.link = v.link
       const cta = spec.link_data.call_to_action as { value?: { link?: string } } | undefined
@@ -42,6 +43,7 @@ async function applyCopy(token: string, accountExternal: string, adId: string, v
   } else if (spec.video_data) {
     if (v.message != null) spec.video_data.message = v.message
     if (v.headline != null) spec.video_data.title = v.headline
+    if (v.description != null) spec.video_data.link_description = v.description
     const cta = spec.video_data.call_to_action as { value?: { link?: string } } | undefined
     if (v.link && cta?.value) cta.value.link = v.link
   } else {

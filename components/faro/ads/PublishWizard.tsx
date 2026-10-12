@@ -61,13 +61,13 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
 
 const input = 'rounded-lg border border-line bg-surface px-3 py-2 text-[13.5px]'
 
-export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ads, defaultLink, templates = [], preAdset, preDup, enhancementsOn = 0 }: {
+export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ads, defaultLink, templates = [], preAdset, preDup, enhancementsOn = 0, multiAdsDefault = false }: {
   canEdit: boolean
   accounts: { id: string; name: string; protected_ids: string[] }[]
   adsets: AdsetOpt[]; campaigns: CampaignOpt[]; ads: AdOpt[]
   defaultLink: string
   templates?: { accountId: string; name: string; body: string; title: string }[]
-  preAdset?: string | null; preDup?: string[]; enhancementsOn?: number
+  preAdset?: string | null; preDup?: string[]; enhancementsOn?: number; multiAdsDefault?: boolean
 }) {
   const startAcc = (preAdset && adsets.find((s) => s.id === preAdset)?.accountId) || (preDup?.length && ads.find((a) => a.id === preDup[0])?.accountId) || accounts[0]?.id || ''
   const [account, setAccount] = useState(startAcc)
@@ -103,6 +103,8 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
   const [identity, setIdentity] = useState(0)
   const [texts, setTexts] = useState<string[]>([''])
   const [titles, setTitles] = useState<string[]>([''])
+  const [description, setDescription] = useState('')
+  const [multiAds, setMultiAds] = useState(multiAdsDefault)
   const [link, setLink] = useState(defaultLink)
   const [cta, setCta] = useState('SHOP_NOW')
   const [utm, setUtm] = useState(true)
@@ -211,7 +213,7 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
       for (let attempt = 0; attempt < 8; attempt++) {
         const r = await fetch('/api/v2/meta/publish', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountId: account, adsetIds, path, storyPath, type: it.type, name: it.name, messages: cleanTexts, headlines: cleanTitles, link, cta, urlTags: utm ? UTM : undefined, pageId: id?.page_id, igUserId: id?.instagram_user_id, videoId, storyVideoId }),
+          body: JSON.stringify({ accountId: account, adsetIds, path, storyPath, type: it.type, name: it.name, messages: cleanTexts, headlines: cleanTitles, description, multiAds, link, cta, urlTags: utm ? UTM : undefined, pageId: id?.page_id, igUserId: id?.instagram_user_id, videoId, storyVideoId }),
         }).then((x) => x.json())
         if (r.ok) {
           mark({ state: 'creado', adIds: r.adIds || [r.adId], error: r.failed?.length ? `${r.failed.length} ad set(s) fallaron: ${r.failed[0].error}` : undefined })
@@ -446,6 +448,9 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
                   </div>
                 ))}
                 {titles.length < 5 && <button onClick={() => setTitles([...titles, ''])} className="self-start text-[13px] text-mute hover:text-ink">+ Otro título</button>}
+                <label className="flex flex-col gap-1 mt-2 text-[13px] text-mute">Descripción <span className="text-faint">(opcional: la línea debajo del título, por ejemplo “Envío gratis desde $80.000”)</span>
+                  <input value={description} maxLength={255} onChange={(e) => setDescription(e.target.value)} className={input} />
+                </label>
                 <label className="flex flex-col gap-1 mt-2 text-[13px] text-mute">Link de destino<input value={link} onChange={(e) => setLink(e.target.value)} className={input} /></label>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-1 text-[13px] text-mute">Botón<select value={cta} onChange={(e) => setCta(e.target.value)} className={input}>{CTAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
@@ -456,6 +461,7 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
                   </label>
                 </div>
                 <label className="flex items-center gap-2 text-mute"><input type="checkbox" checked={utm} onChange={(e) => setUtm(e.target.checked)} /> UTMs de campaña y anuncio</label>
+                <label className="flex items-start gap-2 text-mute"><input type="checkbox" className="mt-1" checked={multiAds} onChange={(e) => setMultiAds(e.target.checked)} /> <span>Anuncios multianunciante <span className="text-faint">(mostrar junto a anuncios de otras marcas; recomendado apagado)</span></span></label>
               </div>
             </div>
           </Step>

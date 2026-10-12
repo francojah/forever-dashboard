@@ -40,3 +40,21 @@ export function tiendanubeInstallUrl() {
   const appId = process.env.TIENDANUBE_APP_ID
   return appId ? `https://www.tiendanube.com/apps/${appId}/authorize` : null
 }
+
+/**
+ * Pasa a esta conexión las cuentas publicitarias del negocio que su token puede usar.
+ * Así, al reconectar Meta (por ejemplo con una app nueva) las cuentas dejan de usar el token viejo.
+ */
+export async function relinkAdAccounts(workspaceId: string, connectionId: string, token: string): Promise<number> {
+  const { data } = await svc().from('ad_accounts').select('id,external_id,connection_id').eq('workspace_id', workspaceId)
+  let n = 0
+  for (const a of (data || []) as { id: string; external_id: string; connection_id: string | null }[]) {
+    if (a.connection_id === connectionId) continue
+    try {
+      await graphGet(a.external_id, token, { fields: 'id' })
+      await svc().from('ad_accounts').update({ connection_id: connectionId, last_sync_error: null }).eq('id', a.id)
+      n++
+    } catch { /* este usuario no tiene acceso a esa cuenta */ }
+  }
+  return n
+}

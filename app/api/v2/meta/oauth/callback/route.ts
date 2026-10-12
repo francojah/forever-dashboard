@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { apiContext } from '@/lib/faro/context'
 import { META_VERSION } from '@/lib/faro/meta'
-import { exchangeLongLived, saveMetaConnection } from '@/lib/faro/connections'
+import { exchangeLongLived, saveMetaConnection, relinkAdAccounts } from '@/lib/faro/connections'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +25,7 @@ export async function GET(req: Request) {
   try {
     const ll = await exchangeLongLived(j.access_token)
     const conn = await saveMetaConnection(ctx.workspace.id, ll.token, 'oauth', ll.expiresAt)
+    await relinkAdAccounts(ctx.workspace.id, conn.id, ll.token).catch(() => 0)
     cookies().delete('faro_meta_state')
     return back(`connection=${conn.id}`)
   } catch (e) {

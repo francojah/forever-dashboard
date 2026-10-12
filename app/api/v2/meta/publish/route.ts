@@ -12,6 +12,8 @@ interface Body {
   adsetIds?: string[]        // crear el mismo anuncio en varios ad sets
   messages?: string[]        // varios textos: Meta elige la mejor combinación
   headlines?: string[]
+  description?: string       // texto debajo del título (descripción del enlace)
+  multiAds?: boolean         // anuncios multianunciante (por defecto, lo de Ajustes)
   path: string               // en el bucket faro-creatives
   type: 'image' | 'video'
   name: string
@@ -50,6 +52,7 @@ export async function POST(req: Request) {
   const { data: adsets } = await svc().from('ad_entities').select('entity_id,name,campaign_id').eq('ad_account_id', acc.id).in('entity_id', adsetIds).eq('level', 'adset')
   if (!adsets || adsets.length !== adsetIds.length) return Response.json({ error: 'Algún ad set no se encontró en la cuenta' }, { status: 400 })
   if (b.storyPath && !b.storyPath.startsWith(`${ctx.workspace.id}/`)) return Response.json({ error: 'Archivo inválido' }, { status: 400 })
+  const description = (b.description || '').trim().slice(0, 255)
   const message = messages[0]
   const headline = headlines[0]
   const prefs = ctx.workspace.settings.meta_enhancements
@@ -97,6 +100,7 @@ export async function POST(req: Request) {
       const base = {
         bodies: messages.map((text) => ({ text })), ...(headlines.length ? { titles: headlines.map((text) => ({ text })) } : {}),
         link_urls: [{ website_url: b.link }], call_to_action_types: [b.cta || 'SHOP_NOW'], optimization_type: 'PLACEMENT', ...audios,
+        ...(description ? { descriptions: [{ text: description }] } : {}),
       }
       let media: Record<string, unknown>
       if (b.type === 'image') {
@@ -132,14 +136,14 @@ export async function POST(req: Request) {
       let objectStory: Record<string, unknown>
       if (b.type === 'image') {
         const hash = await uploadImage(b.path, b.name)
-        objectStory = { ...identity, link_data: { image_hash: hash, link: b.link, message, ...(headline ? { name: headline } : {}), call_to_action: cta } }
+        objectStory = { ...identity, link_data: { image_hash: hash, link: b.link, message, ...(headline ? { name: headline } : {}), ...(description ? { description } : {}), call_to_action: cta } }
       } else {
         const videoId = await startVideo(b.path, b.videoId, b.name)
         let ready = false
         while (Date.now() - t0 < 40000) { if (await videoReady(videoId)) { ready = true; break } await sleep(4000) }
         if (!ready) return Response.json({ ok: false, pending: true, videoId })
         const thumb = await thumbOf(videoId)
-        objectStory = { ...identity, video_data: { video_id: videoId, ...(thumb ? { image_url: thumb } : {}), message, ...(headline ? { title: headline } : {}), call_to_action: cta } }
+        objectStory = { ...identity, video_data: { video_id: videoId, ...(thumb ? { image_url: thumb } : {}), message, ...(headline ? { title: headline } : {}), ...(description ? { link_description: description } : {}), call_to_action: cta } }
       }
       creativeBody = { object_story_spec: objectStory, ...(Object.keys(feedSpec).length ? { asset_feed_spec: feedSpec } : {}) }
     }
@@ -147,6 +151,7 @@ export async function POST(req: Request) {
     const creative = await graphPost<{ id: string }>(`${acc.external_id}/adcreatives`, token, {
       name: b.name, ...creativeBody, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
       degrees_of_freedom_spec: degreesOfFreedomSpec(prefs, b.type),
+      contextual_multi_ads: { enroll_status: (b.multiAds ?? prefs.multiAds) ? 'OPT_IN' : 'OPT_OUT' },
     })
     const created: { adsetId: string; adId?: string; error?: string }[] = []
     for (const set of adsets as { entity_id: string; name: string; campaign_id: string }[]) {

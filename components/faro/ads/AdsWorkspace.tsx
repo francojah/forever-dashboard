@@ -7,13 +7,14 @@ import type { TreeNode, Metrics } from '@/lib/faro/adsTree'
 import { money, int, ratio, pct } from '@/lib/faro/format'
 import { Badge, Explain } from '../ui'
 import { Field, Pending, Account, LEVEL, warningFor, describe, EditDialog, Pacing } from './editing'
+import DailyCharts, { DayPoint } from './DailyCharts'
+export type { DayPoint }
 
 type Level = 'campaign' | 'adset' | 'ad'
 type View = 'resultados' | 'entrega' | 'embudo' | 'video'
 type StatusFilter = 'activos' | 'gasto' | 'todos'
 interface Row { n: TreeNode; campaign: string; adset: string | null }
 interface Col { key: string; label: string; title?: string; val: (m: Metrics, n: TreeNode) => number | null; fmt: (v: number | null, n: TreeNode) => React.ReactNode; tone?: (v: number | null) => string }
-export interface DayPoint { date: string; spend: number; purchases: number; value: number }
 
 const div = (a: number, b: number) => (b > 0 ? a / b : null)
 const VIEWS: { key: View; label: string }[] = [
@@ -24,28 +25,6 @@ function sumMetrics(list: TreeNode[]): Metrics {
   const z: Metrics = { spend: 0, impressions: 0, reach: 0, linkClicks: 0, lpv: 0, atc: 0, ic: 0, purchases: 0, purchaseValue: 0, video3s: 0, videoP50: 0 }
   for (const n of list) (Object.keys(z) as (keyof Metrics)[]).forEach((k) => { z[k] += n.m[k] })
   return z
-}
-
-/** Barras de gasto por día con puntos de compras. Sin librerías, liviano. */
-function DailyBars({ days, height = 72 }: { days: DayPoint[]; height?: number }) {
-  if (!days.length) return <div className="h-[72px] grid place-items-center text-[12px] text-faint">Sin datos diarios</div>
-  const maxS = Math.max(1, ...days.map((d) => d.spend))
-  const maxP = Math.max(1, ...days.map((d) => d.purchases))
-  const w = 100 / days.length
-  return (
-    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }} role="img" aria-label="Gasto y compras por día">
-      {days.map((d, i) => {
-        const h = (d.spend / maxS) * (height - 10)
-        return (
-          <g key={d.date}>
-            <title>{`${d.date.slice(8)}/${d.date.slice(5, 7)}: ${money(d.spend)} · ${int(d.purchases)} compras`}</title>
-            <rect x={i * w + w * 0.15} y={height - h} width={w * 0.7} height={h} rx={0.6} className="fill-[rgb(var(--f-ink)/0.18)]" />
-            {d.purchases > 0 && <circle cx={i * w + w / 2} cy={height - 4 - (d.purchases / maxP) * (height - 14)} r={1.4} className="fill-[rgb(var(--f-good))]" />}
-          </g>
-        )
-      })}
-    </svg>
-  )
 }
 
 export default function AdsWorkspace({
@@ -248,9 +227,8 @@ export default function AdsWorkspace({
             </div>
           ))}
         </div>
-        <div className="border-t border-line px-4 pt-3 pb-2">
-          <div className="flex items-center justify-between text-[12px] text-mute mb-1"><span>Gasto por día · <span className="text-good">●</span> compras</span><span>{period.label}</span></div>
-          <DailyBars days={daily} />
+        <div className="border-t border-line px-4 pt-4 pb-3">
+          <DailyCharts days={daily} maxCpa={maxCpa} />
         </div>
       </section>
 
@@ -517,8 +495,7 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
           )}
 
           <section>
-            <div className="flex items-center justify-between text-[12.5px] text-mute mb-1"><span>Gasto por día · <span className="text-good">●</span> compras</span><span>últimos {days?.length || 0} días</span></div>
-            {days == null ? <div className="h-[90px] rounded bg-sunken animate-pulse" /> : <DailyBars days={days} height={90} />}
+            {days == null ? <div className="h-[130px] rounded bg-sunken animate-pulse" /> : <DailyCharts days={days} maxCpa={maxCpa} height={120} stacked />}
           </section>
 
           <section>

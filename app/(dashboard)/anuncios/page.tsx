@@ -110,6 +110,7 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         preAdset={searchParams.adset || null}
         preDup={searchParams.dup ? searchParams.dup.split(',').filter(Boolean).slice(0, 20) : []}
         enhancementsOn={enabledCount(ctx.workspace.settings.meta_enhancements)}
+        multiAdsDefault={ctx.workspace.settings.meta_enhancements.multiAds}
       />
     )
   } else {
