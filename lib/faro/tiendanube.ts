@@ -1,5 +1,6 @@
 import { readStoredToken } from './tokens'
 import { svc, upsertChunks, logSync } from './db'
+import { saveAttribution } from './attribution'
 import { addDays, localDate } from './dates'
 
 const TN_API = 'https://api.tiendanube.com/v1'
@@ -65,6 +66,18 @@ const ORDER_FIELDS = [
   'subtotal', 'discount', 'total', 'shipping_cost_owner', 'shipping_cost_customer', 'gateway', 'payment_details',
   'shipping_option', 'shipping_pickup_type', 'shipping_address', 'customer', 'contact_email', 'storefront', 'products',
 ].join(',')
+// Con URL de llegada para cruzar pedidos con anuncios (UTMs). Si Tiendanube la rechaza, se sigue sin ella.
+const ORDER_FIELDS_UTM = ORDER_FIELDS + ',landing_url'
+let utmFieldOk = true
+async function getOrders(storeId: string, token: string, path: string, params: Record<string, string>) {
+  if (utmFieldOk) {
+    try { return await tnGet<unknown>(storeId, token, path, { ...params, fields: ORDER_FIELDS_UTM }) } catch (e) {
+      if (!/Tiendanube 4\d\d/.test((e as Error).message) || /Tiendanube 40[134]|Tiendanube 429/.test((e as Error).message)) throw e
+      utmFieldOk = false
+    }
+  }
+  return tnGet<unknown>(storeId, token, path, { ...params, fields: ORDER_FIELDS })
+}
 
 const n = (v: unknown) => {
   const x = parseFloat(String(v ?? '0'))
@@ -143,11 +156,11 @@ export async function syncStoreOrders(store: StoreRow, budgetMs = 40000): Promis
       const since = addDays(localDate(new Date(), 'UTC'), -400) + 'T00:00:00Z'
       let page = store.backfill_page || 1
       while (Date.now() - t0 < budgetMs) {
-        const { data } = await tnGet<unknown[]>(store.external_id, token, 'orders', {
-          per_page: '200', page: String(page), created_at_min: since, fields: ORDER_FIELDS,
+        const { data } = await getOrders(store.external_id, token, 'orders', {
+          per_page: '200', page: String(page), created_at_min: since,
         })
         const batch = Array.isArray(data) ? data : []
-        if (batch.length) rows += await upsertChunks('orders', batch.map((o) => mapOrder(store.id, o)), 'store_id,order_id')
+        if (batch.length) { rows += await upsertChunks('orders', batch.map((o) => mapOrder(store.id, o)), 'store_id,order_id'); await saveAttribution(store.id, batch) }
         if (batch.length < 200) {
           await sb.from('stores').update({ backfill_done: true, backfill_page: page, last_synced_at: new Date().toISOString(), last_sync_error: null }).eq('id', store.id)
           store.backfill_done = true
@@ -167,13 +180,14 @@ export async function syncStoreOrders(store: StoreRow, budgetMs = 40000): Promis
     let page = 1
     let maxUpdated = store.orders_cursor || cursor
     while (Date.now() - t0 < budgetMs) {
-      const { data } = await tnGet<unknown[]>(store.external_id, token, 'orders', {
-        per_page: '200', page: String(page), updated_at_min: cursor, fields: ORDER_FIELDS,
+      const { data } = await getOrders(store.external_id, token, 'orders', {
+        per_page: '200', page: String(page), updated_at_min: cursor,
       })
       const batch = Array.isArray(data) ? data : []
       if (batch.length) {
         const mapped = batch.map((o) => mapOrder(store.id, o))
         rows += await upsertChunks('orders', mapped, 'store_id,order_id')
+        await saveAttribution(store.id, batch)
         for (const m of mapped) if (m.updated_at && m.updated_at > maxUpdated) maxUpdated = m.updated_at
       }
       if (batch.length < 200) break
@@ -193,9 +207,10 @@ export async function syncStoreOrders(store: StoreRow, budgetMs = 40000): Promis
 /** Actualiza una sola orden (webhooks). */
 export async function syncSingleOrder(store: StoreRow, orderId: string) {
   const token = await getConnectionToken(store.connection_id)
-  const { data } = await tnGet<unknown>(store.external_id, token, `orders/${orderId}`, { fields: ORDER_FIELDS })
+  const { data } = await getOrders(store.external_id, token, `orders/${orderId}`, {})
   if (data && typeof data === 'object') {
     await upsertChunks('orders', [mapOrder(store.id, data)], 'store_id,order_id')
+    await saveAttribution(store.id, [data])
   }
 }
 
@@ -273,4 +288,26 @@ export async function fetchStoreInfo(externalId: string, token: string) {
       ? `https://${String(d.domains[0]).replace(/^https?:\/\//, '')}`
       : (d.original_domain as string) ? `https://${d.original_domain}` : (d.url_with_protocol as string) || null,
   }
+}
+
+/** Trae la URL de llegada de los pedidos de los últimos días (para cruzar con anuncios lo ya vendido). */
+export async function backfillAttribution(store: StoreRow, days = 60, budgetMs = 40000): Promise<{ orders: number; withLanding: number; done: boolean }> {
+  const token = await getConnectionToken(store.connection_id)
+  const since = addDays(localDate(new Date(), 'UTC'), -days) + 'T00:00:00Z'
+  const t0 = Date.now()
+  let orders = 0, withLanding = 0, page = 1
+  while (Date.now() - t0 < budgetMs) {
+    let data: unknown
+    try {
+      ({ data } = await tnGet<unknown[]>(store.external_id, token, 'orders', {
+        per_page: '200', page: String(page), created_at_min: since, fields: 'id,created_at,status,payment_status,cancelled_at,total,shipping_cost_customer,landing_url',
+      }))
+    } catch (e) { if (/Tiendanube 404/.test((e as Error).message)) return { orders, withLanding, done: true }; throw e }
+    const batch = Array.isArray(data) ? data : []
+    orders += batch.length
+    withLanding += await saveAttribution(store.id, batch)
+    if (batch.length < 200) return { orders, withLanding, done: true }
+    page++
+  }
+  return { orders, withLanding, done: false }
 }

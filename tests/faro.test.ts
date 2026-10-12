@@ -224,3 +224,25 @@ describe('plan de inversión mensual', () => {
     expect(Math.round(p.dailyNeeded)).toBe(Math.round(2_000_000 / 21))
   })
 })
+
+import { parseLanding, attribute } from '../lib/faro/attribution'
+
+describe('ventas reales por anuncio (UTM)', () => {
+  it('lee las UTMs de la URL de llegada', () => {
+    const p = parseLanding('https://www.foreverbasics.com.ar/productos/remera/?utm_source=facebook&utm_content=Remera%20negra&utm_term=120200&fbclid=abc')!
+    expect(p.utm_source).toBe('facebook'); expect(p.utm_content).toBe('Remera negra'); expect(p.utm_term).toBe('120200'); expect(p.fbclid).toBe(true)
+    expect(parseLanding('')).toBeNull()
+  })
+  it('cruza por id y por nombre, y no cuenta pedidos cancelados', () => {
+    const ads = [{ id: '1', name: 'Remera', spend: 100 }, { id: '2', name: 'remera', spend: 500 }, { id: '3', name: 'Buzo', spend: 50 }]
+    const r = attribute([
+      { order_id: 'a', utm_source: 'facebook', utm_content: 'x', utm_term: '3', fbclid: false, net: 1000, valid: true },
+      { order_id: 'b', utm_source: 'facebook', utm_content: 'Remera', utm_term: null, fbclid: false, net: 2000, valid: true },
+      { order_id: 'c', utm_source: 'facebook', utm_content: 'Remera', utm_term: null, fbclid: false, net: 9999, valid: false },
+      { order_id: 'd', utm_source: 'google', utm_content: null, utm_term: null, fbclid: false, net: 500, valid: true },
+    ], ads)
+    expect(r.byAd['3']).toEqual({ orders: 1, revenue: 1000 })
+    expect(r.byAd['2']).toEqual({ orders: 1, revenue: 2000 })
+    expect(r.matched).toBe(2); expect(r.fromMeta).toBe(2)
+  })
+})

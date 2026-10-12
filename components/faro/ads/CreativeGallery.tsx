@@ -72,7 +72,7 @@ function TagChip({ dim, value, auto, options, canEdit, onSave }: { dim: Dim; val
   )
 }
 
-export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = {}, initialTags = {}, canEdit = false }: { cards: CreativeCard[]; maxCpa: number | null; periodLabel: string; fatigue?: Record<string, Fatigue>; initialTags?: Record<string, Tags>; canEdit?: boolean }) {
+export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = {}, initialTags = {}, canEdit = false, sales = null, attr = null }: { cards: CreativeCard[]; maxCpa: number | null; periodLabel: string; fatigue?: Record<string, Fatigue>; initialTags?: Record<string, Tags>; canEdit?: boolean; sales?: Record<string, { orders: number; revenue: number }> | null; attr?: AttrInfo | null }) {
   const [sort, setSort] = useState<Sort>('spend')
   const [tags, setTags] = useState<Record<string, Tags>>(initialTags)
   const [mode, setMode] = useState<'grilla' | 'etiquetas'>('grilla')
@@ -136,6 +136,7 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = 
         </span>
       </div>
 
+      {attr && <AttributionNote attr={attr} canEdit={canEdit} />}
       {tagErr && <p className="text-[12.5px] text-bad">{tagErr}</p>}
       {mode === 'etiquetas' ? <TagReport list={list} tags={tags} dim={dim} setDim={setDim} maxCpa={maxCpa} /> : list.length === 0 ? <Empty title={`Sin creativos con gasto en ${periodLabel.toLowerCase()}`} /> : (
         <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -150,6 +151,7 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = 
               ['Compras', int(m.purchases)],
               ['Costo/compra', cpa != null ? money(cpa) : '—', cpa != null && maxCpa != null ? (cpa <= maxCpa ? 'text-good' : 'text-bad') : undefined],
               ['ROAS', m.purchaseValue > 0 ? ratio(m.purchaseValue / m.spend) : '—'],
+              ...(sales ? [['Ventas Tiendanube', sales[c.id] ? `${int(sales[c.id].orders)} · ${money(sales[c.id].revenue)}` : '—'], ['ROAS real', sales[c.id] && m.spend > 0 ? ratio(sales[c.id].revenue / m.spend) : '—']] as [string, string, string?][] : []),
               ['CTR', pct(div(m.linkClicks, m.impressions), 2)],
               ['CPC', money(div(m.spend, m.linkClicks))],
               ...(c.isVideo ? [['Hook rate', pct(hook), hook != null ? (hook >= 0.25 ? 'text-good' : hook < 0.15 ? 'text-bad' : undefined) : undefined], ['Retención 50%', pct(hold)]] as [string, string, string?][] : [['Carrito/visita', pct(div(m.atc, m.lpv), 1)], ['Visitas web', int(m.lpv)]] as [string, string, string?][]),
@@ -245,6 +247,34 @@ function TagReport({ list, tags, dim, setDim, maxCpa }: { list: CreativeCard[]; 
         </table>
       </div>
       {tagged === 0 && dim !== 'formato' && <p className="px-4 py-3 text-[12.5px] text-mute border-t border-line">Cargá el {DIM[dim].toLowerCase()} de cada creativo desde la vista Creativos (las etiquetas debajo de cada uno) para ver qué funciona mejor.</p>}
+    </div>
+  )
+}
+
+export interface AttrInfo { totalOrders: number; withLanding: number; fromMeta: number; matched: number; missing: boolean }
+
+/** Cuántas ventas de Tiendanube se pudieron cruzar con un anuncio, y botón para traer el origen de pedidos viejos. */
+function AttributionNote({ attr, canEdit }: { attr: AttrInfo; canEdit: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  async function backfill() {
+    setBusy(true); setMsg(null)
+    try {
+      const r = await fetch('/api/v2/attribution', { method: 'POST' })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'No se pudo')
+      setMsg(`Listo: ${j.withLanding} de ${j.orders} pedidos con origen.${j.done ? '' : ' Faltan más: tocá de nuevo.'} Recargá la página para verlo.`)
+    } catch (e) { setMsg((e as Error).message) } finally { setBusy(false) }
+  }
+  if (attr.missing) return <p className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-2 text-[13px] text-ink">Para ver ventas reales de Tiendanube por anuncio falta correr la migración 20261013_order_attribution.sql en Supabase.</p>
+  const share = attr.totalOrders > 0 ? attr.matched / attr.totalOrders : 0
+  return (
+    <div className="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="text-ink font-medium">Ventas reales por anuncio (Tiendanube)</span>
+      <span className="text-mute">{attr.matched} de {attr.totalOrders} pedidos cruzados con un anuncio ({Math.round(share * 100)}%) · {attr.fromMeta} vinieron de Meta · {attr.withLanding} con origen guardado.</span>
+      <span className="text-mute">Se cruza por las UTMs del link: los anuncios cargados desde Faro las llevan; los demás necesitan <code className="text-[12px]">utm_content={'{{ad.name}}'}</code> o <code className="text-[12px]">utm_term={'{{ad.id}}'}</code>.</span>
+      {canEdit && <button disabled={busy} onClick={backfill} className="ml-auto rounded-md border border-line px-2.5 py-1 hover:bg-sunken disabled:opacity-50">{busy ? 'Trayendo…' : 'Traer origen de los últimos 60 días'}</button>}
+      {msg && <span className="basis-full text-mute">{msg}</span>}
     </div>
   )
 }

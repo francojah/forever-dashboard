@@ -20,7 +20,7 @@ interface FileItem {
 }
 
 const CTAS = [['SHOP_NOW', 'Comprar'], ['LEARN_MORE', 'Más información'], ['BUY_NOW', 'Comprar ahora'], ['ORDER_NOW', 'Pedir ahora'], ['GET_OFFER', 'Obtener oferta'], ['SEND_MESSAGE', 'Enviar mensaje']]
-const UTM = 'utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_content={{ad.name}}'
+const UTM = 'utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_content={{ad.name}}&utm_term={{ad.id}}'
 const TRAFFIC = new Set(['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'REACH', 'IMPRESSIONS', 'PROFILE_VISIT', 'VISIT_INSTAGRAM_PROFILE'])
 const baseName = (f: string) => f.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().toUpperCase().slice(0, 60)
 const todayLabel = () => { const d = new Date(); return `${d.getDate()}/${d.getMonth() + 1}` }

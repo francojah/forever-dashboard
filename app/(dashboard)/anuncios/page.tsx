@@ -15,6 +15,8 @@ import ChangeHistory from '@/components/faro/ads/ChangeHistory'
 import CreativeGallery, { CreativeCard } from '@/components/faro/ads/CreativeGallery'
 import { svc } from '@/lib/faro/db'
 import { loadRules, runRules } from '@/lib/faro/rules'
+import { loadAttribution } from '@/lib/faro/attribution'
+import { startOfLocalDayUTC } from '@/lib/faro/dates'
 import { planPacing, monthOf } from '@/lib/faro/budgetPlan'
 import RulesManager from '@/components/faro/ads/RulesManager'
 
@@ -111,10 +113,15 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         image: a.image, isVideo: a.isVideo, body: a.copy?.body || null, m: a.m,
       })
     }
-    const fatigue = await loadFatigue(accounts.map((a) => a.id), today, maxCpa)
+    const [fatigue, periodOrders] = await Promise.all([
+      loadFatigue(accounts.map((a) => a.id), today, maxCpa),
+      loadOrders(storeIds, period.from, period.to, tz),
+    ])
+    const totalOrders = summarizeSales(periodOrders, tz, idx, ctx.workspace.settings).orders
+    const attr = await loadAttribution(storeIds, startOfLocalDayUTC(period.from, tz), startOfLocalDayUTC(addDays(period.to, 1), tz), cards.map((c) => ({ id: c.id, name: c.name, spend: c.m.spend })), totalOrders)
     const { data: tagRows } = await svc().from('ad_tags').select('ad_id,angulo,formato,producto').eq('workspace_id', ctx.workspace.id)
     const initialTags = Object.fromEntries(((tagRows || []) as { ad_id: string; angulo: string | null; formato: string | null; producto: string | null }[]).map((t) => [t.ad_id, { angulo: t.angulo, formato: t.formato, producto: t.producto }]))
-    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} fatigue={fatigue} initialTags={initialTags} canEdit={canEdit(ctx)} />
+    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} fatigue={fatigue} initialTags={initialTags} canEdit={canEdit(ctx)} sales={storeIds.length ? attr.byAd : null} attr={storeIds.length ? { totalOrders: attr.totalOrders, withLanding: attr.withLanding, fromMeta: attr.fromMeta, matched: attr.matched, missing: attr.missing } : null} />
   } else if (tab === 'publicar') {
     const ids = accounts.map((a) => a.id)
     const [{ data: ents }, tree30, { data: adRows }] = await Promise.all([
