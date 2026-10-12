@@ -47,12 +47,13 @@ function sumMetrics(list: TreeNode[]): Metrics {
 }
 
 export default function AdsWorkspace({
-  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period, prev = {}, prevLabel = 'el período anterior', alerts = [], fatigue = {}, proposals = [], plan = null,
+  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period, prev = {}, prevLabel = 'el período anterior', alerts = [], fatigue = {}, proposals = [], plan = null, demo = false,
 }: {
   tree: TreeNode[]; accounts: Account[]; maxCpa: number | null; canEdit: boolean; focus: string | null
   todaySpend?: Record<string, number>; hourShare?: number; daily: DayPoint[]; period: { from: string; to: string; label: string; key: string }
   prev?: Record<string, Metrics>; prevLabel?: string; alerts?: AdAlert[]; fatigue?: Record<string, string>
   proposals?: Proposal[]; plan?: PlanPacing | null
+  demo?: boolean
 }) {
   const router = useRouter()
   const [level, setLevel] = useState<Level>('campaign')
@@ -406,6 +407,7 @@ export default function AdsWorkspace({
       {open && (
         <DetailPanel
           row={open} period={period} maxCpa={maxCpa} canEdit={canEdit} protectedNow={isProtected(open.n)}
+          demoDays={demo ? daily.map((d) => { const k = total.spend > 0 ? open.n.m.spend / total.spend : 0; return { date: d.date, spend: d.spend * k, purchases: Math.round(d.purchases * k * (total.purchases > 0 && open.n.m.spend > 0 ? (open.n.m.purchases / open.n.m.spend) / (total.purchases / total.spend) : 0)), value: d.value * k } }) : undefined}
           todaySpend={todaySpend} hourShare={hourShare}
           budget={valueOf(open.n, 'daily_budget') as number | null}
           status={valueOf(open.n, 'status') as string}
@@ -452,7 +454,8 @@ export default function AdsWorkspace({
   )
 }
 
-function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, hourShare, budget, status, onClose, onStage, onEdit, onProtect, onOpen }: {
+function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, hourShare, budget, status, onClose, onStage, onEdit, onProtect, onOpen, demoDays }: {
+  demoDays?: DayPoint[]
   row: Row; period: { from: string; to: string; label: string }; maxCpa: number | null; canEdit: boolean; protectedNow: boolean
   todaySpend: Record<string, number>; hourShare: number; budget: number | null; status: string
   onClose: () => void; onStage: (f: Field, v: unknown) => void; onEdit: (k: 'name' | 'targeting' | 'copy') => void; onProtect: () => void; onOpen: (id: string) => void
@@ -461,6 +464,7 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
   const [days, setDays] = useState<DayPoint[] | null>(null)
   const [dup, setDup] = useState<string | null>(null)
   useEffect(() => {
+    if (demoDays) { setDays(demoDays); return }
     setDays(null)
     // Al menos 14 días para ver tendencia
     const to = period.to
@@ -468,6 +472,7 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
     const min = d.toISOString().slice(0, 10)
     const from = period.from < min ? period.from : min
     fetch(`/api/v2/meta/entity-daily?level=${n.level}&id=${n.id}&from=${from}&to=${to}`).then((r) => r.json()).then((j) => setDays((j.days || []).map((x: { date: string; spend: number; purchases: number; value: number }) => x))).catch(() => setDays([]))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [n.id, n.level, period.from, period.to])
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
 
@@ -545,7 +550,7 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
             {days == null ? <div className="h-[130px] rounded bg-sunken animate-pulse" /> : <DailyCharts days={days} maxCpa={maxCpa} height={120} stacked />}
           </section>
 
-          <Breakdown accountId={n.accountId} id={n.id} from={period.from} to={period.to} maxCpa={maxCpa} />
+          {demoDays ? <p className="text-[12.5px] text-mute">Con tu cuenta conectada acá ves el desglose por edad, género, provincia, plataforma y ubicación.</p> : <Breakdown accountId={n.accountId} id={n.id} from={period.from} to={period.to} maxCpa={maxCpa} />}
 
           <section>
             <p className="text-[13px] text-mute mb-2">{period.label}</p>

@@ -8,6 +8,7 @@ import MonthPicker from '@/components/faro/finance/MonthPicker'
 import CloseMonth from '@/components/faro/finance/CloseMonth'
 import CostTable from '@/components/faro/finance/CostTable'
 import ResultChart from '@/components/faro/finance/ResultChart'
+import { costChecks, projectMonth } from '@/lib/faro/costCheck'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -76,16 +77,31 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
       storeIds: ctx.stores.filter((s) => s.active).map((s) => s.id), accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id),
     }, months)
     const p = all.find((x) => x.month === month)!
+    const [py, pm] = month.split('-').map(Number)
+    const prevMonth = pm === 1 ? `${py - 1}-12` : `${py}-${String(pm - 1).padStart(2, '0')}`
+    const prevP = all.find((x) => x.month === prevMonth) || (await loadPnL({
+      workspaceId: ctx.workspace.id, tz, settings: ctx.workspace.settings,
+      storeIds: ctx.stores.filter((s) => s.active).map((s) => s.id), accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id),
+    }, [prevMonth]))[0]
+    const today = localDate(new Date(), tz)
+    const proj = projectMonth(p, today)
+    const checks = costChecks(p, ctx.workspace.settings)
     const coverage = ctx.adAccounts.filter((a) => a.active).map((a) => a.insights_from).filter(Boolean).sort()[0] as string | undefined
     const noAdsData = (m: string) => ctx.adAccounts.some((a) => a.active) && (!coverage || `${m}-31` < coverage)
     const s = p.sales
     const cm = s.netSales > 0 ? p.contribution / s.netSales : null
+    const pcm = prevP && prevP.sales.netSales > 0 ? prevP.contribution / prevP.sales.netSales : null
     const kpis = [
-      { label: 'Resultado operativo', value: money(p.operatingResult), tone: p.operatingResult < 0 ? 'text-bad' : 'text-ink', sub: s.netSales > 0 ? `${pct(p.operatingResult / s.netSales, 1)} de las ventas netas` : '' },
-      { label: 'Margen de contribución', value: pct(cm, 1), sub: `${money(p.contribution)} antes de publicidad` },
-      { label: 'Costo por compra máximo', value: money(s.orders ? p.contribution / s.orders : null), sub: 'ganancia promedio por orden antes de publicidad' },
-      { label: 'Ventas para cubrir fijos', value: money(p.breakEvenSales), sub: p.breakEvenSales != null ? (s.netSales >= p.breakEvenSales ? 'superado este mes' : `faltan ${money(p.breakEvenSales - s.netSales)}`) : 'la publicidad se come el margen' },
-    ]
+      { label: 'Resultado operativo', value: money(p.operatingResult), tone: p.operatingResult < 0 ? 'text-bad' : 'text-ink', sub: proj ? `Proyección al cierre: ${money(proj.result)}` : s.netSales > 0 ? `${pct(p.operatingResult / s.netSales, 1)} de las ventas netas` : '', vs: proj ? null : prevP ? { cur: p.operatingResult, prev: prevP.operatingResult } : null },
+      { label: 'Margen de contribución', value: pct(cm, 1), sub: `${money(p.contribution)} antes de publicidad`, vs: cm != null && pcm != null ? { cur: cm, prev: pcm, pts: true } : null },
+      { label: 'Costo por compra máximo', value: money(s.orders ? p.contribution / s.orders : null), sub: 'ganancia promedio por orden antes de publicidad', vs: null },
+      { label: 'Ventas para cubrir fijos', value: money(p.breakEvenSales), sub: p.breakEvenSales != null ? (s.netSales >= p.breakEvenSales ? 'superado este mes' : proj ? (proj.netSales >= p.breakEvenSales ? `al ritmo actual cerrás con ${money(proj.netSales)}: se cubre` : `al ritmo actual cerrás con ${money(proj.netSales)}: no alcanza`) : `faltan ${money(p.breakEvenSales - s.netSales)}`) : 'la publicidad se come el margen', vs: null },
+    ] as { label: string; value: string; sub: string; tone?: string; vs: { cur: number; prev: number; pts?: boolean } | null }[]
+    const vsText = (v: { cur: number; prev: number; pts?: boolean }) => {
+      if (v.pts) { const d = (v.cur - v.prev) * 100; return { t: `${d >= 0 ? '+' : ''}${d.toFixed(1)} pts vs ${monthLabel(prevMonth).toLowerCase()}`, good: d >= 0 } }
+      const d = v.cur - v.prev
+      return { t: `${d >= 0 ? '+' : '−'}${money(Math.abs(d))} vs ${monthLabel(prevMonth).toLowerCase()}`, good: d >= 0 }
+    }
     body = (
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 rounded-panel border border-line bg-surface">
@@ -94,9 +110,26 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
               <p className="text-[13px] text-mute">{k.label}</p>
               <p className={`num mt-2 text-[24px] font-semibold leading-none ${k.tone || 'text-ink'}`}>{k.value}</p>
               <p className="mt-2 text-[12.5px] text-mute">{k.sub}</p>
+              {k.vs && (() => { const v = vsText(k.vs); return <p className={`mt-1 text-[12px] num ${v.good ? 'text-good' : 'text-bad'}`}>{v.t}</p> })()}
             </div>
           ))}
         </div>
+        {checks.length > 0 && (
+          <Panel title="Chequeo de costos" description="Qué parte del resultado es real y qué puede estar faltando." padded={false}>
+            <ul className="divide-y divide-line">
+              {checks.map((c) => (
+                <li key={c.key} className="px-5 py-3 flex items-start gap-3 text-[13.5px]">
+                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${c.level === 'bad' ? 'bg-bad' : c.level === 'warn' ? 'bg-warn' : 'bg-good'}`} aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">{c.title}</p>
+                    <p className="text-mute">{c.detail}{c.impact ? ` Impacto aproximado en el mes: ${money(c.impact)}.` : ''}</p>
+                  </div>
+                  {c.href && c.level !== 'ok' && <a href={c.href} className="shrink-0 rounded-md border border-line px-2.5 py-1 text-[12.5px] hover:bg-sunken">Corregir</a>}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-5 items-start">
           <Panel title={`Estado de resultados · ${monthLabel(month)}`} description={p.closed ? 'Mes cerrado: los números quedaron congelados.' : month === thisMonth ? 'Mes en curso, se actualiza con cada venta.' : 'Calculado desde las órdenes y la inversión reales.'} padded={false} actions={canEdit(ctx) && month < thisMonth ? <CloseMonth month={month} closed={p.closed} /> : undefined}>
             <Statement p={p} noAds={noAdsData(month)} />

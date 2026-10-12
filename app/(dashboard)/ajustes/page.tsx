@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import WeeklyEmail from '@/components/faro/settings/WeeklyEmail'
+import { mailConfigured } from '@/lib/faro/mailer'
 import { getRequestContext, canEdit } from '@/lib/faro/context'
 import { svc, fetchAll } from '@/lib/faro/db'
 import { metaLoginConfigured, tiendanubeInstallUrl } from '@/lib/faro/connections'
@@ -69,7 +71,12 @@ export default async function AjustesPage({ searchParams }: { searchParams: { ta
       const { data } = await sb.auth.admin.getUserById(m.user_id)
       return { user_id: m.user_id, role: m.role, email: data.user?.email || m.user_id, you: m.user_id === ctx.user.id }
     }))
-    body = <Team members={withEmail} isOwner={ctx.role === 'owner'} workspaceName={ctx.workspace.name} />
+    body = (
+      <div className="flex flex-col gap-5">
+        <Team members={withEmail} isOwner={ctx.role === 'owner'} workspaceName={ctx.workspace.name} />
+        <WeeklyEmail enabled={ctx.workspace.settings.weekly_email} canEdit={canEdit(ctx)} mailReady={mailConfigured()} />
+      </div>
+    )
   } else {
     const { data: log } = await sb.from('sync_log').select('source,status,rows,ms,error,created_at').eq('workspace_id', ctx.workspace.id).order('created_at', { ascending: false }).limit(60)
     body = <SyncLog rows={log || []} timezone={ctx.workspace.timezone} />

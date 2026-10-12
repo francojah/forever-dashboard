@@ -151,7 +151,7 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = 
               ['Compras', int(m.purchases)],
               ['Costo/compra', cpa != null ? money(cpa) : '—', cpa != null && maxCpa != null ? (cpa <= maxCpa ? 'text-good' : 'text-bad') : undefined],
               ['ROAS', m.purchaseValue > 0 ? ratio(m.purchaseValue / m.spend) : '—'],
-              ...(sales ? [['Ventas Tiendanube', sales[c.id] ? `${int(sales[c.id].orders)} · ${money(sales[c.id].revenue)}` : '—'], ['ROAS real', sales[c.id] && m.spend > 0 ? ratio(sales[c.id].revenue / m.spend) : '—']] as [string, string, string?][] : []),
+              ...(sales ? [['Ventas tienda', sales[c.id] ? int(sales[c.id].orders) : '—'], ['ROAS real', sales[c.id] && m.spend > 0 ? ratio(sales[c.id].revenue / m.spend) : '—']] as [string, string, string?][] : []),
               ['CTR', pct(div(m.linkClicks, m.impressions), 2)],
               ['CPC', money(div(m.spend, m.linkClicks))],
               ...(c.isVideo ? [['Hook rate', pct(hook), hook != null ? (hook >= 0.25 ? 'text-good' : hook < 0.15 ? 'text-bad' : undefined) : undefined], ['Retención 50%', pct(hold)]] as [string, string, string?][] : [['Carrito/visita', pct(div(m.atc, m.lpv), 1)], ['Visitas web', int(m.lpv)]] as [string, string, string?][]),
@@ -179,7 +179,7 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = 
                   </div>
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px]">
                     {stats.map(([k, val, tone]) => (
-                      <div key={k} className="flex justify-between gap-2"><dt className="text-mute">{k}</dt><dd className={`num ${tone || 'text-ink'}`}>{val}</dd></div>
+                      <div key={k} className="flex justify-between gap-2"><dt className="text-mute truncate min-w-0" title={k}>{k}</dt><dd className={`num whitespace-nowrap ${tone || 'text-ink'}`}>{val}</dd></div>
                     ))}
                   </dl>
                   {fatigue[c.id] && (

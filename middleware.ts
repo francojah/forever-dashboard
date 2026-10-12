@@ -43,14 +43,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Rutas públicas: landing estática de Faro, páginas legales (las pide Meta), API y portal de cambios (sin auth)
-  if (pathname === '/landing.html' || pathname === '/privacidad' || pathname === '/terminos' || pathname === '/eliminar-datos' || pathname.startsWith('/api') || pathname === '/cambios' || pathname.startsWith('/cambios/')) {
+  if (pathname === '/landing' || pathname === '/demo' || pathname === '/recuperar' || pathname === '/auth/callback' || pathname === '/privacidad' || pathname === '/terminos' || pathname === '/eliminar-datos' || pathname.startsWith('/api') || pathname === '/cambios' || pathname.startsWith('/cambios/')) {
     return response
   }
 
   // Home pública: quien NO inició sesión ve la landing de Faro en "/"
   // (el usuario logueado ve su dashboard en "/" normalmente).
   if (!user && pathname === '/') {
-    return NextResponse.rewrite(new URL('/landing.html', request.url))
+    return NextResponse.rewrite(new URL('/landing', request.url))
   }
 
   // Resto de rutas protegidas: sin sesión → login
@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Si ya está logueado y va al login → dashboard (home)
-  if (user && pathname === '/login') {
+  if (user && (pathname === '/login' || pathname === '/signup' || pathname === '/landing')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 

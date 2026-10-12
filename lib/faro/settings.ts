@@ -26,6 +26,7 @@ export interface WorkspaceSettings {
   use_platform_cost: boolean        // usar el "costo" cargado en Tiendanube cuando exista
   configured: boolean               // terminó el onboarding de costos
   meta_enhancements: EnhancementPrefs // mejoras automáticas de Meta en anuncios nuevos
+  weekly_email: boolean             // resumen semanal por mail al equipo (lunes)
 }
 
 export const DEFAULT_SETTINGS: WorkspaceSettings = {
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: WorkspaceSettings = {
   use_platform_cost: true,
   configured: false,
   meta_enhancements: normalizePrefs(null),
+  weekly_email: true,
 }
 
 /** Sugerencias editables que se muestran en el onboarding. No se aplican solas. */
@@ -84,6 +86,7 @@ export function normalizeSettings(raw: unknown): WorkspaceSettings {
     use_platform_cost: typeof r.use_platform_cost === 'boolean' ? r.use_platform_cost : true,
     configured: !!r.configured,
     meta_enhancements: normalizePrefs(r.meta_enhancements),
+    weekly_email: typeof r.weekly_email === 'boolean' ? r.weekly_email : true,
   }
 }
 

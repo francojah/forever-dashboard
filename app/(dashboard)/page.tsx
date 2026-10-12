@@ -9,6 +9,7 @@ import DailyChart from '@/components/faro/DailyChart'
 import ActionList from '@/components/faro/ActionList'
 import SetupNotice from '@/components/faro/SetupNotice'
 import AiAdvisor from '@/components/faro/AiAdvisor'
+import Onboarding, { onboardingSteps } from '@/components/faro/Onboarding'
 import { lastReport, aiConfigured } from '@/lib/faro/ai'
 import { money, int, ratio, pct } from '@/lib/faro/format'
 
@@ -17,7 +18,17 @@ export const dynamic = 'force-dynamic'
 export default async function InicioPage({ searchParams }: { searchParams: { p?: string; from?: string; to?: string } }) {
   const ctx = await getRequestContext()
   if (!ctx) redirect('/login')
-  if (!ctx.stores.length && !ctx.adAccounts.length) redirect('/ajustes?tab=conexiones&bienvenida=1')
+  if (!ctx.stores.length && !ctx.adAccounts.length) {
+    return (
+      <>
+        <PageHeader title="Bienvenido a Faro" description="Conectá tu tienda y tu cuenta de Meta para ver tus números reales. Son unos minutos." />
+        <div className="flex flex-col gap-5 max-w-[760px]">
+          <Onboarding steps={onboardingSteps(ctx)} />
+          <p className="text-[13.5px] text-mute">¿Querés ver cómo se ve antes? <Link href="/demo" className="underline underline-offset-2 text-ink">Mirá la demo con datos de ejemplo</Link>.</p>
+        </div>
+      </>
+    )
+  }
 
   const period = resolvePeriod(parsePeriodKey(searchParams.p), ctx.workspace.timezone, new Date(), { from: searchParams.from, to: searchParams.to })
   const [d, ai] = await Promise.all([loadHome(ctx, period), lastReport(ctx.workspace.id)])
@@ -30,6 +41,7 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
       </PageHeader>
 
       <div className="flex flex-col gap-5">
+        <Onboarding compact steps={onboardingSteps(ctx, { cogsKnownShare: d.cur.sales.orders > 0 ? 1 - d.cur.sales.cogsCoverage.estimated : null })} />
         <SetupNotice settings={ctx.workspace.settings} sales={d.cur.sales} />
         <KpiStrip cur={d.cur} before={d.before} prevLabel={d.prev.label} currency={cur} />
 

@@ -246,3 +246,22 @@ describe('ventas reales por anuncio (UTM)', () => {
     expect(r.matched).toBe(2); expect(r.fromMeta).toBe(2)
   })
 })
+
+import { demoHome } from '../lib/faro/demo'
+import { projectMonth } from '../lib/faro/costCheck'
+
+describe('demo y proyección', () => {
+  it('la demo es determinística y coherente', () => {
+    const now = new Date('2026-10-12T15:00:00Z')
+    const a = demoHome(now), b = demoHome(now)
+    expect(a.cur.sales.orders).toBe(b.cur.sales.orders)
+    expect(a.cur.sales.orders).toBeGreaterThan(300)
+    expect(a.cur.profitAfterAds).toBeGreaterThan(0)
+  })
+  it('proyecta el cierre del mes en curso', () => {
+    const p = { month: '2026-10', profitAfterAds: 1000, fixedTotal: 500, extraTotal: 0, sales: { netSales: 10000 }, ads: { spend: 100 }, adTax: 0 } as never
+    const r = projectMonth(p, '2026-10-11')!
+    expect(Math.round(r.factor * 100) / 100).toBe(Math.round((31 / 10.5) * 100) / 100)
+    expect(projectMonth(p, '2026-11-01')).toBeNull()
+  })
+})

@@ -10,7 +10,7 @@ const TIPO: Record<AiAction['tipo'], string> = {
 }
 const TONE: Partial<Record<AiAction['tipo'], 'good' | 'bad' | 'warn' | 'beacon'>> = { escalar: 'good', pausar: 'bad', bajar: 'warn', creativos: 'beacon' }
 
-export default function AiAdvisor({ initial, configured, timezone }: { initial: { report: AiReport; createdAt: string } | null; configured: boolean; timezone: string }) {
+export default function AiAdvisor({ initial, configured, timezone, readOnly = false }: { initial: { report: AiReport; createdAt: string } | null; configured: boolean; timezone: string; readOnly?: boolean }) {
   const [data, setData] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,9 +31,9 @@ export default function AiAdvisor({ initial, configured, timezone }: { initial: 
     <Panel
       title="Plan sugerido por IA"
       description={data ? `Análisis del ${when}, con los últimos 7 y 30 días. Revisá cada cambio antes de aplicarlo.` : 'Lee la estructura de campañas, los creativos, el embudo y tus márgenes, y propone qué escalar, qué corregir y qué publicar.'}
-      actions={configured ? <button onClick={run} disabled={busy} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-sunken disabled:opacity-60">{busy ? 'Analizando… (hasta 1 min)' : data ? 'Volver a analizar' : 'Analizar ahora'}</button> : undefined}
+      actions={configured && !readOnly ? <button onClick={run} disabled={busy} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-sunken disabled:opacity-60">{busy ? 'Analizando… (hasta 1 min)' : data ? 'Volver a analizar' : 'Analizar ahora'}</button> : undefined}
     >
-      {!configured && <p className="text-[13.5px] text-mute">Para activarlo, cargá <code className="text-ink">ANTHROPIC_API_KEY</code> en Vercel (Settings → Environment Variables) y hacé Redeploy. Cada análisis cuesta centavos de dólar.</p>}
+      {!configured && !readOnly && <p className="text-[13.5px] text-mute">Para activarlo, cargá <code className="text-ink">ANTHROPIC_API_KEY</code> en Vercel (Settings → Environment Variables) y hacé Redeploy. Cada análisis cuesta centavos de dólar.</p>}
       {error && <p className="text-[13.5px] text-bad mb-3">{error}</p>}
       {data && (
         <div className="flex flex-col gap-4">
