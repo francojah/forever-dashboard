@@ -8,6 +8,8 @@ import { money, int, ratio, pct } from '@/lib/faro/format'
 import { Badge, Explain } from '../ui'
 import { Field, Pending, Account, LEVEL, warningFor, describe, EditDialog, Pacing } from './editing'
 import DailyCharts, { DayPoint } from './DailyCharts'
+import Breakdown from './Breakdown'
+import type { AdAlert } from '@/lib/faro/adAlerts'
 export type { DayPoint }
 
 type Level = 'campaign' | 'adset' | 'ad'
@@ -17,6 +19,20 @@ interface Row { n: TreeNode; campaign: string; adset: string | null }
 interface Col { key: string; label: string; title?: string; val: (m: Metrics, n: TreeNode) => number | null; fmt: (v: number | null, n: TreeNode) => React.ReactNode; tone?: (v: number | null) => string }
 
 const div = (a: number, b: number) => (b > 0 ? a / b : null)
+// Qué dirección es buena en cada métrica (para pintar la variación)
+const BETTER: Record<string, 'up' | 'down'> = {
+  purchases: 'up', roas: 'up', ctr: 'up', atcr: 'up', icr: 'up', pr: 'up', cvr: 'up', hook: 'up', hold: 'up', clk: 'up', lpv: 'up',
+  cpa: 'down', cpc: 'down', cpm: 'down', cpv: 'down',
+}
+const NO_DELTA = new Set(['freq', 'today'])
+
+function Delta({ cur, prev, better, title }: { cur: number | null; prev: number | null; better?: 'up' | 'down'; title?: string }) {
+  if (cur == null || prev == null || prev === 0) return null
+  const d = cur / prev - 1
+  if (!isFinite(d) || Math.abs(d) < 0.05) return null
+  const good = better ? (better === 'up' ? d > 0 : d < 0) : null
+  return <span title={title} className={`block text-[11px] leading-tight ${good == null ? 'text-faint' : good ? 'text-good' : 'text-bad'}`}>{d > 0 ? '▲' : '▼'} {Math.abs(Math.round(d * 100))}%</span>
+}
 const VIEWS: { key: View; label: string }[] = [
   { key: 'resultados', label: 'Resultados' }, { key: 'entrega', label: 'Entrega y costos' }, { key: 'embudo', label: 'Embudo' }, { key: 'video', label: 'Video' },
 ]
@@ -28,10 +44,11 @@ function sumMetrics(list: TreeNode[]): Metrics {
 }
 
 export default function AdsWorkspace({
-  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period,
+  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period, prev = {}, prevLabel = 'el período anterior', alerts = [], fatigue = {},
 }: {
   tree: TreeNode[]; accounts: Account[]; maxCpa: number | null; canEdit: boolean; focus: string | null
   todaySpend?: Record<string, number>; hourShare?: number; daily: DayPoint[]; period: { from: string; to: string; label: string; key: string }
+  prev?: Record<string, Metrics>; prevLabel?: string; alerts?: AdAlert[]; fatigue?: Record<string, string>
 }) {
   const router = useRouter()
   const [level, setLevel] = useState<Level>('campaign')
@@ -204,18 +221,28 @@ export default function AdsWorkspace({
   const anyProtectedPending = Array.from(pending.values()).some((p) => isProtected(p.node))
   const counts = { campaign: rows.campaign.filter((r) => account === 'all' || r.n.accountId === account).length, adset: rows.adset.filter((r) => account === 'all' || r.n.accountId === account).length, ad: rows.ad.filter((r) => account === 'all' || r.n.accountId === account).length }
 
+  const prevTotal = useMemo(() => {
+    const list = scope.map((c) => prev[c.id]).filter(Boolean) as Metrics[]
+    if (!list.length) return null
+    const z = { spend: 0, impressions: 0, reach: 0, linkClicks: 0, lpv: 0, atc: 0, ic: 0, purchases: 0, purchaseValue: 0, video3s: 0, videoP50: 0 } as Metrics
+    for (const m of list) (Object.keys(z) as (keyof Metrics)[]).forEach((k) => { z[k] += m[k] })
+    return z
+  }, [scope, prev])
+  const P = prevTotal
   const cpaAll = div(total.spend, total.purchases)
   const kpis = [
-    { l: 'Gasto', v: money(total.spend), s: budgetToday.budget > 0 ? `hoy ${money(budgetToday.spent)} de ${money(budgetToday.budget)}` : `${int(total.impressions)} impresiones` },
-    { l: 'Compras', v: int(total.purchases), s: `${pct(div(total.purchases, total.lpv), 2)} de las visitas` },
-    { l: 'Costo por compra', v: cpaAll != null ? money(cpaAll) : '—', s: maxCpa != null ? `máximo rentable ${money(maxCpa)}` : '', tone: cpaTone(cpaAll) },
-    { l: 'ROAS Meta', v: total.purchaseValue > 0 ? ratio(total.purchaseValue / total.spend) : '—', s: `${money(total.purchaseValue)} en compras` },
-    { l: 'CTR', v: pct(div(total.linkClicks, total.impressions), 2), s: `CPC ${money(div(total.spend, total.linkClicks))}` },
-    { l: 'CPM', v: money(div(total.spend * 1000, total.impressions)), s: `${int(total.linkClicks)} clics` },
+    { l: 'Gasto', cur: total.spend, pv: P?.spend ?? null, v: money(total.spend), s: budgetToday.budget > 0 ? `hoy ${money(budgetToday.spent)} de ${money(budgetToday.budget)}` : `${int(total.impressions)} impresiones` },
+    { l: 'Compras', cur: total.purchases, pv: P?.purchases ?? null, b: 'up' as const, v: int(total.purchases), s: `${pct(div(total.purchases, total.lpv), 2)} de las visitas` },
+    { l: 'Costo por compra', cur: cpaAll, pv: P ? div(P.spend, P.purchases) : null, b: 'down' as const, v: cpaAll != null ? money(cpaAll) : '—', s: maxCpa != null ? `máximo rentable ${money(maxCpa)}` : '', tone: cpaTone(cpaAll) },
+    { l: 'ROAS Meta', cur: div(total.purchaseValue, total.spend), pv: P ? div(P.purchaseValue, P.spend) : null, b: 'up' as const, v: total.purchaseValue > 0 ? ratio(total.purchaseValue / total.spend) : '—', s: `${money(total.purchaseValue)} en compras` },
+    { l: 'CTR', cur: div(total.linkClicks, total.impressions), pv: P ? div(P.linkClicks, P.impressions) : null, b: 'up' as const, v: pct(div(total.linkClicks, total.impressions), 2), s: `CPC ${money(div(total.spend, total.linkClicks))}` },
+    { l: 'CPM', cur: div(total.spend * 1000, total.impressions), pv: P ? div(P.spend * 1000, P.impressions) : null, b: 'down' as const, v: money(div(total.spend * 1000, total.impressions)), s: `${int(total.linkClicks)} clics` },
   ]
 
   return (
     <div className="flex flex-col gap-4 pb-28">
+      {alerts.length > 0 && <AlertsBox alerts={alerts} onOpen={(id) => { const r = byId.get(id); if (r) { setLevel(r.n.level); setOpenId(id) } }} />}
+
       {/* Resumen */}
       <section className="rounded-panel border border-line bg-surface">
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -224,6 +251,7 @@ export default function AdsWorkspace({
               <p className="text-[12.5px] text-mute">{k.l}</p>
               <p className={`num mt-1.5 text-[22px] font-semibold leading-none ${k.tone || 'text-ink'}`}>{k.v}</p>
               <p className="mt-1.5 text-[12px] text-mute truncate">{k.s}</p>
+              <Delta cur={k.cur ?? null} prev={k.pv ?? null} better={'b' in k ? k.b : undefined} title={`vs ${prevLabel}`} />
             </div>
           ))}
         </div>
@@ -320,6 +348,7 @@ export default function AdsWorkspace({
                         <p className="truncate text-[12px] text-mute">
                           {n.level === 'campaign' ? (n.children.length ? `${n.children.length} ad sets` : (n.objective || '').replace('OUTCOME_', '').toLowerCase()) : n.level === 'adset' ? campaign : `${adset} · ${campaign}`}
                           {isProtected(n) && <span className="text-warn"> · protegido</span>}
+                          {fatigue[n.id] && <span className="text-bad" title={`Últimos 7 días contra los 7 anteriores. ${fatigue[n.id]}`}> · {fatigue[n.id].split(':')[0]}</span>}
                           {n.effectiveStatus && !['ACTIVE', 'PAUSED'].includes(n.effectiveStatus) && <span> · {n.effectiveStatus.replace(/_/g, ' ').toLowerCase()}</span>}
                         </p>
                       </div>
@@ -331,7 +360,12 @@ export default function AdsWorkspace({
                         : <span className="text-faint">{n.level === 'adset' ? 'de campaña' : 'por ad set'}</span>}
                     </td>
                   )}
-                  {cols.map((c) => { const v = c.val(n.m, n); return <td key={c.key} className={`px-2 py-2 text-right num whitespace-nowrap last:pr-4 ${c.tone?.(v) || ''}`}>{c.fmt(v, n)}</td> })}
+                  {cols.map((c) => {
+                    const v = c.val(n.m, n)
+                    const pm = prev[n.id]
+                    const pv = pm && !NO_DELTA.has(c.key) ? c.val(pm, n) : null
+                    return <td key={c.key} className={`px-2 py-2 text-right num whitespace-nowrap last:pr-4 ${c.tone?.(v) || ''}`}>{c.fmt(v, n)}<Delta cur={v} prev={pv} better={BETTER[c.key]} title={pv != null ? `${prevLabel}: ${c.fmt(pv, n)}` : undefined} /></td>
+                  })}
                 </tr>
               )
             })}
@@ -498,6 +532,8 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
             {days == null ? <div className="h-[130px] rounded bg-sunken animate-pulse" /> : <DailyCharts days={days} maxCpa={maxCpa} height={120} stacked />}
           </section>
 
+          <Breakdown accountId={n.accountId} id={n.id} from={period.from} to={period.to} maxCpa={maxCpa} />
+
           <section>
             <p className="text-[13px] text-mute mb-2">{period.label}</p>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13.5px]">
@@ -549,5 +585,29 @@ function DetailPanel({ row, period, maxCpa, canEdit, protectedNow, todaySpend, h
         </div>
       </aside>
     </div>
+  )
+}
+
+function AlertsBox({ alerts, onOpen }: { alerts: AdAlert[]; onOpen: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const shown = open ? alerts : alerts.slice(0, 3)
+  const crit = alerts.filter((a) => a.level === 'critical').length
+  return (
+    <section className={`rounded-panel border px-4 py-3 ${crit ? 'border-bad/40 bg-bad/5' : 'border-warn/40 bg-warn/5'}`} aria-label="Alertas de las cuentas">
+      <p className="text-[13.5px] font-semibold text-ink">{alerts.length} {alerts.length === 1 ? 'alerta' : 'alertas'} en tus cuentas{crit ? ` · ${crit} ${crit === 1 ? 'urgente' : 'urgentes'}` : ''}</p>
+      <ul className="mt-1.5 flex flex-col gap-1.5">
+        {shown.map((a) => (
+          <li key={a.id} className="text-[13px] flex gap-2">
+            <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${a.level === 'critical' ? 'bg-bad' : a.level === 'warning' ? 'bg-warn' : 'bg-faint'}`} aria-hidden />
+            <span className="min-w-0">
+              {a.targetId ? <button onClick={() => onOpen(a.targetId!)} className="text-ink font-medium hover:underline text-left">{a.title}</button> : <span className="text-ink font-medium">{a.title}</span>}
+              <span className="text-mute"> · {a.account}</span>
+              <span className="block text-mute">{a.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {alerts.length > 3 && <button onClick={() => setOpen(!open)} className="mt-1.5 text-[12.5px] text-mute hover:text-ink underline">{open ? 'Ver menos' : `Ver las ${alerts.length}`}</button>}
+    </section>
   )
 }

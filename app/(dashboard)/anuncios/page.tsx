@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getRequestContext, canEdit } from '@/lib/faro/context'
-import { parsePeriodKey, resolvePeriod, addDays, localDate } from '@/lib/faro/dates'
+import { parsePeriodKey, resolvePeriod, addDays, localDate, previousPeriod } from '@/lib/faro/dates'
+import { loadAdAlerts } from '@/lib/faro/adAlerts'
+import { loadFatigue } from '@/lib/faro/fatigue'
+import type { Metrics } from '@/lib/faro/adsTree'
 import { loadAdsTree, loadFrequency, flatten } from '@/lib/faro/adsTree'
 import { loadOrders, loadCostIndex, summarizeSales, loadAdsDaily } from '@/lib/faro/metrics'
 import { PageHeader, PeriodPicker, Panel, Tabs, Empty } from '@/components/faro/ui'
@@ -30,14 +33,19 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
   let content: React.ReactNode = null
   if (tab === 'campanias') {
     const storeIds = ctx.stores.filter((s) => s.active).map((s) => s.id)
-    const [tree, freq, orders14, idx, todayRes, daily] = await Promise.all([
+    const prevP = previousPeriod(period)
+    const [tree, freq, orders14, idx, todayRes, daily, prevTree, alerts] = await Promise.all([
       loadAdsTree(accounts, period.from, period.to, { includeInactive: true }),
       loadFrequency(accounts, period.from, period.to),
       loadOrders(storeIds, addDays(today, -13), today, tz),
       loadCostIndex(storeIds),
       svc().rpc('faro_ads_by_ad', { p_accounts: accounts.map((a) => a.id), p_from: today, p_to: today }),
       loadAdsDaily(accounts.map((a) => a.id), period.from, period.to),
+      loadAdsTree(accounts, prevP.from, prevP.to, { includeInactive: true }),
+      loadAdAlerts(accounts),
     ])
+    const prev: Record<string, Metrics> = {}
+    for (const n of flatten(prevTree)) prev[n.id] = n.m
     // Gasto de hoy por anuncio, ad set y campaña (para el ritmo contra el presupuesto diario)
     const todaySpend: Record<string, number> = {}
     for (const r of (todayRes.data || []) as { ad_id: string; adset_id: string | null; campaign_id: string | null; spend: number }[]) {
@@ -48,6 +56,7 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
     for (const n of flatten(tree)) if (n.level === 'adset') n.frequency = freq.get(n.id) ?? null
     const ref = summarizeSales(orders14, tz, idx, ctx.workspace.settings)
     const maxCpa = ref.orders > 0 ? ref.contribution / ref.orders / (1 + ctx.workspace.settings.ad_tax_pct / 100) : null
+    const fatigue = await loadFatigue(accounts.map((a) => a.id), today, maxCpa)
     content = (
       <AdsWorkspace
         tree={tree}
@@ -59,6 +68,10 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         hourShare={hourShare}
         daily={daily.map((d) => ({ date: d.date, spend: d.spend, purchases: d.purchases, value: d.purchase_value }))}
         period={{ from: period.from, to: period.to, label: period.label, key: period.key }}
+        prev={prev}
+        prevLabel={prevP.label.toLowerCase()}
+        alerts={alerts}
+        fatigue={Object.fromEntries(Object.values(fatigue).map((f) => [f.adId, `${f.status === 'fatiga' ? 'fatiga' : 'cayendo'}: ${f.reasons.join(', ')}`]))}
       />
     )
   } else if (tab === 'creativos') {
@@ -78,7 +91,8 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         image: a.image, isVideo: a.isVideo, body: a.copy?.body || null, m: a.m,
       })
     }
-    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} />
+    const fatigue = await loadFatigue(accounts.map((a) => a.id), today, maxCpa)
+    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} fatigue={fatigue} />
   } else if (tab === 'publicar') {
     const ids = accounts.map((a) => a.id)
     const [{ data: ents }, tree30, { data: adRows }] = await Promise.all([

@@ -169,3 +169,21 @@ describe('cifrado de tokens', () => {
     expect(encryptSecret('x')).toBe('x')
   })
 })
+
+describe('fatiga de creativos', () => {
+  it('detecta caída de CTR y suba de costo por compra', async () => {
+    const { detectFatigue } = await import('../lib/faro/fatigue')
+    const { addDays } = await import('../lib/faro/dates')
+    const today = '2026-10-12'
+    const rows = Array.from({ length: 14 }, (_, i) => {
+      const late = i >= 7
+      return { ad_id: 'A', date: addDays(today, i - 14), spend: 10000, impressions: 5000, link_clicks: late ? 40 : 100, purchases: late ? 1 : 3, video_3s: 0 }
+    })
+    const ok = Array.from({ length: 14 }, (_, i) => ({ ad_id: 'B', date: addDays(today, i - 14), spend: 10000, impressions: 5000, link_clicks: 100, purchases: 3, video_3s: 0 }))
+    const f = detectFatigue([...rows, ...ok], today, 40000)
+    expect(f.A.status).toBe('fatiga')
+    expect(f.A.reasons.length).toBe(2)
+    expect(f.B).toBeUndefined()
+    expect(f.A.ctrSeries.length).toBe(14)
+  })
+})

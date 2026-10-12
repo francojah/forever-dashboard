@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { TreeNode } from '@/lib/faro/adsTree'
 import { money, int, ratio, pct } from '@/lib/faro/format'
 import { Badge, Empty } from '../ui'
+import type { Fatigue } from '@/lib/faro/fatigue'
 
 export interface CreativeCard {
   id: string
@@ -19,10 +20,10 @@ export interface CreativeCard {
   m: TreeNode['m']
 }
 
-type Sort = 'spend' | 'cpa' | 'roas' | 'hook' | 'ctr' | 'purchases'
+type Sort = 'spend' | 'cpa' | 'roas' | 'hook' | 'ctr' | 'purchases' | 'fatiga'
 const SORTS: { key: Sort; label: string }[] = [
   { key: 'spend', label: 'Gasto' }, { key: 'purchases', label: 'Compras' }, { key: 'cpa', label: 'Costo por compra' },
-  { key: 'roas', label: 'ROAS' }, { key: 'ctr', label: 'CTR' }, { key: 'hook', label: 'Hook rate' },
+  { key: 'roas', label: 'ROAS' }, { key: 'ctr', label: 'CTR' }, { key: 'hook', label: 'Hook rate' }, { key: 'fatiga', label: 'Fatiga primero' },
 ]
 const div = (a: number, b: number) => (b > 0 ? a / b : null)
 
@@ -37,7 +38,14 @@ function verdict(c: CreativeCard, maxCpa: number | null): { label: string; tone:
   return { label: 'caro', tone: 'warn', why: `Costo por compra ${money(cpa)} sobre el máximo ${money(maxCpa)}.` }
 }
 
-export default function CreativeGallery({ cards, maxCpa, periodLabel }: { cards: CreativeCard[]; maxCpa: number | null; periodLabel: string }) {
+function Spark({ values }: { values: (number | null)[] }) {
+  const v = values.map((x) => x ?? 0)
+  const max = Math.max(...v, 0.0001)
+  const pts = v.map((x, i) => `${(i / (v.length - 1)) * 100},${24 - (x / max) * 22}`).join(' ')
+  return <svg viewBox="0 0 100 26" className="w-20 h-5" aria-hidden><polyline points={pts} fill="none" className="stroke-[rgb(var(--f-bad))]" strokeWidth={1.8} /></svg>
+}
+
+export default function CreativeGallery({ cards, maxCpa, periodLabel, fatigue = {} }: { cards: CreativeCard[]; maxCpa: number | null; periodLabel: string; fatigue?: Record<string, Fatigue> }) {
   const [sort, setSort] = useState<Sort>('spend')
   const [onlyActive, setOnlyActive] = useState(true)
   const [minSpend, setMinSpend] = useState(true)
@@ -50,12 +58,13 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel }: { cards:
       if (sort === 'cpa') return -(div(m.spend, m.purchases) ?? Infinity)
       if (sort === 'roas') return div(m.purchaseValue, m.spend) ?? -1
       if (sort === 'ctr') return div(m.linkClicks, m.impressions) ?? -1
+      if (sort === 'fatiga') return fatigue[c.id] ? (fatigue[c.id].status === 'fatiga' ? 2e12 : 1e12) + m.spend : m.spend
       return c.isVideo ? div(m.video3s, m.impressions) ?? -1 : -1
     }
     return cards
       .filter((c) => (!onlyActive || c.active) && (!minSpend || c.m.spend > 0))
       .sort((a, b) => val(b) - val(a))
-  }, [cards, sort, onlyActive, minSpend])
+  }, [cards, sort, onlyActive, minSpend, fatigue])
 
   const totals = useMemo(() => {
     const s = list.reduce((a, c) => ({ spend: a.spend + c.m.spend, purchases: a.purchases + c.m.purchases }), { spend: 0, purchases: 0 })
@@ -78,6 +87,7 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel }: { cards:
           {list.length} creativos · {money(totals.spend)} · {int(totals.purchases)} compras
           {totals.winners > 0 && <> · <span className="text-good">{totals.winners} ganadores</span></>}
           {totals.losers > 0 && <> · <span className="text-bad">{totals.losers} gastaron {money(totals.wasted)} sin vender</span></>}
+          {list.filter((c) => fatigue[c.id]).length > 0 && <> · <button onClick={() => setSort('fatiga')} className="text-warn underline">{list.filter((c) => fatigue[c.id]).length} se están cansando</button></>}
         </span>
       </div>
 
@@ -109,7 +119,10 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel }: { cards:
                     {c.isVideo && <span className="rounded bg-black/60 text-white text-[11px] px-1.5 py-0.5">video</span>}
                     {!c.active && <span className="rounded bg-black/60 text-white text-[11px] px-1.5 py-0.5">pausado</span>}
                   </div>
-                  {v && <div className="absolute top-2 right-2" title={v.why}><Badge tone={v.tone}>{v.label}</Badge></div>}
+                  <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                    {v && <span title={v.why}><Badge tone={v.tone}>{v.label}</Badge></span>}
+                    {fatigue[c.id] && <span title={`Últimos 7 días contra los 7 anteriores: ${fatigue[c.id].reasons.join(', ')}`}><Badge tone={fatigue[c.id].status === 'fatiga' ? 'bad' : 'warn'}>{fatigue[c.id].status === 'fatiga' ? 'fatiga' : 'cayendo'}</Badge></span>}
+                  </div>
                 </div>
                 <div className="p-3 flex flex-col gap-2 flex-1">
                   <div>
@@ -121,6 +134,12 @@ export default function CreativeGallery({ cards, maxCpa, periodLabel }: { cards:
                       <div key={k} className="flex justify-between gap-2"><dt className="text-mute">{k}</dt><dd className={`num ${tone || 'text-ink'}`}>{val}</dd></div>
                     ))}
                   </dl>
+                  {fatigue[c.id] && (
+                    <div className="flex items-center justify-between gap-2 rounded-md bg-warn/10 px-2 py-1 text-[12px] text-ink">
+                      <span>{fatigue[c.id].reasons.join(' · ')}</span>
+                      <span title="CTR por día, últimos 14 días"><Spark values={fatigue[c.id].ctrSeries} /></span>
+                    </div>
+                  )}
                   {c.body && <p className="text-[12px] text-mute line-clamp-2" title={c.body}>{c.body}</p>}
                   {c.adsetId && <Link href={`/anuncios?tab=campanias&focus=${c.adsetId}`} className="mt-auto text-[12.5px] text-mute hover:text-ink underline-offset-2 hover:underline">Ver en la tabla</Link>}
                 </div>
