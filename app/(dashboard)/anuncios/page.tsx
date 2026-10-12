@@ -14,6 +14,9 @@ import { enabledCount } from '@/lib/faro/enhancements'
 import ChangeHistory from '@/components/faro/ads/ChangeHistory'
 import CreativeGallery, { CreativeCard } from '@/components/faro/ads/CreativeGallery'
 import { svc } from '@/lib/faro/db'
+import { loadRules, runRules } from '@/lib/faro/rules'
+import { planPacing, monthOf } from '@/lib/faro/budgetPlan'
+import RulesManager from '@/components/faro/ads/RulesManager'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -25,7 +28,7 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
   if (!accounts.length) {
     return (<><PageHeader title="Anuncios" /><Panel><Empty title="Todavía no conectaste una cuenta de Meta"><Link href="/ajustes?tab=conexiones" className="underline">Conectar Meta</Link></Empty></Panel></>)
   }
-  const tab = ['campanias', 'creativos', 'publicar', 'historial'].includes(searchParams.tab || '') ? searchParams.tab! : 'campanias'
+  const tab = ['campanias', 'creativos', 'publicar', 'reglas', 'historial'].includes(searchParams.tab || '') ? searchParams.tab! : 'campanias'
   const tz = ctx.workspace.timezone
   const period = resolvePeriod(parsePeriodKey(searchParams.p), tz, new Date(), { from: searchParams.from, to: searchParams.to })
   const today = localDate(new Date(), tz)
@@ -56,9 +59,26 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
     for (const n of flatten(tree)) if (n.level === 'adset') n.frequency = freq.get(n.id) ?? null
     const ref = summarizeSales(orders14, tz, idx, ctx.workspace.settings)
     const maxCpa = ref.orders > 0 ? ref.contribution / ref.orders / (1 + ctx.workspace.settings.ad_tax_pct / 100) : null
-    const fatigue = await loadFatigue(accounts.map((a) => a.id), today, maxCpa)
+    const month = monthOf(today)
+    const [fatigue, { rules }, planRes, mtd] = await Promise.all([
+      loadFatigue(accounts.map((a) => a.id), today, maxCpa),
+      loadRules(ctx.workspace.id),
+      svc().from('ad_budget_plans').select('amount').eq('workspace_id', ctx.workspace.id).eq('month', month).maybeSingle(),
+      loadAdsDaily(accounts.map((a) => a.id), `${month}-01`, today),
+    ])
+    const proposals = await runRules(rules, accounts, today, maxCpa).catch(() => [])
+    let dailyNow = 0
+    for (const c of tree) {
+      if (c.effectiveStatus !== 'ACTIVE') continue
+      if (c.dailyBudget) dailyNow += c.dailyBudget
+      else for (const s of c.children) if (s.effectiveStatus === 'ACTIVE' && s.dailyBudget) dailyNow += s.dailyBudget
+    }
+    const planAmount = Number((planRes.data as { amount?: number } | null)?.amount) || 0
+    const plan = planAmount > 0 ? planPacing({ plan: planAmount, spent: mtd.reduce((a, d) => a + d.spend, 0), today, hourShare, dailyNow }) : null
     content = (
       <AdsWorkspace
+        proposals={proposals}
+        plan={plan}
         tree={tree}
         accounts={accounts.map((a) => ({ id: a.id, name: a.name, external_id: a.external_id, protected_ids: a.protected_ids || [] }))}
         maxCpa={maxCpa}
@@ -92,7 +112,9 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
       })
     }
     const fatigue = await loadFatigue(accounts.map((a) => a.id), today, maxCpa)
-    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} fatigue={fatigue} />
+    const { data: tagRows } = await svc().from('ad_tags').select('ad_id,angulo,formato,producto').eq('workspace_id', ctx.workspace.id)
+    const initialTags = Object.fromEntries(((tagRows || []) as { ad_id: string; angulo: string | null; formato: string | null; producto: string | null }[]).map((t) => [t.ad_id, { angulo: t.angulo, formato: t.formato, producto: t.producto }]))
+    content = <CreativeGallery cards={cards} maxCpa={maxCpa} periodLabel={period.label} fatigue={fatigue} initialTags={initialTags} canEdit={canEdit(ctx)} />
   } else if (tab === 'publicar') {
     const ids = accounts.map((a) => a.id)
     const [{ data: ents }, tree30, { data: adRows }] = await Promise.all([
@@ -127,16 +149,29 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         multiAdsDefault={ctx.workspace.settings.meta_enhancements.multiAds}
       />
     )
+  } else if (tab === 'reglas') {
+    const month = monthOf(today)
+    const nextMonth = monthOf(addDays(`${month}-28`, 7))
+    const threeAgo = monthOf(addDays(`${month}-01`, -85))
+    const [{ rules, missing }, { data: planRows }, hist] = await Promise.all([
+      loadRules(ctx.workspace.id),
+      svc().from('ad_budget_plans').select('month,amount').eq('workspace_id', ctx.workspace.id).in('month', [month, nextMonth]),
+      loadAdsDaily(accounts.map((a) => a.id), `${threeAgo}-01`, addDays(`${month}-01`, -1)),
+    ])
+    const months = new Set(hist.filter((d) => d.spend > 0).map((d) => d.date.slice(0, 7)))
+    const avgMonthly = months.size ? hist.reduce((a, d) => a + d.spend, 0) / months.size : null
+    const plans = Object.fromEntries(((planRows || []) as { month: string; amount: number }[]).map((p) => [p.month, Number(p.amount)]))
+    content = <RulesManager initialRules={rules} missing={missing} canEdit={canEdit(ctx)} plans={plans} thisMonth={month} nextMonth={nextMonth} avgMonthly={avgMonthly} />
   } else {
     content = <ChangeHistory canEdit={canEdit(ctx)} timezone={tz} />
   }
 
   return (
     <>
-      <PageHeader title="Anuncios" description={tab === 'campanias' ? `${period.label}. Los cambios se revisan antes de publicarse en Meta.` : tab === 'creativos' ? `${period.label}. Cada anuncio con su imagen y sus números, para ver qué escalar y qué apagar.` : tab === 'publicar' ? 'Creativos nuevos o duplicados, en uno o varios ad sets, o en un ad set nuevo. Todo se crea en pausa.' : 'Todo lo que se cambió desde Faro, con quién y cuándo.'}>
+      <PageHeader title="Anuncios" description={tab === 'campanias' ? `${period.label}. Los cambios se revisan antes de publicarse en Meta.` : tab === 'creativos' ? `${period.label}. Cada anuncio con su imagen y sus números, para ver qué escalar y qué apagar.` : tab === 'publicar' ? 'Creativos nuevos o duplicados, en uno o varios ad sets, o en un ad set nuevo. Todo se crea en pausa.' : tab === 'reglas' ? 'Reglas que proponen cambios para aprobar y el plan de inversión del mes.' : 'Todo lo que se cambió desde Faro, con quién y cuándo.'}>
         {(tab === 'campanias' || tab === 'creativos') && <PeriodPicker value={period.key} from={period.from} to={period.to} />}
       </PageHeader>
-      <Tabs value={tab} tabs={[{ key: 'campanias', label: 'Campañas' }, { key: 'creativos', label: 'Creativos' }, { key: 'publicar', label: 'Cargar anuncios' }, { key: 'historial', label: 'Historial de cambios' }]} />
+      <Tabs value={tab} tabs={[{ key: 'campanias', label: 'Campañas' }, { key: 'creativos', label: 'Creativos' }, { key: 'publicar', label: 'Cargar anuncios' }, { key: 'reglas', label: 'Reglas y plan' }, { key: 'historial', label: 'Historial de cambios' }]} />
       {content}
     </>
   )

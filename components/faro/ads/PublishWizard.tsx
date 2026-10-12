@@ -161,10 +161,14 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
   const say = (ok: boolean, text: string) => setLog((l) => [...l, { ok, text }])
 
   const destCount = dest === 'nuevo' ? 1 : targets.size
-  const contentCount = source === 'archivos' ? files.filter((f) => !f.partOf && (f.state === 'listo' || f.state === 'error')).length : dupIds.size
-  const total = destCount * contentCount
   const cleanTexts = texts.map((t) => t.trim()).filter(Boolean)
   const cleanTitles = titles.map((t) => t.trim()).filter(Boolean)
+  const contentFiles = files.filter((f) => !f.partOf && (f.state === 'listo' || f.state === 'error'))
+  const contentCount = source === 'archivos' ? contentFiles.length : dupIds.size
+  // Con versión feed + historias, Meta acepta un solo texto y título por anuncio: va un anuncio por cada texto
+  const textVariants = Math.max(cleanTexts.length, cleanTitles.length, 1)
+  const pairedCount = source === 'archivos' ? contentFiles.filter((f) => f.story).length : 0
+  const total = destCount * (contentCount + pairedCount * (textVariants - 1))
   const missing = [
     dest === 'existentes' && !targets.size && 'elegí al menos un ad set',
     dest === 'nuevo' && !pixel && 'elegí el píxel',
@@ -473,7 +477,7 @@ export default function PublishWizard({ canEdit, accounts, adsets, campaigns, ad
           <p className="text-[13px] text-mute">Se van a crear</p>
           <p className="num text-[30px] font-semibold text-ink leading-tight">{total} anuncios</p>
           <p className="text-[13px] text-mute">{contentCount} {source === 'archivos' ? 'creativos' : 'anuncios a duplicar'} × {destCount} ad set{destCount === 1 ? '' : 's'}{dest === 'nuevo' ? ' nuevo' : ''}</p>
-          {source === 'archivos' && (cleanTexts.length > 1 || cleanTitles.length > 1) && <p className="text-[12.5px] text-mute mt-1">{cleanTexts.length} textos y {cleanTitles.length || 1} títulos por anuncio</p>}
+          {source === 'archivos' && (cleanTexts.length > 1 || cleanTitles.length > 1) && <p className="text-[12.5px] text-mute mt-1">{pairedCount > 0 ? `Feed + historias admite 1 texto y 1 título por anuncio: se crea un anuncio por cada texto (${textVariants} por creativo)` : `${cleanTexts.length} textos y ${cleanTitles.length || 1} títulos por anuncio`}</p>}
           <p className="text-[12.5px] text-faint mt-2">Todo se crea en pausa. Lo revisás y lo activás cuando quieras.</p>
           {source === 'archivos' && <p className="text-[12.5px] text-mute mt-1">Mejoras automáticas de Meta: {enhancementsOn} prendidas, el resto apagadas. <a href="/ajustes?tab=meta" className="underline hover:text-ink">Cambiar</a></p>}
           <button onClick={run} disabled={running || missing.length > 0 || total === 0} className="mt-4 w-full rounded-lg bg-ink text-bg px-4 py-3 text-[14px] font-semibold disabled:opacity-50">

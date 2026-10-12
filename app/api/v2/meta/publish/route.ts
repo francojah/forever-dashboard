@@ -92,23 +92,18 @@ export async function POST(req: Request) {
       return (th.data || []).find((t) => t.is_preferred)?.uri || th.data?.[0]?.uri
     }
 
-    let creativeBody: Record<string, unknown>
+    const variants: { message: string; headline: string; suffix: string; body: Record<string, unknown> }[] = []
     if (pac) {
       // Personalización por ubicación: feed usa una versión, historias y reels la otra (9:16)
       const FEED = { publisher_platforms: ['facebook', 'instagram', 'audience_network', 'messenger'], facebook_positions: ['feed', 'marketplace', 'video_feeds', 'search', 'profile_feed', 'instream_video'], instagram_positions: ['stream', 'explore', 'explore_home', 'profile_feed'], audience_network_positions: ['classic'], messenger_positions: ['messenger_home'] }
       const STORY = { publisher_platforms: ['facebook', 'instagram', 'messenger'], facebook_positions: ['story', 'facebook_reels'], instagram_positions: ['story', 'reels'], messenger_positions: ['story'] }
-      const base = {
-        bodies: messages.map((text) => ({ text })), ...(headlines.length ? { titles: headlines.map((text) => ({ text })) } : {}),
-        link_urls: [{ website_url: b.link }], call_to_action_types: [b.cta || 'SHOP_NOW'], optimization_type: 'PLACEMENT', ...audios,
-        ...(description ? { descriptions: [{ text: description }] } : {}),
-      }
       let media: Record<string, unknown>
       if (b.type === 'image') {
         const [feedHash, storyHash] = await Promise.all([uploadImage(b.path, `${b.name} · feed`), uploadImage(b.storyPath!, `${b.name} · historias`)])
         media = {
           ad_formats: ['SINGLE_IMAGE'],
           images: [{ hash: feedHash, adlabels: [{ name: 'faro_feed' }] }, { hash: storyHash, adlabels: [{ name: 'faro_story' }] }],
-          asset_customization_rules: [{ customization_spec: FEED, image_label: { name: 'faro_feed' }, priority: 1 }, { customization_spec: STORY, image_label: { name: 'faro_story' }, priority: 2 }],
+          rules: [{ customization_spec: FEED, image_label: { name: 'faro_feed' }, priority: 1 }, { customization_spec: STORY, image_label: { name: 'faro_story' }, priority: 2 }],
         }
       } else {
         const [feedId, storyId] = await Promise.all([startVideo(b.path, b.videoId, `${b.name} · feed`), startVideo(b.storyPath!, b.storyVideoId, `${b.name} · historias`)])
@@ -123,10 +118,35 @@ export async function POST(req: Request) {
         media = {
           ad_formats: ['SINGLE_VIDEO'],
           videos: [{ video_id: feedId, ...(t1 ? { thumbnail_url: t1 } : {}), adlabels: [{ name: 'faro_feed' }] }, { video_id: storyId, ...(t2 ? { thumbnail_url: t2 } : {}), adlabels: [{ name: 'faro_story' }] }],
-          asset_customization_rules: [{ customization_spec: FEED, video_label: { name: 'faro_feed' }, priority: 1 }, { customization_spec: STORY, video_label: { name: 'faro_story' }, priority: 2 }],
+          rules: [{ customization_spec: FEED, video_label: { name: 'faro_feed' }, priority: 1 }, { customization_spec: STORY, video_label: { name: 'faro_story' }, priority: 2 }],
         }
       }
-      creativeBody = { object_story_spec: identity, asset_feed_spec: { ...base, ...media } }
+      // Meta no deja más de un texto ni más de un título por regla de ubicación: cada combinación de texto
+      // y título va en su propio anuncio (todos con versión feed + historias).
+      const { rules, ...mediaRest } = media as { rules: Record<string, unknown>[] }
+      const L = (name: string) => [{ name }]
+      const n = Math.max(messages.length, headlines.length || 1)
+      for (let i = 0; i < n; i++) {
+        const msg = messages[i % messages.length]
+        const head = headlines.length ? headlines[i % headlines.length] : ''
+        variants.push({
+          message: msg, headline: head, suffix: n > 1 ? ` · texto ${i + 1}` : '',
+          body: {
+            object_story_spec: identity,
+            asset_feed_spec: {
+              bodies: [{ text: msg, adlabels: L('faro_body') }],
+              ...(head ? { titles: [{ text: head, adlabels: L('faro_title') }] } : {}),
+              ...(description ? { descriptions: [{ text: description, adlabels: L('faro_desc') }] } : {}),
+              link_urls: [{ website_url: b.link, adlabels: L('faro_link') }],
+              call_to_action_types: [b.cta || 'SHOP_NOW'], optimization_type: 'PLACEMENT', ...audios, ...mediaRest,
+              asset_customization_rules: rules.map((r) => ({
+                ...r, body_label: { name: 'faro_body' }, link_url_label: { name: 'faro_link' },
+                ...(head ? { title_label: { name: 'faro_title' } } : {}), ...(description ? { description_label: { name: 'faro_desc' } } : {}),
+              })),
+            },
+          },
+        })
+      }
     } else {
       const feedSpec: Record<string, unknown> = {
         // Varios textos o títulos: variaciones que Meta combina sola
@@ -145,38 +165,48 @@ export async function POST(req: Request) {
         const thumb = await thumbOf(videoId)
         objectStory = { ...identity, video_data: { video_id: videoId, ...(thumb ? { image_url: thumb } : {}), message, ...(headline ? { title: headline } : {}), ...(description ? { link_description: description } : {}), call_to_action: cta } }
       }
-      creativeBody = { object_story_spec: objectStory, ...(Object.keys(feedSpec).length ? { asset_feed_spec: feedSpec } : {}) }
+      variants.push({ message, headline, suffix: '', body: { object_story_spec: objectStory, ...(Object.keys(feedSpec).length ? { asset_feed_spec: feedSpec } : {}) } })
     }
 
-    const creative = await graphPost<{ id: string }>(`${acc.external_id}/adcreatives`, token, {
-      name: b.name, ...creativeBody, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
-      degrees_of_freedom_spec: degreesOfFreedomSpec(prefs, b.type),
-      contextual_multi_ads: { enroll_status: (b.multiAds ?? prefs.multiAds) ? 'OPT_IN' : 'OPT_OUT' },
-    })
-    const created: { adsetId: string; adId?: string; error?: string }[] = []
-    for (const set of adsets as { entity_id: string; name: string; campaign_id: string }[]) {
+    const created: { adsetId: string; adId?: string; creativeId?: string; error?: string }[] = []
+    for (const v of variants) {
+      const adName = `${b.name}${v.suffix}`
+      let creative: { id: string }
       try {
-        const ad = await graphPost<{ id: string }>(`${acc.external_id}/ads`, token, {
-          name: b.name, adset_id: set.entity_id, creative: { creative_id: creative.id }, status: b.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+        creative = await graphPost<{ id: string }>(`${acc.external_id}/adcreatives`, token, {
+          name: adName, ...v.body, ...(b.urlTags ? { url_tags: b.urlTags } : {}),
+          degrees_of_freedom_spec: degreesOfFreedomSpec(prefs, b.type),
+          contextual_multi_ads: { enroll_status: (b.multiAds ?? prefs.multiAds) ? 'OPT_IN' : 'OPT_OUT' },
         })
-        created.push({ adsetId: set.entity_id, adId: ad.id })
-        await svc().from('change_log').insert({
-          workspace_id: ctx.workspace.id, ad_account_id: acc.id, user_id: ctx.user.id, user_email: ctx.user.email,
-          level: 'ad', entity_id: ad.id, entity_name: b.name, field: 'create_ad',
-          old_value: null, new_value: { adset_id: set.entity_id, adset_name: set.name, creative_id: creative.id, status: b.status || 'PAUSED', texts: messages.length, titles: headlines.length }, status: 'ok',
-        })
-        await svc().from('ad_entities').upsert({
-          ad_account_id: acc.id, entity_id: ad.id, level: 'ad', parent_id: set.entity_id, campaign_id: set.campaign_id,
-          name: b.name, status: b.status || 'PAUSED', effective_status: b.status || 'PAUSED', creative: { id: creative.id, body: message, title: headline || null }, synced_at: new Date().toISOString(),
-        }, { onConflict: 'ad_account_id,entity_id' })
       } catch (e) {
-        created.push({ adsetId: set.entity_id, error: e instanceof Error ? e.message : 'Error de Meta' })
+        if (variants.length === 1) throw e
+        created.push({ adsetId: '', error: `${adName}: ${e instanceof Error ? e.message : 'Error de Meta'}` })
+        continue
+      }
+      for (const set of adsets as { entity_id: string; name: string; campaign_id: string }[]) {
+        try {
+          const ad = await graphPost<{ id: string }>(`${acc.external_id}/ads`, token, {
+            name: adName, adset_id: set.entity_id, creative: { creative_id: creative.id }, status: b.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+          })
+          created.push({ adsetId: set.entity_id, adId: ad.id, creativeId: creative.id })
+          await svc().from('change_log').insert({
+            workspace_id: ctx.workspace.id, ad_account_id: acc.id, user_id: ctx.user.id, user_email: ctx.user.email,
+            level: 'ad', entity_id: ad.id, entity_name: adName, field: 'create_ad',
+            old_value: null, new_value: { adset_id: set.entity_id, adset_name: set.name, creative_id: creative.id, status: b.status || 'PAUSED', texts: pac ? 1 : messages.length, titles: pac ? (v.headline ? 1 : 0) : headlines.length }, status: 'ok',
+          })
+          await svc().from('ad_entities').upsert({
+            ad_account_id: acc.id, entity_id: ad.id, level: 'ad', parent_id: set.entity_id, campaign_id: set.campaign_id,
+            name: adName, status: b.status || 'PAUSED', effective_status: b.status || 'PAUSED', creative: { id: creative.id, body: v.message, title: v.headline || null }, synced_at: new Date().toISOString(),
+          }, { onConflict: 'ad_account_id,entity_id' })
+        } catch (e) {
+          created.push({ adsetId: set.entity_id, error: e instanceof Error ? e.message : 'Error de Meta' })
+        }
       }
     }
     await storage.remove([b.path, ...(b.storyPath ? [b.storyPath] : [])]).catch(() => null)
     const ok = created.filter((c) => c.adId)
     if (!ok.length) throw new Error(created[0]?.error || 'Meta rechazó el anuncio')
-    return Response.json({ ok: true, adId: ok[0].adId, adIds: ok.map((c) => c.adId), failed: created.filter((c) => c.error), creativeId: creative.id })
+    return Response.json({ ok: true, adId: ok[0].adId, adIds: ok.map((c) => c.adId), failed: created.filter((c) => c.error), creativeId: ok[0].creativeId })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error de Meta'
     const devMode = (e as { subcode?: number })?.subcode === 1885183 || /modo de desarrollo|development mode/i.test(msg)

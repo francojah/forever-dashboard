@@ -187,3 +187,40 @@ describe('fatiga de creativos', () => {
     expect(f.A.ctrSeries.length).toBe(14)
   })
 })
+
+import { evaluateRule, mergeProposals, type Rule } from '../lib/faro/rules'
+import { planPacing } from '../lib/faro/budgetPlan'
+
+describe('reglas con aprobación', () => {
+  const m = (spend: number, purchases: number) => ({ spend, impressions: 10000, reach: 5000, linkClicks: 100, lpv: 80, atc: 10, ic: 5, purchases, purchaseValue: purchases * 30000, video3s: 0, videoP50: 0 })
+  const node = (id: string, spend: number, purchases: number, extra: Record<string, unknown> = {}) => ({
+    id, accountId: 'a', accountExternal: 'act_1', level: 'adset', name: id, status: 'ACTIVE', effectiveStatus: 'ACTIVE', objective: null, optimizationGoal: null,
+    dailyBudget: 10000, lifetimeBudget: null, budgetOwner: 'adset', parentId: 'c', campaignId: 'c', thumbnail: null, image: null, isVideo: false, copy: null, targeting: null,
+    frequency: null, m: m(spend, purchases), children: [], protected: false, ...extra,
+  }) as never
+  const rule = (x: Partial<Rule>): Rule => ({ id: 'r', name: 'R', active: true, level: 'adset', metric: 'cpa_over_max', threshold: 150, days: 3, action: 'budget_down', action_pct: 20, ...x })
+  it('propone bajar presupuesto al caro y no toca protegidos ni pausados', () => {
+    const nodes = [node('caro', 40000, 2), node('prot', 40000, 2, { protected: true }), node('pausado', 40000, 2, { effectiveStatus: 'PAUSED' }), node('bien', 10000, 2)]
+    const p = evaluateRule(rule({}), nodes, 10000)
+    expect(p.map((x) => x.nodeId)).toEqual(['caro'])
+    expect(p[0].to).toBe(8000)
+  })
+  it('pausar gana sobre bajar presupuesto en el mismo ad set', () => {
+    const nodes = [node('x', 40000, 0)]
+    const a = evaluateRule(rule({ id: 'a', metric: 'no_purchases', action: 'pause' }), nodes, 10000)
+    const b = evaluateRule(rule({ id: 'b', metric: 'no_purchases', action: 'budget_down' }), nodes, 10000)
+    const merged = mergeProposals([...b, ...a])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].action).toBe('pause')
+  })
+})
+
+describe('plan de inversión mensual', () => {
+  it('proyecta el cierre y el presupuesto diario necesario', () => {
+    const p = planPacing({ plan: 3_000_000, spent: 1_000_000, today: '2026-10-11', hourShare: 0, dailyNow: 100_000 })
+    expect(p.daysInMonth).toBe(31)
+    expect(Math.round(p.forecast)).toBe(3_100_000)
+    expect(p.status).toBe('ok')
+    expect(Math.round(p.dailyNeeded)).toBe(Math.round(2_000_000 / 21))
+  })
+})

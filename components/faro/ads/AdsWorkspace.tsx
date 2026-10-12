@@ -10,6 +10,9 @@ import { Field, Pending, Account, LEVEL, warningFor, describe, EditDialog, Pacin
 import DailyCharts, { DayPoint } from './DailyCharts'
 import Breakdown from './Breakdown'
 import type { AdAlert } from '@/lib/faro/adAlerts'
+import type { Proposal } from '@/lib/faro/rules'
+import type { PlanPacing } from '@/lib/faro/budgetPlan'
+import { ProposalsBox, PlanCard } from './RulesPlan'
 export type { DayPoint }
 
 type Level = 'campaign' | 'adset' | 'ad'
@@ -44,11 +47,12 @@ function sumMetrics(list: TreeNode[]): Metrics {
 }
 
 export default function AdsWorkspace({
-  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period, prev = {}, prevLabel = 'el período anterior', alerts = [], fatigue = {},
+  tree, accounts, maxCpa, canEdit, focus, todaySpend = {}, hourShare = 1, daily, period, prev = {}, prevLabel = 'el período anterior', alerts = [], fatigue = {}, proposals = [], plan = null,
 }: {
   tree: TreeNode[]; accounts: Account[]; maxCpa: number | null; canEdit: boolean; focus: string | null
   todaySpend?: Record<string, number>; hourShare?: number; daily: DayPoint[]; period: { from: string; to: string; label: string; key: string }
   prev?: Record<string, Metrics>; prevLabel?: string; alerts?: AdAlert[]; fatigue?: Record<string, string>
+  proposals?: Proposal[]; plan?: PlanPacing | null
 }) {
   const router = useRouter()
   const [level, setLevel] = useState<Level>('campaign')
@@ -241,6 +245,15 @@ export default function AdsWorkspace({
 
   return (
     <div className="flex flex-col gap-4 pb-28">
+      {plan && <PlanCard plan={plan} />}
+      {proposals.length > 0 && (
+        <ProposalsBox
+          proposals={proposals} canEdit={canEdit}
+          staged={(p) => !!p.field && pending.has(`${p.nodeId}:${p.field}`)}
+          onAdd={(list) => { for (const p of list) { const r = byId.get(p.nodeId); if (r && p.field) stage(r.n, p.field, p.to) } }}
+          onOpen={(id) => { const r = byId.get(id); if (r) { setLevel(r.n.level); setOpenId(id) } }}
+        />
+      )}
       {alerts.length > 0 && <AlertsBox alerts={alerts} onOpen={(id) => { const r = byId.get(id); if (r) { setLevel(r.n.level); setOpenId(id) } }} />}
 
       {/* Resumen */}
