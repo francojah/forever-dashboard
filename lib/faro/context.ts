@@ -1,3 +1,4 @@
+import { encryptSecret } from './secret'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
 import { createClientServer } from '@/lib/supabase'
@@ -138,7 +139,7 @@ export async function bootstrapLegacy(ws: Workspace) {
   if (tnToken && tnUser) {
     const info = await fetchStoreInfo(String(tnUser), tnToken).catch(() => ({ name: ws.name, currency: 'ARS', url: null }))
     const { data: conn } = await sb.from('connections').upsert({
-      workspace_id: ws.id, provider: 'tiendanube', external_id: String(tnUser), label: info.name, access_token: tnToken,
+      workspace_id: ws.id, provider: 'tiendanube', external_id: String(tnUser), label: info.name, access_token: encryptSecret(tnToken),
     }, { onConflict: 'workspace_id,provider,external_id' }).select('id').single()
     await sb.from('stores').upsert({
       workspace_id: ws.id, connection_id: conn?.id, platform: 'tiendanube', external_id: String(tnUser),
@@ -155,7 +156,7 @@ export async function bootstrapLegacy(ws: Workspace) {
   if (metaToken && accountId) {
     const me = await graphGet<{ id: string; name?: string }>('me', metaToken, { fields: 'id,name' }).catch(() => ({ id: 'legacy', name: 'Token anterior' }))
     const { data: conn } = await sb.from('connections').upsert({
-      workspace_id: ws.id, provider: 'meta', external_id: String(me.id), label: me.name || 'Meta', access_token: metaToken,
+      workspace_id: ws.id, provider: 'meta', external_id: String(me.id), label: me.name || 'Meta', access_token: encryptSecret(metaToken),
       meta: { source: 'legacy' },
     }, { onConflict: 'workspace_id,provider,external_id' }).select('id').single()
     const info = await fetchAccountInfo(accountId, metaToken).catch(() => ({ name: accountId, currency: 'ARS', timezone: null }))

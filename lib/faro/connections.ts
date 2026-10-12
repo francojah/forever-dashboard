@@ -1,3 +1,4 @@
+import { encryptSecret } from './secret'
 import { svc } from './db'
 import { graphGet, META_VERSION } from './meta'
 
@@ -11,7 +12,7 @@ export async function saveMetaConnection(workspaceId: string, token: string, sou
   } catch { /* tokens de usuario del sistema pueden no exponerlo */ }
   const { data, error } = await svc().from('connections').upsert({
     workspace_id: workspaceId, provider: 'meta', external_id: String(me.id), label: me.name || 'Meta',
-    access_token: token, token_expires_at: expiresAt || null, status: 'ok', last_error: null,
+    access_token: encryptSecret(token), token_expires_at: expiresAt || null, status: 'ok', last_error: null,
     meta: { source, permissions: perms }, updated_at: new Date().toISOString(),
   }, { onConflict: 'workspace_id,provider,external_id' }).select('id').single()
   if (error || !data) throw new Error(error?.message || 'No se pudo guardar la conexión')

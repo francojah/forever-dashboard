@@ -1,3 +1,4 @@
+import { readStoredToken } from './tokens'
 import { svc, upsertChunks, logSync } from './db'
 import { addDays, localDate } from './dates'
 
@@ -117,7 +118,7 @@ export async function getConnectionToken(connectionId: string | null): Promise<s
   if (!connectionId) throw new Error('La tienda no tiene conexión')
   const { data, error } = await svc().from('connections').select('access_token,status').eq('id', connectionId).single()
   if (error || !data) throw new Error('No se encontró la conexión de la tienda')
-  return data.access_token as string
+  return readStoredToken(connectionId!, data.access_token as string)
 }
 
 /**

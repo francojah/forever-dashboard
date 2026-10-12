@@ -1,3 +1,4 @@
+import { encryptSecret } from '@/lib/faro/secret'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
     }
     const { data: conn, error } = await sb.from('connections').upsert({
       workspace_id: ctx.workspace.id, provider: 'tiendanube', external_id: userId, label: info.name,
-      access_token: accessToken, status: 'ok', last_error: null, updated_at: new Date().toISOString(),
+      access_token: encryptSecret(accessToken), status: 'ok', last_error: null, updated_at: new Date().toISOString(),
     }, { onConflict: 'workspace_id,provider,external_id' }).select('id').single()
     if (error || !conn) throw new Error(error?.message || 'No se pudo guardar la conexión')
     await sb.from('stores').upsert({

@@ -154,3 +154,18 @@ describe('versiones feed + historias', () => {
     expect(two[0].story).toBe('y')
   })
 })
+
+describe('cifrado de tokens', () => {
+  it('cifra, descifra y lee tokens viejos sin cifrar', async () => {
+    process.env.FARO_ENC_KEY = Buffer.alloc(32, 7).toString('base64')
+    const { encryptSecret, decryptSecret, isEncrypted } = await import('../lib/faro/secret')
+    const e = encryptSecret('EAAB-token-123')
+    expect(isEncrypted(e)).toBe(true)
+    expect(e).not.toContain('EAAB')
+    expect(decryptSecret(e)).toBe('EAAB-token-123')
+    expect(decryptSecret('viejo-sin-cifrar')).toBe('viejo-sin-cifrar')
+    expect(encryptSecret(e)).toBe(e)
+    delete process.env.FARO_ENC_KEY
+    expect(encryptSecret('x')).toBe('x')
+  })
+})

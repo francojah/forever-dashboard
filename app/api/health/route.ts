@@ -11,7 +11,12 @@ export const dynamic = 'force-dynamic'
  *
  * Devuelve 200 si todo OK, 503 si el último sync falló o el snapshot está viejo.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  // Público: solo si está vivo. El detalle (fechas, errores de sincronización) requiere CRON_SECRET.
+  const secret = process.env.CRON_SECRET
+  const auth = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!secret || auth !== secret) return Response.json({ status: 'ok' })
+
   const startedAt = Date.now()
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY

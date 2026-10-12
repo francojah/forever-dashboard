@@ -16,6 +16,19 @@ const nextConfig = {
       ...['/competencia', '/resumen', '/assistant', '/chat', '/ideas', '/leads', '/eventos', '/historico', '/alertas', '/recomendaciones', '/onboarding'].map(to('/')),
     ]
   },
+  // Cabeceras de seguridad para toda la app
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+      ],
+    }]
+  },
   webpack: (config) => {
     config.resolve.alias['@'] = path.resolve(__dirname)
     return config

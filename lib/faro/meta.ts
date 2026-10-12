@@ -1,4 +1,5 @@
 import { svc, upsertChunks, logSync } from './db'
+import { readStoredToken } from './tokens'
 import { addDays, localDate } from './dates'
 
 export const META_VERSION = process.env.META_API_VERSION || 'v24.0'
@@ -139,7 +140,7 @@ export async function getMetaToken(connectionId: string | null): Promise<string>
   if (!connectionId) throw new Error('La cuenta publicitaria no tiene conexión')
   const { data } = await svc().from('connections').select('access_token').eq('id', connectionId).single()
   if (!data?.access_token) throw new Error('No se encontró el token de Meta')
-  return data.access_token as string
+  return readStoredToken(connectionId, data.access_token as string)
 }
 
 type Action = { action_type: string; value: string }
