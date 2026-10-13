@@ -9,11 +9,14 @@ export function money(v: number | null | undefined, opts: { sign?: boolean; curr
 }
 
 /** Solo para ejes de gráficos, donde el espacio manda. */
-export function moneyAxis(v: number): string {
+export function moneyAxis(v: number): string { return moneyAxisIn(v, 'ARS') }
+
+export function moneyAxisIn(v: number, currency: string): string {
   const a = Math.abs(v)
-  if (a >= 1_000_000) return `$ ${(v / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`
-  if (a >= 1_000) return `$ ${Math.round(v / 1_000).toLocaleString('es-AR')} mil`
-  return `$ ${Math.round(v)}`
+  const sym = currency === 'USD' ? 'US$' : '$'
+  if (a >= 1_000_000) return `${sym} ${(v / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`
+  if (a >= 1_000) return `${sym} ${Math.round(v / 1_000).toLocaleString('es-AR')} mil`
+  return `${sym} ${Math.round(v)}`
 }
 
 export function int(v: number | null | undefined): string {

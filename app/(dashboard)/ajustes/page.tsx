@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import WeeklyEmail from '@/components/faro/settings/WeeklyEmail'
+import WhatsAppNotify from '@/components/faro/settings/WhatsAppNotify'
 import { mailConfigured } from '@/lib/faro/mailer'
 import { getRequestContext, canEdit } from '@/lib/faro/context'
 import { svc, fetchAll } from '@/lib/faro/db'
@@ -74,6 +75,7 @@ export default async function AjustesPage({ searchParams }: { searchParams: { ta
     body = (
       <div className="flex flex-col gap-5">
         <Team members={withEmail} isOwner={ctx.role === 'owner'} workspaceName={ctx.workspace.name} />
+        <WhatsAppNotify />
         <WeeklyEmail enabled={ctx.workspace.settings.weekly_email} canEdit={canEdit(ctx)} mailReady={mailConfigured()} />
       </div>
     )

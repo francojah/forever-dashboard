@@ -23,3 +23,6 @@ jobs:
           code=$(curl -s -o out.json -w "%{http_code}" --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$FARO_URL/api/v2/cron/sync")
           cat out.json; echo
           test "$code" = "200"
+          # Avisos urgentes por WhatsApp (si está configurado); el resumen diario sale a las 8 hora Argentina
+          curl -s --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$FARO_URL/api/v2/cron/notify?kind=alerts" || true
+          if [ "$(TZ=America/Argentina/Buenos_Aires date +%H)" = "08" ]; then curl -s --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$FARO_URL/api/v2/cron/notify?kind=daily" || true; fi

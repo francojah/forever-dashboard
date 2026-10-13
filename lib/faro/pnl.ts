@@ -71,3 +71,25 @@ export async function loadPnL(ctx: Ctx, months: string[]): Promise<PnL[]> {
     }
   })
 }
+
+/** Copia del resultado con todos los montos multiplicados (inflación o dólar). Cantidades y porcentajes no cambian. */
+export function scalePnL(p: PnL, f: number): PnL {
+  if (f === 1) return p
+  const s = p.sales
+  const k = (v: number) => v * f
+  return {
+    ...p,
+    sales: {
+      ...s, productsGross: k(s.productsGross), discounts: k(s.discounts), netSales: k(s.netSales), shippingCustomer: k(s.shippingCustomer),
+      shippingOwner: k(s.shippingOwner), cogs: k(s.cogs), platformFee: k(s.platformFee), paymentFees: k(s.paymentFees), packaging: k(s.packaging),
+      iibb: k(s.iibb), contribution: k(s.contribution),
+    },
+    ads: { ...p.ads, spend: k(p.ads.spend), purchaseValue: k(p.ads.purchaseValue) },
+    adTax: k(p.adTax),
+    fixed: p.fixed.map((x) => ({ ...x, amount: k(x.amount) })),
+    extra: p.extra.map((x) => ({ ...x, amount: k(x.amount) })),
+    fixedTotal: k(p.fixedTotal), extraTotal: k(p.extraTotal), contribution: k(p.contribution),
+    profitAfterAds: k(p.profitAfterAds), operatingResult: k(p.operatingResult),
+    breakEvenSales: p.breakEvenSales == null ? null : k(p.breakEvenSales),
+  }
+}

@@ -265,3 +265,47 @@ describe('demo y proyección', () => {
     expect(projectMonth(p, '2026-11-01')).toBeNull()
   })
 })
+
+import { buildIndex, monthlyAvg, makeAdjuster } from '../lib/faro/macro'
+
+describe('inflación y dólar', () => {
+  const inf = buildIndex([{ fecha: '2026-06-30', valor: 2 }, { fecha: '2026-07-31', valor: 2 }, { fecha: '2026-08-31', valor: 1 }])
+  const mep = monthlyAvg([{ fecha: '2026-08-01', venta: 1000 }, { fecha: '2026-08-02', venta: 1200 }, { fecha: '2026-09-01', venta: 1300 }])
+  const macro = { ipc: inf.ipc, ipcLatest: inf.latest, mep: mep.mep, mepLast: mep.last }
+  it('lleva junio a pesos de agosto', () => {
+    const a = makeAdjuster('real', macro)
+    expect(a.factor('2026-06')).toBeCloseTo(1.02 * 1.01, 6)
+    expect(a.factor('2026-08')).toBe(1)
+    expect(a.factor('2026-10')).toBe(1)
+  })
+  it('convierte a dólar MEP promedio del mes', () => {
+    const a = makeAdjuster('usd', macro)
+    expect(a.currency).toBe('USD')
+    expect(a.factor('2026-08')).toBeCloseTo(1 / 1100, 9)
+    expect(a.factor('2026-10')).toBeCloseTo(1 / 1300, 9)
+  })
+  it('sin datos queda en pesos', () => {
+    expect(makeAdjuster('usd', null).factor('2026-08')).toBe(1)
+  })
+})
+
+import { normalizePhone, cleanParam } from '../lib/faro/whatsapp'
+import { dailyText } from '../lib/faro/notify'
+
+describe('WhatsApp', () => {
+  it('normaliza celulares argentinos', () => {
+    expect(normalizePhone('11 2345-6789')).toBe('5491123456789')
+    expect(normalizePhone('+54 9 11 2345 6789')).toBe('5491123456789')
+    expect(normalizePhone('54 11 2345 6789')).toBe('5491123456789')
+    expect(normalizePhone('abc')).toBeNull()
+  })
+  it('limpia parámetros de plantilla', () => {
+    expect(cleanParam('a\nb    c')).toBe('a · b c')
+  })
+  it('arma el resumen diario', () => {
+    const t = dailyText({ date: '2026-10-11', orders: 12, billing: 500000, profit: 200000, spend: 80000, cpa: 6667, maxCpa: 9000, mtdProfit: 1500000, proposals: 2 })
+    expect(t).toContain('Ayer 11/10: 12 ventas')
+    expect(t).toContain('dentro del máximo')
+    expect(t).toContain('2 propuestas')
+  })
+})

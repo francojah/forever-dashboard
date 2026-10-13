@@ -11,6 +11,10 @@
     {
       "path": "/api/v2/cron/weekly",
       "schedule": "0 11 * * 1"
+    },
+    {
+      "path": "/api/v2/cron/notify?kind=daily",
+      "schedule": "30 11 * * *"
     }
   ]
 }
