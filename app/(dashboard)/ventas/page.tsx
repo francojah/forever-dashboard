@@ -9,6 +9,12 @@ import { pctDelta } from '@/lib/faro/metrics'
 import { loadFunnel, funnelSteps } from '@/lib/faro/funnel'
 import type { StoreRow } from '@/lib/faro/tiendanube'
 import Funnel from '@/components/faro/Funnel'
+import { Heatmap, Cohorts, Segments, LtvChannels, Basket, CoverageTable, AfterAdsTable } from '@/components/faro/sales/Insights'
+import { heatmap, cohorts, customerTable, segments, ltvByChannel, basketPairs, coverage, productAfterAds } from '@/lib/faro/insights'
+import { loadOrders, loadCostIndex, loadAdsDaily, summarizeAds } from '@/lib/faro/metrics'
+import { localDate, addDays } from '@/lib/faro/dates'
+import { svc } from '@/lib/faro/db'
+import { getCachedProducts } from '@/lib/faro/actions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -57,6 +63,58 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
   }
   const d = await loadSales(ctx, period, tab === 'productos')
   const s = d.sales
+  const tz = ctx.workspace.timezone
+  const storeIds = ctx.stores.filter((x) => x.active).map((x) => x.id)
+  const accountIds = ctx.adAccounts.filter((a) => a.active).map((a) => a.id)
+  const today = localDate(new Date(), tz)
+  // Datos extra por pestaña (se calculan solo cuando hacen falta)
+  let extra: React.ReactNode = null
+  if (tab === 'resumen') {
+    const orders = await loadOrders(storeIds, period.from, period.to, tz)
+    const h = heatmap(orders, tz)
+    extra = <Panel title="Cuándo vendés" description={`Ventas netas por día de la semana y hora · ${period.label.toLowerCase()}`}><Heatmap {...h} /></Panel>
+  } else if (tab === 'clientes') {
+    const [hist, attr] = await Promise.all([
+      loadOrders(storeIds, addDays(today, -730), today, tz),
+      svc().from('order_attribution').select('order_id,utm_source,utm_medium,fbclid').in('store_id', storeIds).gte('created_at', new Date(Date.now() - 730 * 86400000).toISOString()).limit(50000),
+    ])
+    const origin = new Map<string, string>()
+    for (const r of (attr.data || []) as { order_id: string; utm_source: string | null; utm_medium: string | null; fbclid: boolean }[]) {
+      const src = (r.utm_source || '').toLowerCase()
+      origin.set(r.order_id, r.fbclid || /^(fb|facebook|ig|instagram|meta)/.test(src) ? 'Meta Ads' : /google/.test(src) ? (/(cpc|paid)/.test(r.utm_medium || '') ? 'Google Ads' : 'Google') : src ? src : 'Directo / otro')
+    }
+    const custs = customerTable(hist)
+    extra = (
+      <div className="flex flex-col gap-5">
+        <Panel title="Segmentos listos para usar" description="Exportalos a CSV para WhatsApp o mail, o crealos como público en Meta (los emails se mandan cifrados).">
+          <Segments list={segments(custs, today)} accounts={ctx.adAccounts.filter((a) => a.active).map((a) => ({ id: a.id, name: a.name }))} canEdit={ctx.role !== 'viewer'} />
+        </Panel>
+        <div className="grid lg:grid-cols-2 gap-5 items-start">
+          <Panel title="Cohortes de recompra" description="De los clientes nuevos de cada mes, qué porcentaje volvió a comprar."><Cohorts rows={cohorts(hist, tz)} /></Panel>
+          <Panel title="Valor del cliente a 90 días por origen" description="Cuánto gasta en sus primeros 90 días un cliente según de dónde vino su primera compra. Requiere el cruce con las UTMs."><LtvChannels rows={ltvByChannel(hist, origin, tz, today)} /></Panel>
+        </div>
+      </div>
+    )
+  } else if (tab === 'productos') {
+    const [orders, idx, ads, attr] = await Promise.all([
+      loadOrders(storeIds, period.from, period.to, tz), loadCostIndex(storeIds), loadAdsDaily(accountIds, period.from, period.to),
+      svc().from('order_attribution').select('order_id,utm_source,fbclid').in('store_id', storeIds).eq('valid', true).limit(50000),
+    ])
+    const attributed = new Set(((attr.data || []) as { order_id: string; utm_source: string | null; fbclid: boolean }[]).filter((r) => r.fbclid || /^(fb|facebook|ig|instagram|meta)/i.test(r.utm_source || '')).map((r) => r.order_id))
+    const adSpend = summarizeAds(ads).spend * (1 + ctx.workspace.settings.ad_tax_pct / 100)
+    const recent = await loadOrders(storeIds, addDays(today, -27), today, tz)
+    const prods: { id: string; name: string; variants: { id: string; name: string; stock: number | null }[] }[] = []
+    for (const st of ctx.stores.filter((x) => x.active)) { try { prods.push(...(await getCachedProducts(st as never))) } catch { /* sin productos */ } }
+    extra = (
+      <div className="flex flex-col gap-5">
+        <Panel title="Margen por producto después de publicidad" description={`La inversión del período se reparte entre productos según las ventas atribuidas a anuncios (o según ventas netas si no hay atribución) · ${period.label.toLowerCase()}`}><AfterAdsTable rows={productAfterAds(orders, tz, idx, ctx.workspace.settings, adSpend, attributed)} /></Panel>
+        <div className="grid lg:grid-cols-[3fr_2fr] gap-5 items-start">
+          <Panel title="Cobertura de stock por variante" description="Al ritmo de venta de los últimos 28 días. Sugerencia: lo que falta para cubrir 30 días."><CoverageTable rows={coverage(prods, recent, 28)} /></Panel>
+          <Panel title="Se compran juntos" description="Pares de productos en la misma orden. Base para packs y promos."><Basket pairs={basketPairs(orders)} /></Panel>
+        </div>
+      </div>
+    )
+  }
 
   const figures = [
     { label: 'Facturación', value: money(s.netSales + s.shippingCustomer), delta: pctDelta(s.netSales + s.shippingCustomer, d.prev.netSales + (d.prev.shippingCustomer || 0)) },
@@ -101,10 +159,11 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
               <Bars rows={d.weekdays} />
             </Panel>
           </div>
+          {extra}
         </div>
       )}
 
-      {tab === 'productos' && (
+      {tab === 'productos' && (<div className="flex flex-col gap-5">
         <Panel padded={false} title="Productos" description="Margen bruto = ventas netas del producto − costo de mercadería. Los días de stock usan el ritmo de las últimas 2 semanas.">
           {d.products.length === 0 ? <div className="px-5"><Empty title="Sin ventas en este período" /></div> : (
             <div className="overflow-x-auto">
@@ -139,9 +198,10 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
             </div>
           )}
         </Panel>
-      )}
+        {extra}
+      </div>)}
 
-      {tab === 'clientes' && (
+      {tab === 'clientes' && (<div className="flex flex-col gap-5">
         <div className="grid md:grid-cols-2 gap-5">
           <Panel title="En este período">
             <dl className="grid grid-cols-2 gap-4 text-[13.5px]">
@@ -159,7 +219,8 @@ export default async function VentasPage({ searchParams }: { searchParams: { p?:
             </dl>
           </Panel>
         </div>
-      )}
+        {extra}
+      </div>)}
     </>
   )
 }

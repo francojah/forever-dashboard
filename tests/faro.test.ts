@@ -309,3 +309,53 @@ describe('WhatsApp', () => {
     expect(t).toContain('2 propuestas')
   })
 })
+
+import { cohorts, segments, customerTable, basketPairs, saturation, simulate, cashForecast, goalProgress, beforeDuringAfter, coverage } from '../lib/faro/insights'
+
+describe('análisis para decidir', () => {
+  const ord = (id: string, cust: string, date: string, total: number, items: string[] = ['Remera']): OrderRow => ({
+    store_id: 's', order_id: id, number: id, created_at: `${date}T15:00:00Z`, status: 'open', payment_status: 'paid', cancelled_at: null, subtotal: total, discount: 0, total, shipping_customer: 0, shipping_owner: 0,
+    payment_method: 'credit_card', gateway: null, installments: null, units: items.length, customer_id: cust, customer_email: `${cust}@x.com`, province: null, shipping_option: null, shipping_pickup: null,
+    items: items.map((n) => ({ product_id: n, variant_id: n, name: n, qty: 1, price: total / items.length, cost: null })),
+  })
+  it('cohortes: cuántos vuelven', () => {
+    const c = cohorts([ord('1', 'a', '2026-03-05', 100), ord('2', 'b', '2026-03-20', 100), ord('3', 'a', '2026-05-01', 100)], 'UTC', 3)
+    expect(c[0].month).toBe('2026-03'); expect(c[0].customers).toBe(2)
+    expect(c[0].back).toEqual([0, 0.5, 0.5])
+  })
+  it('segmentos: una compra sin volver, y recientes', () => {
+    const cs = customerTable([ord('1', 'a', '2026-07-01', 100), ord('2', 'b', '2026-10-05', 100), ord('3', 'b', '2026-10-06', 100), ord('4', 'b', '2026-10-07', 100)])
+    const s = segments(cs, '2026-10-12')
+    expect(s.find((x) => x.key === 'once')!.customers.map((c) => c.id)).toEqual(['a'])
+    expect(s.find((x) => x.key === 'vip')!.customers.map((c) => c.id)).toEqual(['b'])
+  })
+  it('canasta: pares que se compran juntos', () => {
+    const p = basketPairs([ord('1', 'a', '2026-10-01', 200, ['Remera', 'Buzo']), ord('2', 'b', '2026-10-01', 200, ['Remera', 'Buzo']), ord('3', 'c', '2026-10-01', 200, ['Remera', 'Buzo']), ord('4', 'd', '2026-10-01', 100, ['Remera'])], 2)
+    expect(p[0]).toMatchObject({ a: 'Buzo', b: 'Remera', together: 3, share: 1 })
+  })
+  it('saturación: detecta dónde sube el costo por compra', () => {
+    const days = Array.from({ length: 24 }, (_, i) => { const spend = 10000 + i * 5000; const cpa = spend < 80000 ? 5000 : 5000 + (spend - 80000) * 0.1; return { date: `2026-09-${String(i + 1).padStart(2, '0')}`, spend, impressions: 0, link_clicks: 0, lpv: 0, atc: 0, ic: 0, purchases: spend / cpa, purchase_value: 0 } })
+    const s = saturation(days, 7000)
+    expect(s.bins.length).toBe(6)
+    expect(s.knee).not.toBeNull()
+    expect(s.maxUseful).toBeLessThan(130000)
+    const sim = simulate(s.bins, { spend: 50000, purchases: 10 }, 20, 20000, 0)!
+    expect(sim.spend).toBe(60000); expect(sim.purchases).toBeGreaterThan(10); expect(sim.purchases).toBeLessThanOrEqual(12)
+  })
+  it('caja: acredita según el medio de pago', () => {
+    const s = { payment_fees: [{ method: 'credit_card', pct: 5 }] } as never
+    const w = cashForecast([ord('1', 'a', '2026-10-10', 10000)], s, { credit_card: 14, '*': 0 }, '2026-10-12')
+    expect(w).toHaveLength(1); expect(w[0].week).toBe('2026-10-19'); expect(w[0].amount).toBe(9500)
+  })
+  it('objetivos y ventanas antes/durante', () => {
+    expect(goalProgress({ metric: 'net_sales', target: 1000 }, 450, 0.5).status).toBe('warn')
+    expect(goalProgress({ metric: 'cpa', target: 5000 }, 4000, 0.5).status).toBe('ok')
+    const series = Array.from({ length: 9 }, (_, i) => ({ date: `2026-10-0${i + 1}`, netSales: i >= 3 && i <= 5 ? 300 : 100, orders: 1, spend: 10, profit: 5, contribution: 0, purchases: 1 }))
+    const r = beforeDuringAfter(series, '2026-10-04', '2026-10-06', '2026-10-12')
+    expect(r.before.net).toBe(300); expect(r.during.net).toBe(900); expect(r.after!.net).toBe(300)
+  })
+  it('cobertura: días de stock y sugerencia', () => {
+    const c = coverage([{ id: 'p', name: 'Remera', variants: [{ id: 'Remera', name: 'M', stock: 10 }] }], [ord('1', 'a', '2026-10-01', 100), ord('2', 'b', '2026-10-02', 100)], 14, 30)
+    expect(c[0].days).toBe(70); expect(c[0].suggest).toBe(0)
+  })
+})

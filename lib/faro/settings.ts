@@ -11,6 +11,7 @@ export interface PaymentFee {
   method: string
   pct: number          // % sobre lo cobrado
   label?: string
+  days?: number        // días hasta que se acredita (caja)
 }
 
 import { EnhancementPrefs, normalizePrefs } from './enhancements'
@@ -75,7 +76,7 @@ export function normalizeSettings(raw: unknown): WorkspaceSettings {
   return {
     platform_fee_pct: num(r.platform_fee_pct, DEFAULT_SETTINGS.platform_fee_pct),
     payment_fees: Array.isArray(r.payment_fees)
-      ? r.payment_fees.filter((f) => f && typeof f.method === 'string').map((f) => ({ method: f.method, pct: num(f.pct, 0), label: f.label }))
+      ? r.payment_fees.filter((f) => f && typeof f.method === 'string').map((f) => ({ method: f.method, pct: num(f.pct, 0), label: f.label, days: f.days == null ? undefined : Math.max(0, Math.round(num(f.days, 0))) }))
       : [],
     packaging_per_order: num(r.packaging_per_order, DEFAULT_SETTINGS.packaging_per_order),
     iibb_pct: num(r.iibb_pct, DEFAULT_SETTINGS.iibb_pct),

@@ -17,6 +17,12 @@ export default function CostSettings({ canEdit, settings, detected }: { canEdit:
 
   const methods = Array.from(new Set([...detected.map((d) => d.method), ...s.payment_fees.map((f) => f.method).filter((m) => m !== '*')]))
   const feeOf = (m: string) => s.payment_fees.find((f) => f.method === m)?.pct
+  const daysOf = (m: string) => s.payment_fees.find((f) => f.method === m)?.days
+  const setDays = (m: string, v: string) => {
+    const cur = s.payment_fees.find((f) => f.method === m)
+    const n = v === '' ? undefined : Math.max(0, Math.round(Number(v)) || 0)
+    setS({ ...s, payment_fees: [...s.payment_fees.filter((f) => f.method !== m), { method: m, pct: cur?.pct ?? 0, label: cur?.label, days: n }] }); setSaved(false)
+  }
   const setFee = (m: string, v: string) => {
     const others = s.payment_fees.filter((f) => f.method !== m)
     const n = v === '' ? null : Number(v.replace(',', '.'))
@@ -49,23 +55,25 @@ export default function CostSettings({ canEdit, settings, detected }: { canEdit:
     <div className="grid lg:grid-cols-2 gap-5 items-start">
       <Panel title="Comisiones de cobro" description="Lo que te cobra la pasarela (Mercado Pago, Pago Nube, etc.) por cada medio. Los medios salen de tus ventas de los últimos 90 días.">
         <table className="w-full text-[13.5px]">
-          <thead><tr className="text-mute text-left"><th className="font-medium pb-2">Medio de pago</th><th className="font-medium pb-2 text-right">De tus ventas</th><th className="font-medium pb-2 text-right">Comisión %</th></tr></thead>
+          <thead><tr className="text-mute text-left"><th className="font-medium pb-2">Medio de pago</th><th className="font-medium pb-2 text-right">De tus ventas</th><th className="font-medium pb-2 text-right">Comisión %</th><th className="font-medium pb-2 text-right" title="Días hasta que la plata llega a tu cuenta (para la caja proyectada)">Acredita en (días)</th></tr></thead>
           <tbody className="divide-y divide-line">
             {methods.map((m) => (
               <tr key={m}>
                 <td className="py-2 text-ink">{PAYMENT_METHOD_LABELS[m] || m}</td>
                 <td className="py-2 text-right num text-mute">{pct(detected.find((d) => d.method === m)?.share ?? 0)}</td>
                 <td className="py-2 text-right"><input disabled={!canEdit} inputMode="decimal" value={feeOf(m) ?? ''} placeholder="sin cargar" onChange={(e) => setFee(m, e.target.value)} className={field} aria-label={`Comisión ${m}`} /></td>
+                <td className="py-2 text-right"><input disabled={!canEdit} inputMode="numeric" value={daysOf(m) ?? ''} placeholder="0" onChange={(e) => setDays(m, e.target.value)} className={field} aria-label={`Días de acreditación ${m}`} /></td>
               </tr>
             ))}
             <tr>
               <td className="py-2 text-ink">Cualquier otro medio</td><td />
               <td className="py-2 text-right"><input disabled={!canEdit} inputMode="decimal" value={feeOf('*') ?? ''} placeholder="sin cargar" onChange={(e) => setFee('*', e.target.value)} className={field} aria-label="Comisión otros medios" /></td>
+              <td className="py-2 text-right"><input disabled={!canEdit} inputMode="numeric" value={daysOf('*') ?? ''} placeholder="0" onChange={(e) => setDays('*', e.target.value)} className={field} aria-label="Días de acreditación otros medios" /></td>
             </tr>
           </tbody>
         </table>
         {canEdit && <button onClick={suggest} className="mt-3 text-[13px] underline underline-offset-2 text-mute hover:text-ink">Completar los vacíos con valores típicos (revisalos con tu liquidación)</button>}
-        <p className="mt-2 text-[12.5px] text-mute">Si ofrecés cuotas sin interés, sumá su costo financiero a la comisión de tarjeta de crédito.</p>
+        <p className="mt-2 text-[12.5px] text-mute">Si ofrecés cuotas sin interés, sumá su costo financiero a la comisión de tarjeta de crédito. Los días de acreditación arman la caja proyectada en Finanzas (tarjeta de crédito suele ser 14 a 18 días; transferencia, 0).</p>
       </Panel>
 
       <div className="flex flex-col gap-5">

@@ -150,8 +150,20 @@ export default function Shell({ userEmail, workspace, workspaces, sources, timez
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1240px] mx-auto px-4 lg:px-8 py-6 lg:py-8">{children}</div>
+          <div className="max-w-[1240px] mx-auto px-4 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-8">{children}</div>
         </main>
+        {/* Barra inferior en el celular: las secciones principales a un toque */}
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-20 border-t border-line bg-surface/95 backdrop-blur" aria-label="Secciones" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <ul className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(5, nav.length)}, minmax(0, 1fr))` }}>
+            {nav.slice(0, 5).map((n) => (
+              <li key={n.href}>
+                <Link href={n.href} aria-current={active(n.href) ? 'page' : undefined} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${active(n.href) ? 'text-ink font-medium' : 'text-mute'}`}>
+                  <Icon d={n.icon} />{n.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </div>
     </div>
   )

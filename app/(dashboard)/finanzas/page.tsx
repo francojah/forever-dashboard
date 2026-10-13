@@ -11,6 +11,16 @@ import ResultChart from '@/components/faro/finance/ResultChart'
 import { costChecks, projectMonth } from '@/lib/faro/costCheck'
 import { loadMacro, makeAdjuster, parseMode } from '@/lib/faro/macro'
 import MoneyMode from '@/components/faro/finance/MoneyMode'
+import Waterfall from '@/components/faro/finance/Waterfall'
+import TrendStrip from '@/components/faro/finance/TrendStrip'
+import Goals from '@/components/faro/finance/Goals'
+import EventsLog, { type EventRow } from '@/components/faro/finance/EventsLog'
+import CashForecast from '@/components/faro/finance/CashForecast'
+import { svc } from '@/lib/faro/db'
+import { loadOrders, loadCostIndex, loadAdsDaily, dailySeries, summarizeSales, summarizeAds } from '@/lib/faro/metrics'
+import { loadFixedMonthly } from '@/lib/faro/economics'
+import { beforeDuringAfter, cashForecast, type Goal } from '@/lib/faro/insights'
+import { addDays, resolvePeriod, monthRange } from '@/lib/faro/dates'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -67,10 +77,13 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
   const tz = ctx.workspace.timezone
   const thisMonth = localDate(new Date(), tz).slice(0, 7)
   const month = searchParams.m && /^\d{4}-\d{2}$/.test(searchParams.m) && searchParams.m <= thisMonth ? searchParams.m : thisMonth
-  const tab = ['resultado', 'fijos', 'caja'].includes(searchParams.tab || '') ? searchParams.tab! : 'resultado'
+  const tab = ['resultado', 'objetivos', 'fijos', 'caja'].includes(searchParams.tab || '') ? searchParams.tab! : 'resultado'
   const year = Number(month.slice(0, 4))
   const lastMonthOfYear = year === Number(thisMonth.slice(0, 4)) ? Number(thisMonth.slice(5)) : 12
   const months = Array.from({ length: lastMonthOfYear }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  // Para la tendencia: 12 meses hasta el elegido, más el mismo mes del año anterior
+  const shiftM = (m: string, n: number) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}` }
+  const trendMonths = Array.from(new Set([...Array.from({ length: 12 }, (_, i) => shiftM(month, -11 + i)), shiftM(month, -12), ...months])).sort()
 
   const mode = parseMode(searchParams.moneda)
   let fmtCur: 'ARS' | 'USD' = 'ARS'
@@ -78,22 +91,21 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
   let body: React.ReactNode = null
   let modeNote: string | null = null
   if (tab === 'resultado') {
-    const [allRaw, macro] = await Promise.all([loadPnL({
+    const [allTrendRaw, macro] = await Promise.all([loadPnL({
       workspaceId: ctx.workspace.id, tz, settings: ctx.workspace.settings,
       storeIds: ctx.stores.filter((s) => s.active).map((s) => s.id), accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id),
-    }, months), ctx.workspace.currency === 'ARS' ? loadMacro() : Promise.resolve(null)])
+    }, trendMonths), ctx.workspace.currency === 'ARS' ? loadMacro() : Promise.resolve(null)])
     const adj = makeAdjuster(ctx.workspace.currency === 'ARS' ? mode : 'nominal', macro)
-    const all = allRaw.map((x) => scalePnL(x, adj.factor(x.month)))
+    const allTrend = allTrendRaw.map((x) => scalePnL(x, adj.factor(x.month)))
+    const allRaw = allTrendRaw.filter((x) => months.includes(x.month))
+    const all = allTrend.filter((x) => months.includes(x.month))
     fmtCur = adj.currency
     modeNote = adj.note
     const pRaw = allRaw.find((x) => x.month === month)!
     const p = all.find((x) => x.month === month)!
     const [py, pm] = month.split('-').map(Number)
     const prevMonth = pm === 1 ? `${py - 1}-12` : `${py}-${String(pm - 1).padStart(2, '0')}`
-    const prevRaw = allRaw.find((x) => x.month === prevMonth) || (await loadPnL({
-      workspaceId: ctx.workspace.id, tz, settings: ctx.workspace.settings,
-      storeIds: ctx.stores.filter((s) => s.active).map((s) => s.id), accountIds: ctx.adAccounts.filter((a) => a.active).map((a) => a.id),
-    }, [prevMonth]))[0]
+    const prevRaw = allTrendRaw.find((x) => x.month === prevMonth)
     const prevP = prevRaw ? scalePnL(prevRaw, adj.factor(prevMonth)) : prevRaw
     const today = localDate(new Date(), tz)
     const proj = projectMonth(p, today)
@@ -142,6 +154,10 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
             </ul>
           </Panel>
         )}
+        <TrendStrip months={allTrend.filter((x) => x.month <= month)} selected={month} currency={adj.currency} />
+        <Panel title={`De la facturación al resultado · ${monthLabel(month)}`} description="Cada escalón es un costo. Lo que queda a la derecha es tuyo.">
+          <Waterfall p={p} currency={adj.currency} />
+        </Panel>
         <div className="grid lg:grid-cols-[1.25fr_1fr] gap-5 items-start">
           <Panel title={`Estado de resultados · ${monthLabel(month)}`} description={p.closed ? 'Mes cerrado: los números quedaron congelados.' : month === thisMonth ? 'Mes en curso, se actualiza con cada venta.' : 'Calculado desde las órdenes y la inversión reales.'} padded={false} actions={canEdit(ctx) && month < thisMonth ? <CloseMonth month={month} closed={p.closed} /> : undefined}>
             <Statement p={p} noAds={noAdsData(month)} cur={adj.currency} />
@@ -172,8 +188,50 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
         <CostTable kind="extra" canEdit={canEdit(ctx)} defaultMonth={month} />
       </div>
     )
+  } else if (tab === 'objetivos') {
+    const storeIds = ctx.stores.filter((s) => s.active).map((s) => s.id)
+    const accountIds = ctx.adAccounts.filter((a) => a.active).map((a) => a.id)
+    const today = localDate(new Date(), tz)
+    const { from: mf, to: mt } = monthRange(thisMonth)
+    const [goalsRes, eventsRes, orders, idx, ads] = await Promise.all([
+      svc().from('goals').select('metric,target').eq('workspace_id', ctx.workspace.id).eq('month', thisMonth),
+      svc().from('events').select('id,kind,name,starts,ends,entity_id,notes').eq('workspace_id', ctx.workspace.id).order('starts', { ascending: false }).limit(40),
+      loadOrders(storeIds, addDays(today, -400), today, tz), loadCostIndex(storeIds), loadAdsDaily(accountIds, addDays(today, -400), today),
+    ])
+    const inM = orders.filter((o) => { const d = localDate(new Date(o.created_at), tz); return d >= mf && d <= today })
+    const sM = summarizeSales(inM, tz, idx, ctx.workspace.settings), aM = summarizeAds(ads.filter((d) => d.date >= mf && d.date <= mt))
+    const adCost = aM.spend * (1 + ctx.workspace.settings.ad_tax_pct / 100)
+    const dim = Number(mt.slice(8, 10)), dayShare = Math.min(1, (Number(today.slice(8, 10)) - 0.5) / dim)
+    const goals = ((goalsRes.data || []) as { metric: Goal['metric']; target: number }[]).map((g) => ({ metric: g.metric, target: Number(g.target) }))
+    const series = dailySeries(resolvePeriod('custom', tz, new Date(), { from: addDays(today, -400), to: today }), orders, ads, tz, idx, ctx.workspace.settings)
+    const names = new Map<string, string>()
+    if ((eventsRes.data || []).some((e: { entity_id: string | null }) => e.entity_id)) {
+      const { data: ents } = await svc().from('ad_entities').select('entity_id,name').in('ad_account_id', accountIds).in('entity_id', (eventsRes.data || []).map((e: { entity_id: string | null }) => e.entity_id).filter(Boolean))
+      for (const e of ents || []) names.set(e.entity_id, e.name)
+    }
+    const events: EventRow[] = ((eventsRes.data || []) as Omit<EventRow, 'stats'>[]).map((e) => ({ ...e, entity_name: e.entity_id ? names.get(e.entity_id) || e.entity_id : null, stats: beforeDuringAfter(series, e.starts, e.ends, today) }))
+    const { data: ents30 } = await svc().from('ad_entities').select('entity_id,name,level').in('ad_account_id', accountIds).in('level', ['campaign', 'adset']).eq('effective_status', 'ACTIVE').limit(100)
+    const missing = !!goalsRes.error && /does not exist|Could not find/i.test(goalsRes.error.message)
+    body = (
+      <div className="flex flex-col gap-5">
+        <Goals month={thisMonth} goals={goals} dayShare={dayShare} canEdit={canEdit(ctx)} missing={missing}
+          actual={{ net_sales: sM.netSales, orders: sM.orders, profit: sM.contribution - adCost, cpa: aM.purchases ? aM.spend / aM.purchases : null, margin: sM.netSales ? sM.contribution / sM.netSales : null }} />
+        <EventsLog events={events} canEdit={canEdit(ctx)} missing={missing} entities={((ents30 || []) as { entity_id: string; name: string; level: string }[]).map((e) => ({ id: e.entity_id, name: `${e.level === 'campaign' ? 'Campaña' : 'Ad set'} · ${e.name}` }))} />
+      </div>
+    )
   } else {
-    body = <CostTable kind="cash" canEdit={canEdit(ctx)} />
+    const storeIds = ctx.stores.filter((s) => s.active).map((s) => s.id)
+    const today = localDate(new Date(), tz)
+    const [orders, fixed] = await Promise.all([loadOrders(storeIds, addDays(today, -45), today, tz), loadFixedMonthly(ctx.workspace.id, today)])
+    const accredit: Record<string, number> = {}
+    for (const f of ctx.workspace.settings.payment_fees) if (f.days != null) accredit[f.method] = f.days
+    const weeks = cashForecast(orders, ctx.workspace.settings, accredit, today)
+    body = (
+      <div className="flex flex-col gap-5">
+        <CashForecast weeks={weeks} configured={Object.keys(accredit).length > 0} fixedMonthly={fixed.total} />
+        <CostTable kind="cash" canEdit={canEdit(ctx)} />
+      </div>
+    )
   }
 
   return (
@@ -181,7 +239,7 @@ export default async function FinanzasPage({ searchParams }: { searchParams: { m
       <PageHeader title="Finanzas" description="El resultado real del negocio, armado desde las órdenes, la inversión en anuncios y tus costos.">
         {tab === 'resultado' && <div className="flex flex-wrap items-center gap-2">{ctx.workspace.currency === 'ARS' && <MoneyMode value={mode} />}<MonthPicker value={month} max={thisMonth} /></div>}
       </PageHeader>
-      <Tabs value={tab} tabs={[{ key: 'resultado', label: 'Resultado' }, { key: 'fijos', label: 'Costos fijos y del mes' }, { key: 'caja', label: 'Caja' }]} />
+      <Tabs value={tab} tabs={[{ key: 'resultado', label: 'Resultado' }, { key: 'objetivos', label: 'Objetivos y promos' }, { key: 'fijos', label: 'Costos fijos y del mes' }, { key: 'caja', label: 'Caja' }]} />
       {modeNote && <p className="mb-4 -mt-2 text-[13px] text-mute">{modeNote}</p>}
       {body}
     </>

@@ -19,6 +19,8 @@ import { loadAttribution } from '@/lib/faro/attribution'
 import { startOfLocalDayUTC } from '@/lib/faro/dates'
 import { planPacing, monthOf } from '@/lib/faro/budgetPlan'
 import RulesManager from '@/components/faro/ads/RulesManager'
+import { SaturationChart, Simulator, ExperimentsLink } from '@/components/faro/ads/Analysis'
+import { saturation } from '@/lib/faro/insights'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -30,7 +32,7 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
   if (!accounts.length) {
     return (<><PageHeader title="Anuncios" /><Panel><Empty title="Todavía no conectaste una cuenta de Meta"><Link href="/ajustes?tab=conexiones" className="underline">Conectar Meta</Link></Empty></Panel></>)
   }
-  const tab = ['campanias', 'creativos', 'publicar', 'reglas', 'historial'].includes(searchParams.tab || '') ? searchParams.tab! : 'campanias'
+  const tab = ['campanias', 'creativos', 'publicar', 'analisis', 'reglas', 'historial'].includes(searchParams.tab || '') ? searchParams.tab! : 'campanias'
   const tz = ctx.workspace.timezone
   const period = resolvePeriod(parsePeriodKey(searchParams.p), tz, new Date(), { from: searchParams.from, to: searchParams.to })
   const today = localDate(new Date(), tz)
@@ -156,6 +158,26 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
         multiAdsDefault={ctx.workspace.settings.meta_enhancements.multiAds}
       />
     )
+  } else if (tab === 'analisis') {
+    const storeIds = ctx.stores.filter((s) => s.active).map((s) => s.id)
+    const [days, orders14, idx, ev] = await Promise.all([
+      loadAdsDaily(accounts.map((a) => a.id), addDays(today, -90), addDays(today, -1)),
+      loadOrders(storeIds, addDays(today, -13), today, tz), loadCostIndex(storeIds),
+      svc().from('events').select('id').eq('workspace_id', ctx.workspace.id).eq('kind', 'experimento'),
+    ])
+    const ref = summarizeSales(orders14, tz, idx, ctx.workspace.settings)
+    const perOrder = ref.orders > 0 ? ref.contribution / ref.orders : null
+    const maxCpa = perOrder != null ? perOrder / (1 + ctx.workspace.settings.ad_tax_pct / 100) : null
+    const sat = saturation(days, maxCpa)
+    const last7 = days.filter((d) => d.date >= addDays(today, -7))
+    const current = { spend: last7.reduce((a, d) => a + d.spend, 0) / Math.max(1, last7.length), purchases: last7.reduce((a, d) => a + d.purchases, 0) / Math.max(1, last7.length) }
+    content = (
+      <div className="flex flex-col gap-5">
+        <Panel title="¿Hasta dónde puedo escalar?" description="Costo por compra según cuánto gastaste cada día en los últimos 90 días. Cuando la línea sube, cada peso extra rinde menos."><SaturationChart sat={sat} maxCpa={maxCpa} /></Panel>
+        <Panel title="Simulador de presupuesto" description="Qué pasaría con compras y ganancia si cambiás el gasto diario total."><Simulator sat={sat} current={current} contributionPerOrder={perOrder} adTaxPct={ctx.workspace.settings.ad_tax_pct} /></Panel>
+        <ExperimentsLink count={(ev.data || []).length} />
+      </div>
+    )
   } else if (tab === 'reglas') {
     const month = monthOf(today)
     const nextMonth = monthOf(addDays(`${month}-28`, 7))
@@ -175,10 +197,10 @@ export default async function AnunciosPage({ searchParams }: { searchParams: { p
 
   return (
     <>
-      <PageHeader title="Anuncios" description={tab === 'campanias' ? `${period.label}. Los cambios se revisan antes de publicarse en Meta.` : tab === 'creativos' ? `${period.label}. Cada anuncio con su imagen y sus números, para ver qué escalar y qué apagar.` : tab === 'publicar' ? 'Creativos nuevos o duplicados, en uno o varios ad sets, o en un ad set nuevo. Todo se crea en pausa.' : tab === 'reglas' ? 'Reglas que proponen cambios para aprobar y el plan de inversión del mes.' : 'Todo lo que se cambió desde Faro, con quién y cuándo.'}>
+      <PageHeader title="Anuncios" description={tab === 'campanias' ? `${period.label}. Los cambios se revisan antes de publicarse en Meta.` : tab === 'creativos' ? `${period.label}. Cada anuncio con su imagen y sus números, para ver qué escalar y qué apagar.` : tab === 'publicar' ? 'Creativos nuevos o duplicados, en uno o varios ad sets, o en un ad set nuevo. Todo se crea en pausa.' : tab === 'analisis' ? 'Hasta dónde escalar y qué esperar si cambiás el presupuesto, con tus propios datos.' : tab === 'reglas' ? 'Reglas que proponen cambios para aprobar y el plan de inversión del mes.' : 'Todo lo que se cambió desde Faro, con quién y cuándo.'}>
         {(tab === 'campanias' || tab === 'creativos') && <PeriodPicker value={period.key} from={period.from} to={period.to} />}
       </PageHeader>
-      <Tabs value={tab} tabs={[{ key: 'campanias', label: 'Campañas' }, { key: 'creativos', label: 'Creativos' }, { key: 'publicar', label: 'Cargar anuncios' }, { key: 'reglas', label: 'Reglas y plan' }, { key: 'historial', label: 'Historial de cambios' }]} />
+      <Tabs value={tab} tabs={[{ key: 'campanias', label: 'Campañas' }, { key: 'creativos', label: 'Creativos' }, { key: 'publicar', label: 'Cargar anuncios' }, { key: 'analisis', label: 'Análisis' }, { key: 'reglas', label: 'Reglas y plan' }, { key: 'historial', label: 'Historial de cambios' }]} />
       {content}
     </>
   )
