@@ -20,7 +20,8 @@ export interface WeeklyData {
   proposals: number
 }
 
-export async function loadWeekly(workspaceId: string, now = new Date()): Promise<WeeklyData | null> {
+/** `weekEnd` (YYYY-MM-DD): último día de la semana a resumir; por defecto, ayer. */
+export async function loadWeekly(workspaceId: string, now = new Date(), weekEnd?: string): Promise<WeeklyData | null> {
   const sb = svc()
   const { data: w } = await sb.from('workspaces').select('id,name,timezone,settings').eq('id', workspaceId).single()
   if (!w) return null
@@ -34,7 +35,8 @@ export async function loadWeekly(workspaceId: string, now = new Date()): Promise
   const accs = (accounts || []).map((a) => ({ ...a, protected_ids: a.protected_ids || [] }))
   if (!storeIds.length && !accs.length) return null
   const today = localDate(now, tz)
-  const to = addDays(today, -1), from = addDays(today, -7)
+  const to = weekEnd && /^\d{4}-\d{2}-\d{2}$/.test(weekEnd) && weekEnd < today ? weekEnd : addDays(today, -1)
+  const from = addDays(to, -6)
   const pTo = addDays(from, -1), pFrom = addDays(from, -7)
   const [orders, idx, ads, tree, { rules }] = await Promise.all([
     loadOrders(storeIds, pFrom, to, tz),
@@ -108,4 +110,9 @@ export async function weeklyRecipients(workspaceId: string): Promise<string[]> {
   const { data: members } = await sb.from('workspace_members').select('user_id,role').eq('workspace_id', workspaceId).in('role', ['owner', 'editor'])
   const emails = await Promise.all((members || []).map(async (m) => (await sb.auth.admin.getUserById(m.user_id)).data.user?.email || null))
   return Array.from(new Set(emails.filter(Boolean) as string[]))
+}
+
+/** Registro de envíos (para ver el último y reenviar). Nunca rompe el envío. */
+export async function logMail(workspaceId: string, m: { kind: string; week_to: string; recipients: string[]; ok: boolean; error?: string; by?: string | null }) {
+  await svc().from('mail_log').insert({ workspace_id: workspaceId, kind: m.kind, week_to: m.week_to, recipients: m.recipients, ok: m.ok, error: m.error || null, sent_by: m.by || null }).then(() => null, () => null)
 }

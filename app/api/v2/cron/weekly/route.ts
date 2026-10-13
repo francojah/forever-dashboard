@@ -1,6 +1,6 @@
 import { svc } from '@/lib/faro/db'
 import { normalizeSettings } from '@/lib/faro/settings'
-import { loadWeekly, renderWeekly, weeklyRecipients } from '@/lib/faro/weekly'
+import { loadWeekly, renderWeekly, weeklyRecipients, logMail } from '@/lib/faro/weekly'
 import { sendMail, mailConfigured } from '@/lib/faro/mailer'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +23,7 @@ export async function GET(req: Request) {
       if (!d || (d.cur.sales.orders === 0 && d.cur.ads.spend === 0)) continue
       const to = await weeklyRecipients(w.id)
       const r = await sendMail({ to, ...renderWeekly(d, APP) })
+      await logMail(w.id, { kind: 'semanal-auto', week_to: d.to, recipients: to, ok: r.ok, error: r.error })
       results.push({ workspace: w.name, ...r })
     } catch (e) { results.push({ workspace: w.name, ok: false, error: e instanceof Error ? e.message : 'Error' }) }
   }

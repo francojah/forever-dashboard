@@ -76,7 +76,7 @@ export default async function AjustesPage({ searchParams }: { searchParams: { ta
       <div className="flex flex-col gap-5">
         <Team members={withEmail} isOwner={ctx.role === 'owner'} workspaceName={ctx.workspace.name} />
         <WhatsAppNotify />
-        <WeeklyEmail enabled={ctx.workspace.settings.weekly_email} canEdit={canEdit(ctx)} mailReady={mailConfigured()} />
+        <WeeklyEmail enabled={ctx.workspace.settings.weekly_email} canEdit={canEdit(ctx)} mailReady={mailConfigured()} timezone={ctx.workspace.timezone} />
       </div>
     )
   } else {
