@@ -10,6 +10,10 @@ import ActionList from '@/components/faro/ActionList'
 import SetupNotice from '@/components/faro/SetupNotice'
 import AiAdvisor from '@/components/faro/AiAdvisor'
 import Onboarding, { onboardingSteps } from '@/components/faro/Onboarding'
+import { WeekDiagnosis, Followups, AskFaro } from '@/components/faro/Brain'
+import { loadDiagnosis } from '@/lib/faro/diagnose'
+import { pendingFollowups, resolveFollowups } from '@/lib/faro/followups'
+import { localDate } from '@/lib/faro/dates'
 import { lastReport, aiConfigured } from '@/lib/faro/ai'
 import { money, int, ratio, pct } from '@/lib/faro/format'
 
@@ -31,7 +35,13 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
   }
 
   const period = resolvePeriod(parsePeriodKey(searchParams.p), ctx.workspace.timezone, new Date(), { from: searchParams.from, to: searchParams.to })
-  const [d, ai] = await Promise.all([loadHome(ctx, period), lastReport(ctx.workspace.id)])
+  const accountIds = ctx.adAccounts.filter((a) => a.active).map((a) => a.id)
+  await resolveFollowups(ctx.workspace.id, accountIds, localDate(new Date(), ctx.workspace.timezone)).catch(() => 0)
+  const [d, ai, diag, fu] = await Promise.all([
+    loadHome(ctx, period), lastReport(ctx.workspace.id),
+    loadDiagnosis(ctx).catch(() => null),
+    pendingFollowups(ctx.workspace.id, ctx.workspace.timezone),
+  ])
   const cur = ctx.workspace.currency
 
   return (
@@ -44,6 +54,9 @@ export default async function InicioPage({ searchParams }: { searchParams: { p?:
         <Onboarding compact steps={onboardingSteps(ctx, { cogsKnownShare: d.cur.sales.orders > 0 ? 1 - d.cur.sales.cogsCoverage.estimated : null })} />
         <SetupNotice settings={ctx.workspace.settings} sales={d.cur.sales} />
         <KpiStrip cur={d.cur} before={d.before} prevLabel={d.prev.label} currency={cur} />
+        {diag && <WeekDiagnosis d={diag} />}
+        <Followups resolved={fu.resolved} upcoming={fu.upcoming} />
+        <AskFaro configured={aiConfigured()} suggestions={['¿Cuánto gané esta semana vs la anterior?', '¿Qué anuncio tiene el mejor costo por compra?', '¿Cuánto llevo invertido este mes y qué resultado tengo?', '¿Cuál fue mi mejor mes?', '¿Qué producto vende más?']} />
 
         <Panel title="Ventas, inversión y ganancia por día" description={d.seriesLabel}>
           <DailyChart data={d.series} />

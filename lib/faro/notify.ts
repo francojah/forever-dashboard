@@ -6,6 +6,9 @@ import { loadRules, runRules } from './rules'
 import { addDays, localDate } from './dates'
 import { money, int } from './format'
 import { sendWhatsApp, whatsappConfigured } from './whatsapp'
+import { systemContext } from './systemContext'
+import { loadDiagnosis } from './diagnose'
+import { resolveFollowups } from './followups'
 
 /**
  * Avisos por WhatsApp: un resumen de ayer a la mañana y avisos urgentes (cuenta de Meta, gasto sin ventas)
@@ -63,10 +66,20 @@ export async function dailySummary(workspaceId: string, now = new Date()): Promi
   const ref = summarizeSales(on(addDays(y, -13), y), tz, idx, settings)
   const maxCpa = ref.orders > 0 ? ref.contribution / ref.orders / (1 + settings.ad_tax_pct / 100) : null
   const proposals = rules.length ? (await runRules(rules, accs, today, maxCpa).catch(() => [])).length : 0
-  return {
-    empty: yS.orders === 0 && yA.spend === 0,
-    text: dailyText({ date: y, orders: yS.orders, billing: yS.netSales + yS.shippingCustomer, profit: cur.profitAfterAds, spend: yA.spend, cpa: yA.purchases > 0 ? yA.spend / yA.purchases : null, maxCpa, mtdProfit: mtd.profitAfterAds, proposals }),
-  }
+  let text = dailyText({ date: y, orders: yS.orders, billing: yS.netSales + yS.shippingCustomer, profit: cur.profitAfterAds, spend: yA.spend, cpa: yA.purchases > 0 ? yA.spend / yA.purchases : null, maxCpa, mtdProfit: mtd.profitAfterAds, proposals })
+  // El "por qué": diagnóstico de la semana y resultado de decisiones, los lunes o cuando algo se movió
+  try {
+    const ctx = await systemContext(w.id)
+    if (ctx) {
+      const dow = new Date(`${today}T12:00:00Z`).getUTCDay()
+      const diag = await loadDiagnosis(ctx, now)
+      if (diag.moved || dow === 1) text += ` · Por qué: ${diag.summary}`
+      const n = await resolveFollowups(w.id, accs.map((a) => a.id), today)
+      const { data: fresh } = await sb.from('decision_followups').select('result').eq('workspace_id', w.id).is('seen_at', null).not('result', 'is', null).order('check_at', { ascending: false }).limit(2)
+      if (n > 0 && fresh?.length) text += ` · Tus decisiones: ${(fresh as { result: { text: string } }[]).map((f) => f.result.text).join(' ')}`
+    }
+  } catch { /* el resumen sale igual sin el por qué */ }
+  return { empty: yS.orders === 0 && yA.spend === 0, text }
 }
 
 /** Avisos urgentes: solo los críticos de la cuenta de Meta. */

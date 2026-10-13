@@ -359,3 +359,34 @@ describe('análisis para decidir', () => {
     expect(c[0].days).toBe(70); expect(c[0].suggest).toBe(0)
   })
 })
+
+import { diagnose } from '../lib/faro/diagnose'
+import { judge } from '../lib/faro/followups'
+import { normalizeSettings as ns2 } from '../lib/faro/settings'
+
+describe('diagnóstico y seguimiento', () => {
+  const ord = (id: string, cust: string, date: string, total: number, name = 'Remera', pm = 'credit_card'): OrderRow => ({
+    store_id: 's', order_id: id, number: id, created_at: `${date}T15:00:00Z`, status: 'open', payment_status: 'paid', cancelled_at: null, subtotal: total, discount: 0, total, shipping_customer: 0, shipping_owner: 0,
+    payment_method: pm, gateway: null, installments: null, units: 1, customer_id: cust, customer_email: null, province: null, shipping_option: null, shipping_pickup: null,
+    items: [{ product_id: 'p1', variant_id: null, name, qty: 1, price: total, cost: 1000 }],
+  })
+  const day = (date: string, spend: number, purchases: number, adset = 'A'): { date: string; adset_id: string; ad_id: string; spend: number; purchases: number; impressions: number; link_clicks: number; lpv: number } => ({ date, adset_id: adset, ad_id: 'ad1', spend, purchases, impressions: 10000, link_clicks: 150, lpv: 100 })
+  const adsDay = (date: string, spend: number, purchases: number) => ({ date, spend, impressions: 10000, link_clicks: 150, lpv: 100, atc: 10, ic: 5, purchases, purchase_value: purchases * 20000 })
+  it('explica una caída por un ad set que dejó de entregar', () => {
+    const prevDays = ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05']
+    const curDays = ['2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12']
+    const prev = { orders: prevDays.flatMap((d, i) => [ord(`p${i}a`, `c${i}`, d, 10000), ord(`p${i}b`, `d${i}`, d, 10000)]), ads: prevDays.map((d) => adsDay(d, 20000, 2)), ents: prevDays.map((d) => day(d, 20000, 2)) }
+    const cur = { orders: curDays.map((d, i) => ord(`c${i}`, `e${i}`, d, 10000)), ads: curDays.map((d) => adsDay(d, 0, 0)), ents: [] }
+    const r = diagnose({ cur, prev, names: new Map([['A', 'Prospecting']]), stock: new Map(), tz: 'UTC', settings: ns2({ configured: true }), idx: new Map(), range: { from: '2026-10-06', to: '2026-10-12', prevFrom: '2026-09-29', prevTo: '2026-10-05' } })
+    expect(r.moved).toBe(true)
+    expect(r.findings.some((f) => f.title.includes('Prospecting') && f.title.includes('dejó de entregar'))).toBe(true)
+    expect(r.summary).toContain('Lo que más lo explica: Prospecting dejó de entregar')
+  })
+  it('juzga una suba de presupuesto', () => {
+    const good = judge({ field: 'daily_budget', to_value: 12000, entity_name: 'RT' }, { spend: 70000, purchases: 10, cpa: 7000, days: 7 }, { spend: 84000, purchases: 13, cpa: 6461, days: 7 })
+    expect(good.verdict).toBe('mejor')
+    const bad = judge({ field: 'daily_budget', to_value: 12000, entity_name: 'RT' }, { spend: 70000, purchases: 10, cpa: 7000, days: 7 }, { spend: 84000, purchases: 6, cpa: 14000, days: 7 })
+    expect(bad.verdict).toBe('peor')
+    expect(judge({ field: 'status', to_value: 'PAUSED', entity_name: 'X' }, { spend: 50000, purchases: 0, cpa: null, days: 7 }, { spend: 0, purchases: 0, cpa: null, days: 0 }).verdict).toBe('mejor')
+  })
+})

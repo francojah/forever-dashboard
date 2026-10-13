@@ -210,3 +210,5 @@ export function canEdit(ctx: FaroContext) {
 
 /** Contexto memoizado por request (layout + página comparten las mismas consultas). */
 export const getRequestContext = cache(async () => getContext())
+
+export { systemContext } from './systemContext'

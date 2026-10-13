@@ -1,4 +1,5 @@
 import { svc } from './db'
+import { scheduleFollowup } from './followups'
 import { graphGet, graphPost, getMetaToken } from './meta'
 import type { FaroContext } from './context'
 
@@ -155,6 +156,7 @@ export async function applyChanges(ctx: FaroContext, changes: Change[], meta: { 
         old_value: oldValue as object, new_value: newValue as object, status: 'ok',
       }).select('id').single()
       if (meta.undoOf) await sb.from('change_log').update({ undone_at: new Date().toISOString() }).eq('id', meta.undoOf)
+      else await scheduleFollowup(ctx.workspace.id, { changeId: log?.id, level: ch.level, entityId: ch.id, entityName: ent.name, field: ch.field, from: oldValue, to: newValue })
       out.push({ id: ch.id, field: ch.field, ok: true, changeId: log?.id, old: oldValue, new: newValue })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
