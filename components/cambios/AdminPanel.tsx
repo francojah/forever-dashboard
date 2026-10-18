@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import MotoLabels from './MotoLabels'
+import ReasonsReport from './ReasonsReport'
 
 type Item = {
   product_id: number; variant_id: number | null; name: string; variant_label: string; quantity: number; reason?: string
@@ -51,7 +52,7 @@ function statusTone(s: string) {
 export default function CambiosAdminPanel({ variant = 'dashboard', userName, onLogout }: { variant?: 'dashboard' | 'standalone'; userName?: string; onLogout?: () => void }) {
   const [data, setData] = useState<Data | null>(null)
   const [err, setErr] = useState('')
-  const [tab, setTab] = useState<'activos' | 'stock' | 'historial' | 'moto'>('activos')
+  const [tab, setTab] = useState<'activos' | 'stock' | 'historial' | 'moto' | 'motivos'>('activos')
   const [motoCount, setMotoCount] = useState<number | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [flash, setFlash] = useState('')
@@ -73,6 +74,7 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       })
       const j = await r.json()
       if (!j.ok) alertMsg(j.error || 'Error')
+      else if (j.stockError) alertMsg(`${row.code}: guardado, pero el STOCK no se movió en Tiendanube (${j.stockError}). Quedó en "Ajustes de stock".`)
       else if (j.emailKind) alertMsg(j.emailSent ? `${row.code}: listo, mail enviado al cliente` : `${row.code}: guardado, pero el MAIL NO SALIÓ (${j.emailError || 'error'}). Reintentá desde el cambio.`)
       else alertMsg(`${row.code}: actualizado`)
       await load()
@@ -97,7 +99,8 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
     const out: { row: Row; kind: 'out' | 'in' | 'skip'; text: string }[] = []
     for (const r of rows) {
       if (r.type !== 'cambio' || r.status === 'cancelado') continue
-      if (r.dispatched_at && !r.stock_out_done) {
+      // La reserva se aplica sola al confirmar el cambio; si quedó pendiente (falló Tiendanube o es un cambio viejo), aparece acá
+      if (!r.stock_out_done && r.items.some((it) => it.new_variant_id)) {
         for (const it of r.items) out.push({ row: r, kind: 'out', text: `Restar ${it.quantity} × ${it.new_product_name || it.name} ${it.new_variant_label}` })
       }
       if (r.received_at && r.item_condition === 'ok' && !r.stock_in_done) {
@@ -108,6 +111,14 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       }
     }
     return out
+  }, [rows])
+
+  const stockLog = useMemo(() => {
+    const out: { at: string; code: string; type: string; detail: string | null }[] = []
+    for (const r of rows) for (const e of r.events || []) {
+      if (['stock_reserva', 'stock_ingreso', 'stock_liberado', 'stock_error'].includes(e.type)) out.push({ at: e.at, code: r.code, type: e.type, detail: e.detail })
+    }
+    return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 25)
   }, [rows])
 
   const alerts = active.filter((r) => r.items.some((i) => i.stock_alert))
@@ -150,7 +161,7 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       {err && <p className="text-sm text-red-600">{err}</p>}
 
       <div className="flex gap-1 border-b border-gray-200 dark:border-zinc-800 overflow-x-auto">
-        {([['activos', `Activos (${active.length})`], ['stock', `Ajustes de stock (${stockTasks.filter((t) => t.kind !== 'skip').length})`], ['historial', `Historial (${history.length})`], ['moto', `Etiquetas moto${motoCount != null ? ` (${motoCount})` : ''}`]] as const).map(([k, l]) => (
+        {([['activos', `Activos (${active.length})`], ['stock', `Ajustes de stock (${stockTasks.filter((t) => t.kind !== 'skip').length})`], ['historial', `Historial (${history.length})`], ['moto', `Despacho moto${motoCount != null ? ` (${motoCount})` : ''}`], ['motivos', 'Motivos']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${tab === k ? 'border-zinc-900 dark:border-white font-medium text-gray-900 dark:text-white' : 'border-transparent text-gray-500'}`}>{l}</button>
         ))}
@@ -159,21 +170,49 @@ export default function CambiosAdminPanel({ variant = 'dashboard', userName, onL
       {!data && !err && <p className="text-sm text-gray-500">Cargando…</p>}
 
       {tab === 'moto' && <MotoLabels onCount={setMotoCount} />}
+      {tab === 'motivos' && data && <ReasonsReport rows={rows} reasons={data.reasons} />}
 
       {tab === 'stock' && (
-        <div className={card + ' divide-y divide-gray-100 dark:divide-zinc-800'}>
-          {stockTasks.length === 0 && <p className="p-4 text-sm text-gray-500">No hay ajustes pendientes.</p>}
-          {stockTasks.map((t, i) => (
-            <div key={i} className="p-3 flex items-center justify-between gap-3 text-sm">
-              <span className={t.kind === 'skip' ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}>
-                <span className="text-xs text-gray-400 mr-2">{t.row.code}</span>{t.text}
-              </span>
-              <button className={btn} disabled={busy !== null}
-                onClick={() => act(t.row, t.kind === 'out' ? 'stock_out' : 'stock_in', { value: true })}>
-                {t.kind === 'skip' ? 'Descartar' : 'Hecho en TN'}
-              </button>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-600 dark:text-zinc-400">
+            El stock se mueve solo en Tiendanube: <b>resta</b> la prenda nueva cuando el cliente confirma, la <b>devuelve</b> si se cancela y <b>suma</b> la que vuelve cuando marcás &quot;Prenda recibida OK&quot; (las falladas no). Acá aparece solo lo que no se pudo hacer solo.
+          </p>
+          <div className={card + ' divide-y divide-gray-100 dark:divide-zinc-800'}>
+            {stockTasks.length === 0 && <p className="p-4 text-sm text-gray-500">No hay ajustes pendientes.</p>}
+            {stockTasks.map((t, i) => (
+              <div key={i} className="p-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className={t.kind === 'skip' ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}>
+                  <span className="text-xs text-gray-400 mr-2">{t.row.code}</span>{t.text}
+                </span>
+                <span className="flex gap-2">
+                  {t.kind !== 'skip' && (
+                    <button className={btnPrimary} disabled={busy !== null}
+                      onClick={() => act(t.row, t.kind === 'out' ? 'stock_apply_out' : 'stock_apply_in')}>Aplicar en Tiendanube</button>
+                  )}
+                  <button className={btn} disabled={busy !== null}
+                    onClick={() => act(t.row, t.kind === 'out' ? 'stock_out' : 'stock_in', { value: true })}>
+                    {t.kind === 'skip' ? 'Descartar' : 'Ya lo hice a mano'}
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+          {stockLog.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-700 dark:text-zinc-300 mb-1.5">Movimientos recientes</p>
+              <ul className={card + ' divide-y divide-gray-100 dark:divide-zinc-800 text-xs'}>
+                {stockLog.map((e, i) => (
+                  <li key={i} className="px-3 py-2 flex gap-2">
+                    <span className="text-gray-400 shrink-0">{new Date(e.at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="text-gray-500 shrink-0">{e.code}</span>
+                    <span className={e.type === 'stock_error' ? 'text-red-700' : 'text-gray-800 dark:text-zinc-200'}>
+                      {e.type === 'stock_reserva' ? 'Reservado ' : e.type === 'stock_ingreso' ? 'Reingresado ' : e.type === 'stock_liberado' ? 'Liberado ' : 'No se pudo: '}{e.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
+          )}
         </div>
       )}
 

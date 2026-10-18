@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import { pushEvent, emailAndLog, labelInfo, noteOnOrder } from '@/lib/cambios/service'
+import { reserveExchange, releaseReservation, receiveReturn } from '@/lib/cambios/stock'
 import { kindForStatus, type EmailKind, type ExchangeRow } from '@/lib/cambios/email'
 
 export const dynamic = 'force-dynamic'
@@ -80,6 +81,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       case 'stock_out':
         patch = { stock_out_done: !!body.value }
         break
+      case 'stock_apply_out':
+      case 'stock_apply_in':
+        // Reintento automático en Tiendanube (se ejecuta después de guardar)
+        patch = {}
+        break
       case 'stock_in':
         patch = { stock_in_done: !!body.value }
         break
@@ -102,8 +108,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       emailSent = res.ok
       emailError = res.ok ? null : res.error || 'error'
     }
+    // Stock en Tiendanube
+    let stockError: string | null = null
+    if (action === 'mark_received' && updated.item_condition === 'ok') stockError = (await receiveReturn(updated)).error ?? null
+    if (action === 'cancel' && ex.status !== 'cancelado') stockError = (await releaseReservation(updated)).error ?? null
+    if (action === 'stock_apply_out') stockError = (await reserveExchange(updated)).error ?? null
+    if (action === 'stock_apply_in') {
+      if (updated.item_condition !== 'ok') return bad('La prenda no está marcada como recibida en buen estado')
+      stockError = (await receiveReturn(updated)).error ?? null
+    }
+
     if (action === 'cancel' && ex.type === 'cambio' && ex.status !== 'cancelado') await noteOnOrder(updated, 'cancelado')
-    return NextResponse.json({ ok: true, emailSent, emailError, emailKind: email })
+    return NextResponse.json({ ok: true, emailSent, emailError, emailKind: email, stockError })
   } catch (e) {
     console.error('[cambios/admin/update]', e)
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })

@@ -11,7 +11,7 @@ export type ExchangeRow = {
   moto_date?: string | null; tracking_number?: string | null; item_condition?: string | null
 }
 
-export type EmailKind = 'creado' | 'monto' | 'pago_confirmado' | 'etiqueta' | 'prenda_recibida' | 'despachado' | 'resuelto' | 'cancelado'
+export type EmailKind = 'creado' | 'monto' | 'recordatorio' | 'vencido' | 'pago_confirmado' | 'etiqueta' | 'prenda_recibida' | 'despachado' | 'resuelto' | 'cancelado'
 export type EmailResult = { ok: boolean; error?: string }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
@@ -57,7 +57,7 @@ function nextStepAfterPay(r: ExchangeRow) {
 
 export function buildEmail(kind: EmailKind, r: ExchangeRow): { subject: string; html: string; text: string } {
   const first = (r.customer_name || '').split(' ')[0] || 'Hola'
-  const link = statusUrl(r.status_token)
+  let link = statusUrl(r.status_token)
   let subject = ''
   let body = ''
   let cta = 'Ver estado del cambio'
@@ -76,6 +76,17 @@ export function buildEmail(kind: EmailKind, r: ExchangeRow): { subject: string; 
       subject = `Costo del envío de tu cambio ${r.code}`
       body = payBlock(r)
       cta = 'Subir comprobante'
+      break
+    case 'recordatorio':
+      subject = `Tu cambio ${r.code} está esperando la transferencia`
+      body = `<p>Todavía no recibimos el pago de tu cambio. Tenemos reservada tu prenda hasta mañana: si no nos llega la transferencia, la solicitud se cancela sola y la prenda vuelve a la venta.</p>${payBlock(r)}`
+      cta = 'Subir comprobante'
+      break
+    case 'vencido':
+      subject = `Cancelamos tu cambio ${r.code}`
+      body = `<p>Pasaron 48 horas sin recibir el pago, así que cancelamos la solicitud y la prenda volvió a la venta. Si todavía querés hacer el cambio, podés iniciarlo de nuevo dentro del plazo o escribirnos por WhatsApp.</p>`
+      cta = 'Iniciar un cambio nuevo'
+      link = CAMBIOS.publicUrl.includes('cambios.') ? CAMBIOS.publicUrl : `${CAMBIOS.publicUrl}/cambios`
       break
     case 'pago_confirmado':
       subject = isMoto(r) ? `Pago confirmado — cambio ${r.code}` : `Pago confirmado: pendiente de recibir etiqueta — cambio ${r.code}`
@@ -192,6 +203,8 @@ export function whatsappText(kind: EmailKind, r: ExchangeRow): string {
         : `${first}! Recibimos tu cambio ${r.code}. Para avanzar transferí ${money(amountDue(r.shipping_amount, r.items))}${diffTotal(r.items) > 0 ? ` (envío + diferencia de precio)` : ''} al ${pay} y subí el comprobante acá:`)
       : `${first}! Recibimos tu solicitud ${r.code}, lo vemos por acá.`,
     monto: `${first}! El total de tu cambio ${r.code} es ${money(amountDue(r.shipping_amount, r.items))}. Transferí al ${pay} y subí el comprobante acá:`,
+    recordatorio: `${first}! Tu cambio ${r.code} sigue esperando la transferencia de ${money(amountDue(r.shipping_amount, r.items))} al ${pay}. Si mañana no nos llegó, se cancela solo. Subí el comprobante acá:`,
+    vencido: `${first}! Cancelamos el cambio ${r.code} porque no recibimos el pago en 48 horas. Si querés hacerlo igual, escribinos.`,
     pago_confirmado: moto
       ? `${first}! Confirmamos tu pago. La moto retira tu prenda y te entrega la nueva en el mismo viaje. Despachamos los lunes, te avisamos el día.`
       : `${first}! Confirmamos tu pago. Estado: pendiente de recibir etiqueta. En breve te mandamos la etiqueta de Correo Argentino para que despaches la prenda.`,

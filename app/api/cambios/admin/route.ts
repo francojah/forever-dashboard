@@ -5,6 +5,7 @@ import { reservedByVariant, type ExchangeItem } from '@/lib/cambios/logic'
 import { whatsappText, kindForStatus, emailConfigured, type ExchangeRow } from '@/lib/cambios/email'
 import { labelInfo, lastEmail } from '@/lib/cambios/service'
 import { CAMBIOS, ZONE_LABEL, REASONS, statusLabel } from '@/lib/cambios/config'
+import { runExpiry } from '@/lib/cambios/expiry'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,8 @@ export async function GET() {
   const auth = await requireCambiosAdmin()
   if (auth instanceof NextResponse) return auth
   try {
+    // Recordatorios y vencimientos pendientes (como mucho cada 30 min)
+    await runExpiry().catch((e) => console.error('[cambios/expiry]', e))
     const sb = supabaseAdmin()
     const { data, error } = await sb.from('exchanges').select('*').order('created_at', { ascending: false }).limit(300)
     if (error) throw new Error(error.message)

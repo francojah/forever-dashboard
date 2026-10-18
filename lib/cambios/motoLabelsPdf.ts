@@ -81,11 +81,12 @@ function layoutLabel(page: PDFPage, o: MotoOrder, x0: number, y0: number, w: num
   rule()
 
   // Número de orden + tipo de envío
-  text('ORDEN', 7.5, f.bold, GREY, 0.25)
+  const isCambio = o.kind === 'cambio'
+  text(isCambio ? `CAMBIO · ORDEN #${o.number}` : 'ORDEN', 7.5, f.bold, GREY, 0.25)
   const numSize = S(26)
   y -= numSize
-  drawText(`#${o.number}`, { x: left, y, size: numSize, font: f.bold, color: BLACK })
-  const tag = 'ENVÍO POR MOTO'
+  drawText(isCambio ? safe(o.code) : `#${o.number}`, { x: left, y, size: numSize, font: f.bold, color: BLACK })
+  const tag = isCambio ? 'CAMBIO POR MOTO' : 'ENVÍO POR MOTO'
   const tagSize = 8
   const tagW = f.bold.widthOfTextAtSize(safe(tag), tagSize) + 4 * MM
   const tagH = 5.5 * MM
@@ -106,6 +107,12 @@ function layoutLabel(page: PDFPage, o: MotoOrder, x0: number, y0: number, w: num
   block(loc, 15, 9, f.reg, 2)
   block([o.province, o.zipcode ? `CP ${o.zipcode}` : ''].filter(Boolean).join(' · '), 13, 9, f.reg, 1)
   if (o.phone) { y -= S(2.5 * MM); block(`Tel: ${o.phone}`, 15, 10, f.bold, 1) }
+
+  // Cambios: qué retira y qué entrega la moto
+  if (o.extra?.length) {
+    y -= S(2.5 * MM)
+    for (const l of o.extra) block(l, 11, 8, /^ENTREGA/.test(l) ? f.bold : f.reg, 2)
+  }
 
   // Nota del cliente (indicaciones que dejó en la compra)
   if (safe(o.note)) {

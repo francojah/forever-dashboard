@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { lookupOrder, pushEvent, emailAndLog, noteOnOrder } from '@/lib/cambios/service'
+import { reserveExchange } from '@/lib/cambios/stock'
 import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
@@ -110,6 +111,8 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin().from('exchanges').insert(row).select('*').single()
     if (error || !data) throw new Error(error?.message || 'insert failed')
     const due = amountDue(data.shipping_amount, items)
+    // Reserva real en Tiendanube de la prenda nueva (si falla queda como tarea manual en el panel)
+    if (type === 'cambio') await reserveExchange(data)
     await Promise.all([
       emailAndLog('creado', data as ExchangeRow),
       notifyTeam(

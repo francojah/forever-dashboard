@@ -1,8 +1,9 @@
 /**
  * Acceso a Tiendanube para el portal de cambios.
- * Todo es SOLO LECTURA, con una única excepción pedida por Franco: `appendOwnerNote`,
- * que agrega una línea a la nota interna de la venta original avisando que tiene un cambio.
- * Nunca crea órdenes ni toca stock, precios o estados.
+ * Escrituras permitidas (pedidas por Franco):
+ *  - `appendOwnerNote`: una línea en la nota interna de la venta original.
+ *  - `adjustVariantStock`: reservar la prenda nueva y reingresar la devuelta (solo si llegó en buen estado).
+ * Nunca crea órdenes ni toca precios o estados de las ventas.
  */
 import { createClient } from '@supabase/supabase-js'
 
@@ -119,7 +120,38 @@ export function productName(p: TNProduct): string {
 }
 
 /**
- * ÚNICA escritura en Tiendanube: agrega una línea a la nota interna ("nota del vendedor") de la venta.
+ * Ajuste RELATIVO de stock de una variante (suma o resta `delta`), sin pisar ventas que entren en paralelo.
+ * Requiere el permiso write_products de la app. Nunca lanza.
+ */
+export async function adjustVariantStock(productId: number | string, variantId: number | string, delta: number): Promise<{ ok: boolean; stock?: number | null; error?: string }> {
+  try {
+    const { token, userId } = await getTNCredentials()
+    const res = await fetch(`${TN_API}/${userId}/products/${productId}/variants/stock`, {
+      method: 'POST',
+      headers: {
+        Authentication: `bearer ${token}`,
+        'User-Agent': 'ForeverAdsApp (soporte@foreverbasics.com.ar)',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'variation', value: delta, id: Number(variantId) }),
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      const j = (await res.json().catch(() => null)) as { description?: string } | null
+      const desc = j?.description || ''
+      if (res.status === 403 && /write_products/.test(desc)) return { ok: false, error: 'La app de Tiendanube no tiene permiso para editar stock' }
+      return { ok: false, error: `Tiendanube HTTP ${res.status}${desc ? `: ${desc}` : ''}` }
+    }
+    const list = (await res.json()) as { id: number; stock: number | null }[]
+    const v = Array.isArray(list) ? list.find((x) => x.id === Number(variantId)) : undefined
+    return { ok: true, stock: v?.stock ?? null }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message.slice(0, 160) }
+  }
+}
+
+/**
+ * Agrega una línea a la nota interna ("nota del vendedor") de la venta.
  * Conserva lo que ya estaba escrito y no repite una línea que ya existe. Nunca lanza.
  */
 export async function appendOwnerNote(orderId: string | number, line: string): Promise<{ ok: boolean; error?: string }> {

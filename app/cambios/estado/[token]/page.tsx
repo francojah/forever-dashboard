@@ -155,6 +155,7 @@ export default function EstadoPage({ params }: { params: { token: string } }) {
                   )}
                 </div>
                 <p className="text-[13.5px] text-neutral-600">Es una cuenta de Mercado Pago: <b className="text-black">podés transferir desde cualquier banco o billetera</b>.</p>
+                <p className="text-[13px] rounded-lg bg-[#FBF6EA] text-[#6B5110] px-3 py-2">Te reservamos la prenda por 48 h. Si en ese plazo no recibimos la transferencia, la solicitud se cancela sola.</p>
                 <p className="text-[13.5px] text-neutral-600">En el concepto poné <b className="text-black">{e.code}</b>.</p>
                 <div className="pt-4 border-t border-[#EFEFEC] space-y-3">
                   <p className="text-[14px] font-semibold">{e.receipt_uploaded_at ? 'Comprobante recibido ✓' : 'Subí el comprobante'}</p>

@@ -17,7 +17,13 @@ export type TNMotoOrder = {
 }
 
 export type MotoOrder = {
-  id: number
+  /** id de la venta en Tiendanube, o id del cambio (uuid) cuando kind = 'cambio' */
+  id: number | string
+  kind?: 'venta' | 'cambio'
+  /** Código del cambio (CB-1010) */
+  code?: string
+  /** Renglones extra para la etiqueta (qué retira y qué entrega la moto) */
+  extra?: string[]
   number: number
   created_at: string
   payment_status: string
@@ -42,6 +48,7 @@ export function toMotoOrder(o: TNMotoOrder, printed: Record<string, string>): Mo
   const a = o.shipping_address || {}
   return {
     id: o.id,
+    kind: 'venta',
     number: o.number,
     created_at: o.created_at,
     payment_status: o.payment_status,
@@ -92,12 +99,66 @@ async function getPrinted(): Promise<Record<string, string>> {
   return (data?.value as Record<string, string>) || {}
 }
 
-export async function markPrinted(ids: number[]) {
+export async function markPrinted(ids: (number | string)[]) {
   const cur = await getPrinted()
   const now = new Date().toISOString()
   const cutoff = Date.now() - 60 * 86400000
   const next: Record<string, string> = {}
   for (const [k, v] of Object.entries(cur)) if (new Date(v).getTime() > cutoff) next[k] = v
-  for (const id of ids) next[String(id)] = now
+  for (const id of ids) next[typeof id === 'string' && !/^\d+$/.test(id) ? `cb:${id}` : String(id)] = now
   await supabaseAdmin().from('app_config').upsert({ key: PRINTED_KEY, value: next }, { onConflict: 'key' })
+}
+
+// ── Cambios por moto que salen en el próximo despacho ──
+type ExRow = {
+  id: string; code: string; order_number: string; created_at: string; status: string; zone: string
+  customer_name: string | null; phone: string | null; customer_note: string | null; moto_date: string | null
+  address: { name?: string; street?: string; floor?: string; locality?: string; city?: string; province?: string; zipcode?: string; notes?: string } | null
+  items: { name: string; variant_label: string; quantity: number; new_product_name?: string | null; new_variant_label?: string | null }[]
+}
+
+function exchangeToMoto(r: ExRow, printed: Record<string, string>): MotoOrder {
+  const a = r.address || {}
+  const q = (n: number) => (n > 1 ? `${n} x ` : '')
+  return {
+    id: r.id,
+    kind: 'cambio',
+    code: r.code,
+    number: Number(r.order_number) || 0,
+    created_at: r.created_at,
+    payment_status: r.status === 'pendiente_pago' ? 'pending' : 'paid',
+    shipping_option: r.zone === 'caba' ? 'Cambio por moto · CABA' : 'Cambio por moto · GBA',
+    name: (a.name || r.customer_name || '').trim(),
+    phone: (r.phone || '').trim(),
+    street: (a.street || '').trim(),
+    floor: (a.floor || '').trim(),
+    locality: (a.locality || '').trim(),
+    city: (a.city || '').trim(),
+    province: (a.province || '').trim(),
+    zipcode: (a.zipcode || '').trim(),
+    note: [a.notes, r.customer_note].filter(Boolean).join(' · '),
+    units: (r.items || []).reduce((s, i) => s + (i.quantity || 1), 0),
+    printed_at: printed[`cb:${r.id}`] ?? null,
+    extra: [
+      ...(r.items || []).map((i) => `RETIRA: ${q(i.quantity)}${i.name} ${i.variant_label}`),
+      ...(r.items || []).filter((i) => i.new_variant_label).map((i) => `ENTREGA: ${q(i.quantity)}${i.new_product_name || i.name} ${i.new_variant_label}`),
+    ],
+  }
+}
+
+/** Cambios por moto pagados que todavía no se hicieron (la moto retira y entrega en el mismo viaje). */
+export async function listMotoExchanges(includePending: boolean): Promise<MotoOrder[]> {
+  const printed = await getPrinted()
+  const statuses = ['pago_confirmado', 'despachado', ...(includePending ? ['pendiente_pago'] : [])]
+  const { data } = await supabaseAdmin().from('exchanges').select('*')
+    .eq('type', 'cambio').in('zone', ['caba', 'moto_gba']).in('status', statuses).is('received_at', null)
+    .order('created_at', { ascending: true })
+  return ((data ?? []) as ExRow[]).map((r) => exchangeToMoto(r, printed))
+}
+
+export async function getMotoExchangesByIds(ids: string[]): Promise<MotoOrder[]> {
+  if (!ids.length) return []
+  const printed = await getPrinted()
+  const { data } = await supabaseAdmin().from('exchanges').select('*').in('id', ids)
+  return ((data ?? []) as ExRow[]).map((r) => exchangeToMoto(r, printed))
 }

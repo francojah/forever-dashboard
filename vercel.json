@@ -3,5 +3,10 @@
   "buildCommand": "next build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cambios/cron",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }

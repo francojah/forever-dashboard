@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
-import { getMotoOrdersByIds, markPrinted } from '@/lib/cambios/motoOrders'
+import { getMotoOrdersByIds, getMotoExchangesByIds, markPrinted } from '@/lib/cambios/motoOrders'
 import { buildMotoLabelsPdf, type LabelFormat } from '@/lib/cambios/motoLabelsPdf'
 
 export const dynamic = 'force-dynamic'
@@ -12,9 +12,11 @@ export async function GET(req: Request) {
   try {
     const q = new URL(req.url).searchParams
     const ids = (q.get('ids') || '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0).slice(0, 60)
-    if (!ids.length) return NextResponse.json({ ok: false, error: 'Elegí al menos una venta' }, { status: 400 })
+    const cambios = (q.get('cambios') || '').split(',').map((s) => s.trim()).filter((s) => /^[0-9a-f-]{36}$/i.test(s)).slice(0, 60)
+    if (!ids.length && !cambios.length) return NextResponse.json({ ok: false, error: 'Elegí al menos una venta' }, { status: 400 })
     const format: LabelFormat = q.get('formato') === '10x15' ? '10x15' : 'a4'
-    const orders = await getMotoOrdersByIds(ids)
+    const [ventas, exch] = await Promise.all([ids.length ? getMotoOrdersByIds(ids) : [], getMotoExchangesByIds(cambios)])
+    const orders = [...ventas, ...exch]
     if (!orders.length) return NextResponse.json({ ok: false, error: 'No se encontraron las ventas' }, { status: 404 })
     const bytes = await buildMotoLabelsPdf(orders, format)
     await markPrinted(orders.map((o) => o.id))

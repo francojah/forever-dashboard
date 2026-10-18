@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
-import { listMotoOrdersToPack } from '@/lib/cambios/motoOrders'
+import { listMotoOrdersToPack, listMotoExchanges } from '@/lib/cambios/motoOrders'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +10,8 @@ export async function GET(req: Request) {
   if (auth instanceof NextResponse) return auth
   try {
     const includePending = new URL(req.url).searchParams.get('pendientes') === '1'
-    return NextResponse.json({ ok: true, orders: await listMotoOrdersToPack(includePending) })
+    const [orders, cambios] = await Promise.all([listMotoOrdersToPack(includePending), listMotoExchanges(includePending)])
+    return NextResponse.json({ ok: true, orders, cambios })
   } catch (e) {
     console.error('[cambios/admin/envios-moto]', e)
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
