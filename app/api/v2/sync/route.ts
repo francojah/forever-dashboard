@@ -1,5 +1,6 @@
 import { apiContext } from '@/lib/faro/context'
 import { syncWorkspace } from '@/lib/faro/sync'
+import { rotateStoredTokens } from '@/lib/faro/tokens'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -10,6 +11,7 @@ export async function POST(req: Request) {
   if (ctx instanceof Response) return ctx
   let force = false
   try { force = !!(await req.json())?.force } catch { /* sin body */ }
+  await rotateStoredTokens().catch(() => null)
   const results = await syncWorkspace(ctx.workspace.id, { budgetMs: 35000, minAgeMs: force ? 0 : 120000, forceEntities: force })
   return Response.json({ ok: results.every((r) => r.ok), results, at: new Date().toISOString() })
 }
