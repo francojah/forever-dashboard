@@ -89,8 +89,8 @@ export async function findOrderByNumber(orderNumber: string): Promise<TNOrder | 
   return list.find((o) => String(o.number) === n) ?? null
 }
 
-export type TNVariant = { id: number; price: string; stock: number | null; values?: { es?: string }[] }
-export type TNProduct = { id: number; name: { es?: string } | string; published?: boolean; variants: TNVariant[]; images?: { src?: string }[] }
+export type TNVariant = { id: number; price: string; stock: number | null; values?: { es?: string }[]; image_id?: number | null }
+export type TNProduct = { id: number; name: { es?: string } | string; published?: boolean; variants: TNVariant[]; images?: { id?: number; src?: string }[] }
 
 export async function getProduct(productId: number | string): Promise<TNProduct | null> {
   return tnGet<TNProduct>(`products/${productId}`)

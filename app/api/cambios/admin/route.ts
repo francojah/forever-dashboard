@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireCambiosAdmin } from '@/lib/cambios/adminAuth'
-import { supabaseAdmin, getProduct } from '@/lib/cambios/tiendanube'
+import { supabaseAdmin, getAllProducts } from '@/lib/cambios/tiendanube'
 import { reservedByVariant, type ExchangeItem } from '@/lib/cambios/logic'
 import { whatsappText, kindForStatus, emailConfigured, type ExchangeRow } from '@/lib/cambios/email'
 import { labelInfo, lastEmail } from '@/lib/cambios/service'
@@ -22,16 +22,21 @@ export async function GET() {
 
     // Alertas de stock: variantes comprometidas cuyo stock en TN ya no alcanza
     const reserved = await reservedByVariant()
-    const productIds = new Set<number>()
-    for (const r of rows) {
-      if (r.type !== 'cambio' || r.stock_out_done || ['cancelado'].includes(r.status)) continue
-      for (const it of r.items as ExchangeItem[]) if (it.new_variant_id) productIds.add(it.product_id)
-    }
+    // Stock e imágenes por variante (un solo pedido a Tiendanube: el catálogo es chico)
     const tnStock = new Map<string, number>()
-    for (const pid of Array.from(productIds)) {
-      const p = await getProduct(pid).catch(() => null)
-      for (const v of p?.variants ?? []) tnStock.set(String(v.id), v.stock === null ? 999 : Number(v.stock) || 0)
+    const imgByVariant = new Map<string, string>()
+    const imgByProduct = new Map<string, string>()
+    for (const p of await getAllProducts().catch(() => [])) {
+      const imgs = p.images ?? []
+      if (imgs[0]?.src) imgByProduct.set(String(p.id), imgs[0].src)
+      for (const v of p.variants ?? []) {
+        tnStock.set(String(v.id), v.stock === null ? 999 : Number(v.stock) || 0)
+        const im = v.image_id ? imgs.find((x) => x.id === v.image_id) : undefined
+        if (im?.src) imgByVariant.set(String(v.id), im.src)
+      }
     }
+    const img = (pid?: number | null, vid?: number | null) =>
+      (vid ? imgByVariant.get(String(vid)) : undefined) || (pid ? imgByProduct.get(String(pid)) : undefined) || null
 
     const out = await Promise.all(rows.map(async (r) => {
       let receipt_url: string | null = null
@@ -52,7 +57,11 @@ export async function GET() {
         const stock = k ? tnStock.get(k) : undefined
         const res = k ? reserved.get(k) ?? 0 : 0
         const stock_alert = !!k && !r.stock_out_done && r.status !== 'cancelado' && stock !== undefined && stock < res
-        return { ...it, tn_stock: stock ?? null, stock_alert }
+        return {
+          ...it, tn_stock: stock ?? null, stock_alert,
+          image: img(it.product_id, it.variant_id),
+          new_image: it.new_variant_id ? img(it.new_product_id || it.product_id, it.new_variant_id) : null,
+        }
       })
       return {
         ...r, items, receipt_url, label_url, label_sent_at: label?.at ?? null,
