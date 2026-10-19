@@ -19,17 +19,17 @@ describe('zona y monto del envío (nombres reales de envío de la tienda)', () =
     const o = base({ shipping_option: 'Moto Express a domicilio', shipping_address: { province: 'Buenos Aires' }, shipping_cost_customer: '8500.00' })
     expect(classifyZone(o)).toBe('moto_gba'); expect(shippingAmount('moto_gba', o)).toBe(8500)
   })
-  it('Correo → siempre $9.000, sin importar lo que pagó', () => {
+  it('Correo → siempre $18.000 (ida y vuelta), sin importar lo que pagó', () => {
     const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_address: { province: 'Córdoba' }, shipping_cost_owner: '9256.84', shipping_cost_customer: '7593.40' })
-    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(9000)
+    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(18000)
   })
-  it('Correo con envío gratis → también $9.000', () => {
+  it('Correo con envío gratis → también $18.000 (ida y vuelta)', () => {
     const o = base({ shipping_option: 'Envío Nube - Correo Argentino Clásico a domicilio', shipping_cost_owner: '0', shipping_cost_customer: '0' })
-    expect(shippingAmount('correo', o)).toBe(9000)
+    expect(shippingAmount('correo', o)).toBe(18000)
   })
-  it('Punto de retiro de Envío Nube → correo, $9.000', () => {
+  it('Punto de retiro de Envío Nube → correo, $18.000 (ida y vuelta)', () => {
     const o = base({ shipping_option: 'Punto de retiro', shipping_pickup_type: 'pickup', shipping_carrier_name: 'Envío Nube', shipping_cost_customer: '6200.00' })
-    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(9000)
+    expect(classifyZone(o)).toBe('correo'); expect(shippingAmount('correo', o)).toBe(18000)
   })
 })
 

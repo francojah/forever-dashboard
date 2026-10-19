@@ -30,7 +30,8 @@ export function shippingAmount(zone: Zone, o: TNOrder): number | null {
     return v > 0 ? Math.round(v) : null
   }
   // Correo Argentino: monto fijo, no depende del destino ni de lo que pagó en la compra
-  if (zone === 'correo') return CAMBIOS.correoFee
+  // Se cobran los dos envíos: la prenda que vuelve y la nueva que sale (ida y vuelta)
+  if (zone === 'correo') return CAMBIOS.correoFee == null ? null : CAMBIOS.correoFee * 2
   return null
 }
 
