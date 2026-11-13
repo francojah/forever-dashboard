@@ -3,5 +3,5 @@
   "buildCommand": "next build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "crons": []
+  "crons": [{ "path": "/api/v2/cron/publicos-clientes", "schedule": "40 9 * * *" }]
 }
