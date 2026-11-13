@@ -98,7 +98,8 @@ export async function runAudienceSyncs(workspaceId?: string) {
   const results: { segment: string; audience: string; count?: number; error?: string }[] = []
   const byStore = new Map<string, any[]>()
   for (const s of syncs || []) byStore.set(s.store_id, [...(byStore.get(s.store_id) || []), s])
-  for (const [storeId, list] of byStore) {
+  for (const storeId of Array.from(byStore.keys())) {
+    const list = byStore.get(storeId) || []
     const { data: store } = await svc().from('stores').select('*').eq('id', storeId).single()
     if (!store) continue
     let seg: Record<Segment, Row[]>
