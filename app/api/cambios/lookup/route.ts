@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { ZONE_LABEL, REASONS, CAMBIOS, PROVINCIAS, provinceCode } from '@/lib/cambios/config'
 import { lookupOrder } from '@/lib/cambios/service'
-import { customerInfo } from '@/lib/cambios/logic'
+import { customerInfo, deliveryOptions, recommendedOption } from '@/lib/cambios/logic'
+import { partidoOptions } from '@/lib/cambios/motoZones'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,7 @@ export async function POST(req: Request) {
     const r = await lookupOrder(String(orderNumber ?? ''), String(email ?? ''))
     if (!r.ok) return NextResponse.json(r)
     const c = customerInfo(r.order)
+    const d = deliveryOptions(r.zone, r.order)
     return NextResponse.json({
       ok: true,
       order: {
@@ -24,6 +26,14 @@ export async function POST(req: Request) {
         provinceCode: provinceCode(r.order.shipping_address?.province),
         needsAddress: r.zone === 'caba' || r.zone === 'moto_gba',
         needsBranch: r.zone === 'correo',
+      },
+      delivery: {
+        options: d.options.map((x) => ({ ...x, label: ZONE_LABEL[x.zone] })),
+        recommended: recommendedOption(d.options).kind,
+        partido: d.detected?.partido ?? null,
+        // Si no reconocimos el partido (o compró por correo en AMBA), el cliente puede elegirlo para ver si llega la moto
+        partidos: r.zone === 'correo' && d.canPickPartido ? partidoOptions() : [],
+        correoAmount: d.options.find((x) => x.kind === 'correo')?.amount ?? null,
       },
       items: r.items,
       catalog: r.catalog,

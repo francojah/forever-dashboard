@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { lookupOrder, pushEvent, emailAndLog, noteOnOrder } from '@/lib/cambios/service'
 import { reserveExchange } from '@/lib/cambios/stock'
-import { amountDue, canTarget, customerInfo, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
+import { amountDue, canTarget, customerInfo, deliveryOptions, priceDiff, randomToken, type ExchangeItem } from '@/lib/cambios/logic'
 import { REASONS } from '@/lib/cambios/config'
 import { supabaseAdmin } from '@/lib/cambios/tiendanube'
 import type { ExchangeRow } from '@/lib/cambios/email'
@@ -19,8 +19,14 @@ export async function POST(req: Request) {
     const sels: Sel[] = Array.isArray(body.items) ? body.items : []
     if (!sels.length) return NextResponse.json({ ok: false, reason: 'Elegí al menos una prenda.' })
 
-    const r = await lookupOrder(String(body.orderNumber ?? ''), String(body.email ?? ''))
-    if (!r.ok) return NextResponse.json(r)
+    const look = await lookupOrder(String(body.orderNumber ?? ''), String(body.email ?? ''))
+    if (!look.ok) return NextResponse.json(look)
+    // Envío elegido por el cliente (moto o correo). El monto se recalcula acá, nunca se toma del navegador.
+    const d = deliveryOptions(look.zone, look.order, typeof body.partido === 'string' ? body.partido : null)
+    const want = body.delivery === 'moto' || body.delivery === 'correo' ? body.delivery : null
+    const pick = (want && d.options.find((x) => x.kind === want)) || d.options[0]
+    if (want === 'moto' && pick.kind !== 'moto') return NextResponse.json({ ok: false, reason: 'La moto no llega a ese partido. Elegí Correo Argentino.' })
+    const r = { ...look, zone: pick.zone, amount: pick.amount }
 
     // Evitar duplicados: si ya hay un cambio activo para esta orden, devolver ese
     const dup = r.active.find((a) => a.type === type)
@@ -77,6 +83,7 @@ export async function POST(req: Request) {
       address = {
         name: full, street, floor: str(sh.floor, 60), locality, city: '',
         province: c.address.province, zipcode: str(sh.zipcode, 12), notes: str(sh.notes, 240), source: 'cliente',
+        partido: pick.partido ?? null, original_zone: look.zone,
       }
     }
 

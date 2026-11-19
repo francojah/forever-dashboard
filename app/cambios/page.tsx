@@ -16,6 +16,13 @@ type Lookup = {
     number: number; customerName: string; hasPhone: boolean; zone: string; zoneLabel: string; shippingAmount: number | null; deadline: string
     provinceCode?: string; needsAddress?: boolean; needsBranch?: boolean
   }
+  delivery?: {
+    options: DOpt[]
+    recommended: 'moto' | 'correo' | 'retiro' | 'otro'
+    partido: string | null
+    partidos: { name: string; tier: string; amount: number }[]
+    correoAmount: number | null
+  }
   items: Item[]
   catalog: CatProduct[]
   active: { code: string; token: string; type: string; status: string }[]
@@ -25,6 +32,7 @@ type Lookup = {
   provincias?: { code: string; name: string }[]
   storeUrl?: string
 }
+type DOpt = { zone: string; kind: 'moto' | 'correo' | 'retiro' | 'otro'; amount: number | null; partido?: string | null; label: string }
 type Sel = { checked: boolean; reason: string; productId: string; color: string; size: string }
 
 const targetsFor = (it: Item, catalog: CatProduct[]) => {
@@ -53,6 +61,8 @@ export default function CambiosPage() {
   const [note, setNote] = useState('')
   const [ship, setShip] = useState({ full_name: '', phone: '', street: '', floor: '', locality: '', notes: '' })
   const [branch, setBranch] = useState<Branch | null>(null)
+  const [delivery, setDelivery] = useState<'moto' | 'correo' | null>(null)
+  const [partido, setPartido] = useState('')
   const setS = (k: keyof typeof ship, v: string) => setShip((x) => ({ ...x, [k]: v }))
 
   async function post(url: string, body: unknown) {
@@ -71,6 +81,9 @@ export default function CambiosPage() {
         init[it.key] = { checked: exch.length === 1 && it.exchangeable, reason: '', productId: String(it.product_id), color: '', size: '' }
       }
       setSel(init); setData(r)
+      const rec = r.delivery?.recommended
+      setDelivery(rec === 'moto' || rec === 'correo' ? rec : null)
+      setPartido(r.delivery?.partido ?? '')
       if (typeof window !== 'undefined') window.scrollTo(0, 0)
     } catch {
       setError('No pudimos conectarnos. Revisá tu conexión y probá de nuevo.')
@@ -92,10 +105,20 @@ export default function CambiosPage() {
   const missing = chosen.some((it) => !sel[it.key].reason || !variantOf(it))
   const needPhone = data ? !data.order.hasPhone : false
   const diff = chosen.reduce((a, it) => a + diffFor(it, variantOf(it)), 0)
-  const shipping = data ? data.order.shippingAmount : null
+  // Envío del cambio: moto o correo (si vive donde llega la moto, puede elegir)
+  const dl = data?.delivery
+  const correoOpt = dl?.options.find((x) => x.kind === 'correo') ?? null
+  const pickedPartido = dl?.partidos.find((p) => p.name === partido)
+  const motoOpt: DOpt | null = dl?.options.find((x) => x.kind === 'moto')
+    ?? (pickedPartido ? { zone: pickedPartido.tier === 'caba' ? 'caba' : 'moto_gba', kind: 'moto', amount: pickedPartido.amount, partido: pickedPartido.name, label: pickedPartido.tier === 'caba' ? 'CABA (moto)' : 'GBA (moto)' } : null)
+  const chosenOpt: DOpt | null = (delivery === 'moto' && motoOpt) || (delivery === 'correo' && correoOpt) || dl?.options[0] || null
+  const showChooser = !!correoOpt && (!!motoOpt || !!dl?.partidos.length)
+  const shipping = chosenOpt ? chosenOpt.amount : data ? data.order.shippingAmount : null
   const total = shipping == null ? null : shipping + diff
-  const needsAddress = !!data?.order.needsAddress
-  const needsBranch = !!data?.order.needsBranch
+  const zoneNow = chosenOpt?.zone ?? data?.order.zone ?? ''
+  const zoneLabelNow = chosenOpt?.label ?? data?.order.zoneLabel ?? ''
+  const needsAddress = chosenOpt ? chosenOpt.kind === 'moto' : !!data?.order.needsAddress
+  const needsBranch = chosenOpt ? chosenOpt.zone === 'correo' : !!data?.order.needsBranch
   const addressOk = !needsAddress || (
     ship.full_name.trim().split(/\s+/).length >= 2 && ship.phone.replace(/\D/g, '').length >= 8 &&
     ship.street.trim().length >= 5 && /\d/.test(ship.street) && ship.locality.trim().length >= 2
@@ -119,6 +142,7 @@ export default function CambiosPage() {
         orderNumber, email, phone: needsAddress ? ship.phone : phone, note, type: 'cambio',
         shipping: needsAddress ? ship : undefined,
         branch: needsBranch ? branch : undefined,
+        delivery: chosenOpt?.kind, partido: chosenOpt?.kind === 'moto' ? chosenOpt.partido ?? partido : undefined,
         items: chosen.map((it) => ({
           key: it.key, reason: sel[it.key].reason,
           new_product_id: Number(sel[it.key].productId), new_variant_id: variantOf(it)?.variant_id,
@@ -322,6 +346,49 @@ export default function CambiosPage() {
           </Card>
         ) : (
           <>
+            {showChooser && (
+              <Card className="space-y-3">
+                <div>
+                  <h2 className="font-display text-[15px] font-bold">¿Cómo hacemos el cambio?</h2>
+                  <p className="text-[13px] text-neutral-600 mt-1">Elegí la opción que te quede más cómoda.</p>
+                </div>
+                {[motoOpt, correoOpt].filter(Boolean).map((op) => {
+                  const x = op as DOpt
+                  const on = chosenOpt?.kind === x.kind
+                  const other = x.kind === 'moto' ? correoOpt : motoOpt
+                  const save = other && x.amount != null && other.amount != null ? other.amount - x.amount : 0
+                  return (
+                    <button key={x.kind} type="button" onClick={() => setDelivery(x.kind as 'moto' | 'correo')}
+                      className={`w-full text-left rounded-xl border-2 p-3.5 transition-colors ${on ? 'border-black bg-[#FAFAF9]' : 'border-[#E6E6E3] bg-white'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[15px]">{x.kind === 'moto' ? '🛵 Moto a tu casa' : '📦 Correo Argentino'}</p>
+                          <p className="text-[13px] text-neutral-600 mt-0.5 leading-snug">
+                            {x.kind === 'moto'
+                              ? `Retira la prenda y te deja la nueva en el mismo viaje. Sin ir al correo.${x.partido && x.partido !== 'CABA' ? ` (${x.partido})` : ''}`
+                              : 'Te mandamos la etiqueta, despachás la prenda en una sucursal y te enviamos la nueva.'}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-display text-[17px] font-bold">{money(x.amount)}</p>
+                          {save > 0 && <p className="text-[12px] font-semibold text-[#1F7A3F]">Ahorrás {money(save)}</p>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+                {!dl?.options.some((x) => x.kind === 'moto') && !!dl?.partidos.length && (
+                  <label className="block">
+                    <span className="block text-[13px] text-neutral-600 mb-1.5">{motoOpt ? 'Tu partido' : '¿Vivís en CABA o GBA? Elegí tu partido para ver si llega la moto'}</span>
+                    <select className={inputCls} value={partido} onChange={(e) => { setPartido(e.target.value); if (e.target.value) setDelivery('moto') }}>
+                      <option value="">Elegí tu partido</option>
+                      {dl.partidos.map((p) => <option key={p.name} value={p.name}>{p.name} · moto {money(p.amount)}</option>)}
+                    </select>
+                  </label>
+                )}
+              </Card>
+            )}
+
             {needsAddress ? (
               <Card className="space-y-4">
                 <div>
@@ -361,16 +428,16 @@ export default function CambiosPage() {
 
             <Card className="space-y-2">
               <h2 className="font-display text-[15px] font-bold mb-1">Resumen</h2>
-              <Row label={`Envío del cambio · ${o.zoneLabel}`} value={shipping === 0 ? 'Sin costo' : money(shipping)} />
+              <Row label={`Envío del cambio · ${zoneLabelNow}`} value={shipping === 0 ? 'Sin costo' : money(shipping)} />
               {diff > 0 && <Row label="Diferencia de precio" value={money(diff)} />}
               <div className="flex justify-between items-baseline pt-2 border-t border-[#EFEFEC]">
                 <span className="font-semibold">Total a transferir</span>
                 <span className="font-display text-[20px] font-bold">{total === 0 ? 'Sin costo' : money(total)}</span>
               </div>
               <p className="text-[12.5px] text-neutral-600 pt-1 leading-relaxed">
-                {o.zone === 'correo'
+                {zoneNow === 'correo'
                   ? 'Te mandamos por mail la etiqueta de Correo Argentino para que despaches la prenda en la sucursal que elegiste. Cuando llega, te enviamos la nueva.'
-                  : o.zone === 'retiro'
+                  : zoneNow === 'retiro'
                   ? 'Te confirmamos día y horario para hacer el cambio.'
                   : 'Una moto retira tu prenda y te entrega la nueva en el mismo viaje.'}
                 {shipping == null && ' Te confirmamos el costo del envío por mail y WhatsApp.'}

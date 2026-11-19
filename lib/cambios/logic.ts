@@ -1,4 +1,5 @@
 import { CAMBIOS } from './config'
+import { MOTO_SURCHARGE, isAmbaProvince, matchFromPartido, motoAmount, motoMatchFromAddress, type MotoMatch } from './motoZones'
 import {
   type TNOrder, getAllProducts, productImage, productName, supabaseAdmin, variantLabel,
 } from './tiendanube'
@@ -19,20 +20,56 @@ export function classifyZone(o: TNOrder): Zone {
   return 'otro'
 }
 
-/** Monto del envío del cambio. null = lo confirma el equipo. */
+/** Correo: lo que pagó de envío en la compra × 2 (vuelve la prenda y sale la nueva).
+ *  Si la compra tuvo envío gratis, se toma lo que cobró el correo; si no hay dato, el fijo de config. */
+export function correoAmount(o: TNOrder): number | null {
+  const paid = Number(o.shipping_cost_customer) || Number(o.shipping_cost_owner) || CAMBIOS.correoFee || 0
+  return paid > 0 ? Math.round(paid * 2) : null
+}
+
+/** Monto del envío del cambio para la zona ORIGINAL de la orden. null = lo confirma el equipo. */
 export function shippingAmount(zone: Zone, o: TNOrder): number | null {
-  if (zone === 'caba') return CAMBIOS.cabaFee
   if (zone === 'retiro') return CAMBIOS.retiroFee
+  if (zone === 'caba') return motoAmount('caba')
   if (zone === 'moto_gba') {
     if (CAMBIOS.motoGbaFee != null) return CAMBIOS.motoGbaFee
-    // Lo que pagó de moto en la compra original
+    const m = motoMatchFromAddress(o.shipping_address)
+    if (m && m.tier !== 'caba') return motoAmount(m.tier)
+    // Partido no reconocido: lo que pagó de moto en la compra + recargo
     const v = Number(o.shipping_cost_customer) || Number(o.shipping_cost_owner) || 0
-    return v > 0 ? Math.round(v) : null
+    return v > 0 ? Math.round(v) + MOTO_SURCHARGE : null
   }
-  // Correo Argentino: monto fijo, no depende del destino ni de lo que pagó en la compra
-  // Se cobran los dos envíos: la prenda que vuelve y la nueva que sale (ida y vuelta)
-  if (zone === 'correo') return CAMBIOS.correoFee == null ? null : CAMBIOS.correoFee * 2
+  if (zone === 'correo') return correoAmount(o)
   return null
+}
+
+export type DeliveryOption = {
+  zone: Zone
+  kind: 'moto' | 'correo' | 'retiro' | 'otro'
+  amount: number | null
+  partido?: string | null
+}
+
+/**
+ * Opciones de envío para el cambio.
+ * Compras por Correo / Punto de retiro de gente que vive donde llega la moto: se ofrece también la moto
+ * (un solo viaje retira y entrega). `partido` = el que eligió el cliente si no lo reconocimos en la dirección.
+ */
+export function deliveryOptions(zone: Zone, o: TNOrder, partido?: string | null): { options: DeliveryOption[]; detected: MotoMatch | null; canPickPartido: boolean } {
+  const detected = motoMatchFromAddress(o.shipping_address)
+  if (zone !== 'correo') {
+    const kind = zone === 'caba' || zone === 'moto_gba' ? 'moto' : zone === 'retiro' ? 'retiro' : 'otro'
+    return { options: [{ zone, kind, amount: shippingAmount(zone, o), partido: detected?.partido ?? null }], detected, canPickPartido: false }
+  }
+  const options: DeliveryOption[] = [{ zone: 'correo', kind: 'correo', amount: correoAmount(o) }]
+  const m = matchFromPartido(partido) || detected
+  if (m) options.push({ zone: m.tier === 'caba' ? 'caba' : 'moto_gba', kind: 'moto', amount: motoAmount(m.tier), partido: m.partido })
+  return { options, detected, canPickPartido: isAmbaProvince(o.shipping_address?.province) || !!detected }
+}
+
+/** La opción más barata (a igual precio, la moto: es más cómoda). */
+export function recommendedOption(options: DeliveryOption[]): DeliveryOption {
+  return [...options].sort((a, b) => (a.amount ?? Infinity) - (b.amount ?? Infinity) || (a.kind === 'moto' ? -1 : 1))[0]
 }
 
 export type Eligibility =
